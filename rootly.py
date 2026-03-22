@@ -4,6 +4,7 @@
 import argparse
 import base64
 import json
+import logging
 import os
 import sys
 import time
@@ -21,6 +22,13 @@ from rich.text import Text
 load_dotenv()
 
 console = Console()
+
+# File logger – writes to rootly.log for diagnostics
+log = logging.getLogger("rootly")
+log.setLevel(logging.DEBUG)
+_fh = logging.FileHandler("rootly.log", mode="w", encoding="utf-8")
+_fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S"))
+log.addHandler(_fh)
 
 # ---------------------------------------------------------------------------
 # Cloudsmith API client
@@ -124,16 +132,37 @@ def _extract_vulns(data: dict | list) -> list[dict]:
     if not isinstance(data, dict):
         return []
     # Direct keys
-    for key in ("vulnerabilities", "results", "scan_results"):
+    for key in ("vulnerabilities", "results", "scan_results", "security_vulnerabilities"):
         val = data.get(key)
         if isinstance(val, list) and val:
             return val
     # Nested under "scan" object
     scan_obj = data.get("scan")
     if isinstance(scan_obj, dict):
-        for key in ("vulnerabilities", "results"):
+        for key in ("vulnerabilities", "results", "security_vulnerabilities"):
             val = scan_obj.get(key)
             if isinstance(val, list) and val:
+                return val
+    # Cloudsmith nests vulnerability details inside "scans" list entries
+    scans_list = data.get("scans")
+    if isinstance(scans_list, list):
+        all_vulns = []
+        for scan_entry in scans_list:
+            if isinstance(scan_entry, dict):
+                # Each scan entry may itself be a vulnerability record
+                if any(k in scan_entry for k in ("severity", "cve_id", "name", "max_severity", "vuln_id")):
+                    all_vulns.append(scan_entry)
+                # Or it may contain nested vulnerability lists
+                for key in ("vulnerabilities", "results", "scan_results"):
+                    val = scan_entry.get(key)
+                    if isinstance(val, list) and val:
+                        all_vulns.extend(val)
+        if all_vulns:
+            return all_vulns
+    # Last resort: look for any list-valued key that contains dicts with severity/cve fields
+    for key, val in data.items():
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            if any(k in val[0] for k in ("severity", "cve_id", "name", "max_severity", "identifier")):
                 return val
     return []
 
@@ -149,7 +178,12 @@ def get_package_vulnerabilities(
     """
     scans = fetch_vulnerability_scans(session, owner, repo, slug)
     if not scans:
+        log.debug("[%s] No scans returned", slug)
         return None, 0, []
+
+    log.debug("[%s] %d scan(s) returned", slug, len(scans))
+    log.debug("[%s] Latest scan keys: %s", slug, list(scans[0].keys()))
+    log.debug("[%s] Scan summary dump: %s", slug, json.dumps(scans[0], default=str)[:1000])
 
     # Pick the most recent scan
     latest = scans[0]
@@ -163,22 +197,75 @@ def get_package_vulnerabilities(
 
     # Try to extract vulns from the scan list entry itself first
     vulns = _extract_vulns(latest)
+    log.debug("[%s] Inline extract: %d vulns", slug, len(vulns))
 
     # If no vulns inline, fetch the detail endpoint
     if not vulns:
         scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
+        log.debug("[%s] Fetching detail endpoint, scan_id=%s", slug, scan_id)
         if scan_id:
             details = fetch_scan_details(session, owner, repo, slug, str(scan_id))
             if details:
+                log.debug("[%s] Detail keys: %s", slug, list(details.keys()))
+                # Log the scans content structure for diagnostics
+                scans_content = details.get("scans")
+                if scans_content:
+                    log.debug("[%s] 'scans' has %d entries", slug, len(scans_content) if isinstance(scans_content, list) else 1)
+                    if isinstance(scans_content, list) and scans_content:
+                        first = scans_content[0]
+                        if isinstance(first, dict):
+                            log.debug("[%s] scans[0] keys: %s", slug, list(first.keys()))
+                            log.debug("[%s] scans[0] sample: %s", slug, json.dumps(first, default=str)[:1500])
                 vulns = _extract_vulns(details)
+                log.debug("[%s] Detail extract: %d vulns", slug, len(vulns))
+                if vulns:
+                    log.debug("[%s] First vuln keys: %s", slug, list(vulns[0].keys()) if isinstance(vulns[0], dict) else "not a dict")
                 if not max_sev:
                     max_sev = details.get("max_severity")
                 if not api_count:
                     api_count = details.get("num_vulnerabilities", 0)
 
+    # If still no vulns, try other scan entries
+    if not vulns and len(scans) > 1:
+        for s in scans:
+            if s is latest:
+                continue
+            vulns = _extract_vulns(s)
+            if vulns:
+                break
+            sid = s.get("identifier") or s.get("slug_perm") or s.get("id")
+            if sid:
+                d = fetch_scan_details(session, owner, repo, slug, str(sid))
+                if d:
+                    vulns = _extract_vulns(d)
+                    if vulns:
+                        break
+
+    # If the scan summary itself has vulnerability-like fields, treat it as a single record
+    if not vulns and api_count > 0 and latest.get("max_severity"):
+        # Some Cloudsmith responses embed vuln info at the scan level
+        embedded = []
+        for s in scans:
+            sev = s.get("max_severity") or s.get("severity")
+            if sev:
+                embedded.append({
+                    "severity": sev,
+                    "cve_id": s.get("cve_id", ""),
+                    "name": s.get("name", ""),
+                    "description": s.get("description", s.get("summary", "")),
+                    "url": s.get("url", ""),
+                })
+        if embedded:
+            vulns = embedded
+
     # Use parsed vulns count if the API didn't report one
     if not api_count and vulns:
         api_count = len(vulns)
+
+    log.info("[%s] Result: max_sev=%s, api_count=%d, extracted_vulns=%d", slug, max_sev, api_count, len(vulns))
+    if api_count > 0 and not vulns:
+        log.warning("[%s] API reports %d vulns but 0 extracted. Full scan data: %s",
+                    slug, api_count, json.dumps(latest, indent=2, default=str)[:2000])
 
     # Derive max_sev from individual records if still missing
     if not max_sev and vulns:
@@ -297,6 +384,12 @@ def build_graph(
         progress.update(vuln_task, description=f"Scanning [white]{node_id}[/]")
         max_sev, api_vuln_count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
 
+        if api_vuln_count > 0 and not vulns:
+            progress.console.print(
+                f"  [dim yellow]\u26a0 {node_id} ({slug}): API reports {api_vuln_count} vulns "
+                f"but details not extractable[/]"
+            )
+
         # api_vuln_count = authoritative count from the Cloudsmith scan
         # vulns = individual CVE records (may be fewer if detail fetch failed)
         vuln_count = api_vuln_count
@@ -307,19 +400,26 @@ def build_graph(
         for v in vulns:
             v_sev = v.get("severity", v.get("max_severity", "Unknown"))
             sev_counts[v_sev] = sev_counts.get(v_sev, 0) + 1
-            cve_id = v.get("cve_id") or v.get("name") or v.get("identifier", "")
+            cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
             # Affected dependency from the vulnerability record
             affected = (
-                v.get("affected_package")
-                or v.get("package_name")
+                v.get("package_name")
+                or v.get("affected_package")
                 or v.get("package")
                 or v.get("component")
                 or v.get("dependency")
                 or ""
             )
-            affected_version = v.get("affected_version") or v.get("package_version") or ""
-            # Build advisory URLs
-            api_url = v.get("url") or v.get("advisory_url") or ""
+            # Handle affected_version as string or nested dict
+            raw_av = v.get("affected_version") or v.get("package_version") or ""
+            affected_version = raw_av.get("raw_version", "") if isinstance(raw_av, dict) else str(raw_av)
+            # Handle fixed_version as string or nested dict
+            raw_fv = v.get("fixed_version") or v.get("fixed_in") or v.get("patched_version") or ""
+            fixed_in = raw_fv.get("raw_version", "") if isinstance(raw_fv, dict) else str(raw_fv)
+            # Build advisory URLs – check references list too
+            refs = v.get("references") or []
+            first_ref = refs[0].get("url", "") if refs and isinstance(refs[0], dict) else (refs[0] if refs else "")
+            api_url = v.get("url") or v.get("advisory_url") or first_ref or ""
             nvd_url = ""
             ghsa_url = ""
             if cve_id and cve_id.upper().startswith("CVE-"):
@@ -327,16 +427,18 @@ def build_graph(
                 ghsa_url = f"https://github.com/advisories?query={cve_id}"
             elif cve_id and cve_id.upper().startswith("GHSA-"):
                 ghsa_url = f"https://github.com/advisories/{cve_id}"
+            # Use title as fallback for description
+            description = v.get("description") or v.get("title") or v.get("summary", "")
             cve_records.append({
                 "id": cve_id,
                 "severity": v_sev,
-                "description": v.get("description", v.get("summary", "")),
+                "description": description,
                 "url": api_url,
                 "nvd_url": nvd_url,
                 "ghsa_url": ghsa_url,
                 "affected": affected,
                 "affected_version": affected_version,
-                "fixed_in": v.get("fixed_in") or v.get("patched_version") or "",
+                "fixed_in": fixed_in,
             })
             if cve_id:
                 cve_to_packages.setdefault(cve_id, []).append(node_id)
