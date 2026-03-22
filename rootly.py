@@ -581,26 +581,18 @@ def build_graph(
     {
       "layout": {
         "hierarchical": {
-          "enabled": true,
-          "direction": "UD",
-          "sortMethod": "directed",
-          "levelSeparation": 200,
-          "nodeSpacing": 150,
-          "treeSpacing": 250,
-          "blockShifting": true,
-          "edgeMinimization": true,
-          "parentCentralization": true
+          "enabled": false
         }
       },
       "physics": {
-        "hierarchicalRepulsion": {
-          "centralGravity": 0.0,
-          "springLength": 150,
-          "springConstant": 0.01,
-          "nodeDistance": 180,
-          "damping": 0.09
+        "forceAtlas2Based": {
+          "gravitationalConstant": -120,
+          "centralGravity": 0.012,
+          "springLength": 160,
+          "springConstant": 0.03,
+          "damping": 0.4
         },
-        "solver": "hierarchicalRepulsion",
+        "solver": "forceAtlas2Based",
         "stabilization": {"iterations": 300}
       },
       "interaction": {
@@ -610,7 +602,7 @@ def build_graph(
       },
       "edges": {
         "color": {"color": "#555555", "highlight": "#ffffff"},
-        "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4},
+        "smooth": {"type": "continuous"},
         "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}}
       }
     }
@@ -732,10 +724,10 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
     font-family:sans-serif; display:flex; align-items:center; gap:6px; font-size:12px;">
   <span style="color:#aaa; margin-right:4px;">Filter:</span>
   <button class="rootly-filter-btn" data-filter="all" style="
-    background:#4a90d9; border:none; border-radius:4px; color:#fff;
+    background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">All</button>
   <button class="rootly-filter-btn" data-filter="vulnerable" style="
-    background:#444; border:none; border-radius:4px; color:#ccc;
+    background:#4a90d9; border:none; border-radius:4px; color:#fff;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x26A0; Vulnerable</button>
   <button class="rootly-filter-btn" data-filter="safe" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
@@ -764,10 +756,10 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
     font-family:sans-serif; display:flex; align-items:center; gap:6px; font-size:12px;">
   <span style="color:#aaa; margin-right:4px;">Layout:</span>
   <button class="rootly-layout-btn" data-layout="tree" style="
-    background:#4a90d9; border:none; border-radius:4px; color:#fff;
+    background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F332; Tree</button>
   <button class="rootly-layout-btn" data-layout="force" style="
-    background:#444; border:none; border-radius:4px; color:#ccc;
+    background:#4a90d9; border:none; border-radius:4px; color:#fff;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F4A5; Force</button>
   <button class="rootly-layout-btn" data-layout="radial" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
@@ -778,7 +770,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
   <button class="rootly-layout-btn" data-layout="cluster" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x2B22; Cluster</button>
-  <span id="layout-label" style="color:#888; font-size:11px; margin-left:6px;">Tree (top-down)</span>
+  <span id="layout-label" style="color:#888; font-size:11px; margin-left:6px;">Force-directed</span>
 </div>
 
 <!-- Rootly: CVE detail panel (hidden by default) -->
@@ -824,8 +816,8 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
   var filterBtns  = document.querySelectorAll('.rootly-filter-btn');
   var layoutBtns   = document.querySelectorAll('.rootly-layout-btn');
   var layoutLabel  = document.getElementById('layout-label');
-  var activeFilter = 'all';
-  var activeLayout = 'tree';
+  var activeFilter = 'vulnerable';
+  var activeLayout = 'force';
 
   /* Build reverse index: CVE ID -> [node IDs] */
   var cveIndex = {};
@@ -1169,6 +1161,9 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
         applyLayout(btn.getAttribute('data-layout'));
       });
     });
+
+    /* Apply default filter on load */
+    applyFilter('vulnerable');
 
     /* --- CLOSE / RESET --- */
     btnClose.addEventListener('click', function() { resetView(); });
