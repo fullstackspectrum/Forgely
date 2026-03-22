@@ -241,7 +241,7 @@ def build_graph(
     output: str,
     include_deps: bool = True,
 ) -> None:
-    G = nx.Graph()  # undirected – topology map
+    G = nx.DiGraph()  # directed – tree layout
 
     repo_image = _load_image_uri("cloudsmith.png")
 
@@ -258,6 +258,7 @@ def build_graph(
         shape="image",
         image=repo_image,
         size=25,
+        level=0,
         title=f"<b>{repo_label}</b><br>Cloudsmith Repository",
         font={"size": 14, "color": "white"},
     )
@@ -346,6 +347,7 @@ def build_graph(
             label=name,
             shape="box",
             size=node_size,
+            level=1,
             title=tooltip,
             borderWidth=2,
             color={"background": "#2a2a2a", "border": sev_clr, "highlight": {"background": "#3a3a3a", "border": "#ffffff"}},
@@ -416,6 +418,7 @@ def build_graph(
                         color=UNKNOWN_COLOR,
                         shape="dot",
                         size=10,
+                        level=2,
                         title=f"<b>{dep_label}</b><br>(external / unscanned)",
                     )
                 if not G.has_edge(src_name, dep_label):
@@ -428,22 +431,35 @@ def build_graph(
         width="100%",
         bgcolor="transparent",
         font_color="white",
-        directed=False,
+        directed=True,
         select_menu=False,
         filter_menu=False,
     )
     net.from_nx(G)
     net.set_options("""
     {
+      "layout": {
+        "hierarchical": {
+          "enabled": true,
+          "direction": "UD",
+          "sortMethod": "directed",
+          "levelSeparation": 200,
+          "nodeSpacing": 150,
+          "treeSpacing": 250,
+          "blockShifting": true,
+          "edgeMinimization": true,
+          "parentCentralization": true
+        }
+      },
       "physics": {
-        "forceAtlas2Based": {
-          "gravitationalConstant": -120,
-          "centralGravity": 0.012,
-          "springLength": 160,
-          "springConstant": 0.03,
-          "damping": 0.4
+        "hierarchicalRepulsion": {
+          "centralGravity": 0.0,
+          "springLength": 150,
+          "springConstant": 0.01,
+          "nodeDistance": 180,
+          "damping": 0.09
         },
-        "solver": "forceAtlas2Based",
+        "solver": "hierarchicalRepulsion",
         "stabilization": {"iterations": 300}
       },
       "interaction": {
@@ -453,7 +469,8 @@ def build_graph(
       },
       "edges": {
         "color": {"color": "#555555", "highlight": "#ffffff"},
-        "smooth": {"type": "continuous"}
+        "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4},
+        "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}}
       }
     }
     """)
@@ -596,6 +613,31 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   <span id="filter-count" style="color:#aaa; font-size:11px; margin-left:6px;"></span>
 </div>
 
+<!-- Rootly: layout switcher -->
+<div id="rootly-layouts" style="
+    position:fixed; top:104px; left:50%; transform:translateX(-50%);
+    background:#222; border-radius:8px; padding:8px 14px;
+    box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:9999;
+    font-family:sans-serif; display:flex; align-items:center; gap:6px; font-size:12px;">
+  <span style="color:#aaa; margin-right:4px;">Layout:</span>
+  <button class="rootly-layout-btn" data-layout="tree" style="
+    background:#4a90d9; border:none; border-radius:4px; color:#fff;
+    padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F332; Tree</button>
+  <button class="rootly-layout-btn" data-layout="force" style="
+    background:#444; border:none; border-radius:4px; color:#ccc;
+    padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F4A5; Force</button>
+  <button class="rootly-layout-btn" data-layout="radial" style="
+    background:#444; border:none; border-radius:4px; color:#ccc;
+    padding:5px 12px; font-size:12px; cursor:pointer;">&#x25CE; Radial</button>
+  <button class="rootly-layout-btn" data-layout="horizontal" style="
+    background:#444; border:none; border-radius:4px; color:#ccc;
+    padding:5px 12px; font-size:12px; cursor:pointer;">&#x2192; Horizontal</button>
+  <button class="rootly-layout-btn" data-layout="cluster" style="
+    background:#444; border:none; border-radius:4px; color:#ccc;
+    padding:5px 12px; font-size:12px; cursor:pointer;">&#x2B22; Cluster</button>
+  <span id="layout-label" style="color:#888; font-size:11px; margin-left:6px;">Tree (top-down)</span>
+</div>
+
 <!-- Rootly: CVE detail panel (hidden by default) -->
 <div id="rootly-panel" style="
     display:none; position:fixed; top:0; right:0; width:420px; height:100%;
@@ -636,7 +678,10 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   var cveResult  = document.getElementById('cve-result');
   var filterCount = document.getElementById('filter-count');
   var filterBtns  = document.querySelectorAll('.rootly-filter-btn');
+  var layoutBtns   = document.querySelectorAll('.rootly-layout-btn');
+  var layoutLabel  = document.getElementById('layout-label');
   var activeFilter = 'all';
+  var activeLayout = 'tree';
 
   /* Build reverse index: CVE ID -> [node IDs] */
   var cveIndex = {};
@@ -786,7 +831,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
       /* Always keep repo node visible */
       originalNodes.forEach(function(n) {
-        if (!ROOTLY_DATA[n.id] && n.shape === 'database') keepIds.add(n.id);
+        if (!ROOTLY_DATA[n.id] && (n.shape === 'image' || n.shape === 'database')) keepIds.add(n.id);
       });
 
       /* Update nodes: add/remove based on filter */
@@ -825,6 +870,122 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
     filterBtns.forEach(function(btn) {
       btn.addEventListener('click', function() {
         applyFilter(btn.getAttribute('data-filter'));
+      });
+    });
+
+    /* --- LAYOUT SWITCHER --- */
+    var LAYOUTS = {
+      tree: {
+        label: 'Tree (top-down)',
+        opts: {
+          layout: { hierarchical: { enabled:true, direction:'UD', sortMethod:'directed',
+            levelSeparation:200, nodeSpacing:150, treeSpacing:250,
+            blockShifting:true, edgeMinimization:true, parentCentralization:true }},
+          physics: { hierarchicalRepulsion: { centralGravity:0, springLength:150,
+            springConstant:0.01, nodeDistance:180, damping:0.09 },
+            solver:'hierarchicalRepulsion', stabilization:{iterations:300} },
+          edges: { color:{color:'#555555',highlight:'#ffffff'},
+            smooth:{type:'cubicBezier',forceDirection:'vertical',roundness:0.4},
+            arrows:{to:{enabled:true,scaleFactor:0.5}} }
+        }
+      },
+      force: {
+        label: 'Force-directed',
+        opts: {
+          layout: { hierarchical: { enabled:false } },
+          physics: { forceAtlas2Based: { gravitationalConstant:-120, centralGravity:0.012,
+            springLength:160, springConstant:0.03, damping:0.4 },
+            solver:'forceAtlas2Based', stabilization:{iterations:300} },
+          edges: { color:{color:'#555555',highlight:'#ffffff'},
+            smooth:{type:'continuous'},
+            arrows:{to:{enabled:true,scaleFactor:0.5}} }
+        }
+      },
+      radial: {
+        label: 'Radial',
+        opts: {
+          layout: { hierarchical: { enabled:false } },
+          physics: { barnesHut: { gravitationalConstant:-3000, centralGravity:0.5,
+            springLength:120, springConstant:0.04, damping:0.09 },
+            solver:'barnesHut', stabilization:{iterations:300} },
+          edges: { color:{color:'#555555',highlight:'#ffffff'},
+            smooth:{type:'continuous'},
+            arrows:{to:{enabled:true,scaleFactor:0.5}} }
+        },
+        afterStabilize: function() {
+          /* Pin repo node to center */
+          var repoId = originalNodes.find(function(n){ return !ROOTLY_DATA[n.id]; });
+          if (repoId) {
+            network.moveNode(repoId.id, 0, 0);
+            allNodes.update({id:repoId.id, fixed:{x:true,y:true}});
+          }
+        }
+      },
+      horizontal: {
+        label: 'Horizontal (left-right)',
+        opts: {
+          layout: { hierarchical: { enabled:true, direction:'LR', sortMethod:'directed',
+            levelSeparation:250, nodeSpacing:120, treeSpacing:200,
+            blockShifting:true, edgeMinimization:true, parentCentralization:true }},
+          physics: { hierarchicalRepulsion: { centralGravity:0, springLength:150,
+            springConstant:0.01, nodeDistance:160, damping:0.09 },
+            solver:'hierarchicalRepulsion', stabilization:{iterations:300} },
+          edges: { color:{color:'#555555',highlight:'#ffffff'},
+            smooth:{type:'cubicBezier',forceDirection:'horizontal',roundness:0.4},
+            arrows:{to:{enabled:true,scaleFactor:0.5}} }
+        }
+      },
+      cluster: {
+        label: 'Clustered',
+        opts: {
+          layout: { hierarchical: { enabled:false } },
+          physics: { repulsion: { centralGravity:0.2, springLength:200,
+            springConstant:0.05, nodeDistance:250, damping:0.09 },
+            solver:'repulsion', stabilization:{iterations:400} },
+          edges: { color:{color:'#555555',highlight:'#ffffff'},
+            smooth:{type:'dynamic'},
+            arrows:{to:{enabled:true,scaleFactor:0.5}} }
+        }
+      }
+    };
+
+    function applyLayout(key) {
+      activeLayout = key;
+      var layout = LAYOUTS[key];
+      /* Update button styles */
+      layoutBtns.forEach(function(btn) {
+        if (btn.getAttribute('data-layout') === key) {
+          btn.style.background = '#4a90d9';
+          btn.style.color = '#fff';
+        } else {
+          btn.style.background = '#444';
+          btn.style.color = '#ccc';
+        }
+      });
+      layoutLabel.textContent = layout.label;
+
+      /* Unfix all nodes before switching */
+      var updates = [];
+      allNodes.forEach(function(n) {
+        updates.push({id:n.id, fixed:{x:false,y:false}});
+      });
+      allNodes.update(updates);
+
+      network.setOptions(layout.opts);
+
+      if (layout.afterStabilize) {
+        network.once('stabilized', layout.afterStabilize);
+      }
+
+      network.stabilize(300);
+      setTimeout(function() {
+        network.fit({ animation:{ duration:600, easingFunction:'easeInOutQuad' } });
+      }, 500);
+    }
+
+    layoutBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        applyLayout(btn.getAttribute('data-layout'));
       });
     });
 
