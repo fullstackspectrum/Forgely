@@ -270,8 +270,10 @@ def build_graph(
     total_cves = 0
     # Per-node metadata for the detail panel (embedded in HTML as JS object)
     node_data: dict[str, dict] = {}
-    # CVE -> list of package names that contain it (for shared-CVE edges)
+    # CVE -> list of package node IDs that contain it (for shared-CVE edges)
     cve_to_packages: dict[str, list[str]] = {}
+    # Track packages by name for grouping duplicates
+    name_to_node_ids: dict[str, list[str]] = {}
 
     console.print()
     progress_cols = [
@@ -286,11 +288,13 @@ def build_graph(
       vuln_task = progress.add_task("Scanning vulnerabilities", total=len(packages))
       for pkg in packages:
         slug = pkg["slug_perm"]
-        name = f"{pkg['name']}@{pkg['version']}"
+        name = pkg['name']
+        version = pkg.get('version', '')
+        node_id = f"{name}@{version}" if version else name
         downloads = pkg.get("downloads", 0)
         scan_status = pkg.get("security_scan_status", "Unknown")
 
-        progress.update(vuln_task, description=f"Scanning [white]{name}[/]")
+        progress.update(vuln_task, description=f"Scanning [white]{node_id}[/]")
         max_sev, api_vuln_count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
 
         # api_vuln_count = authoritative count from the Cloudsmith scan
@@ -304,14 +308,38 @@ def build_graph(
             v_sev = v.get("severity", v.get("max_severity", "Unknown"))
             sev_counts[v_sev] = sev_counts.get(v_sev, 0) + 1
             cve_id = v.get("cve_id") or v.get("name") or v.get("identifier", "")
+            # Affected dependency from the vulnerability record
+            affected = (
+                v.get("affected_package")
+                or v.get("package_name")
+                or v.get("package")
+                or v.get("component")
+                or v.get("dependency")
+                or ""
+            )
+            affected_version = v.get("affected_version") or v.get("package_version") or ""
+            # Build advisory URLs
+            api_url = v.get("url") or v.get("advisory_url") or ""
+            nvd_url = ""
+            ghsa_url = ""
+            if cve_id and cve_id.upper().startswith("CVE-"):
+                nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+                ghsa_url = f"https://github.com/advisories?query={cve_id}"
+            elif cve_id and cve_id.upper().startswith("GHSA-"):
+                ghsa_url = f"https://github.com/advisories/{cve_id}"
             cve_records.append({
                 "id": cve_id,
                 "severity": v_sev,
                 "description": v.get("description", v.get("summary", "")),
-                "url": v.get("url", ""),
+                "url": api_url,
+                "nvd_url": nvd_url,
+                "ghsa_url": ghsa_url,
+                "affected": affected,
+                "affected_version": affected_version,
+                "fixed_in": v.get("fixed_in") or v.get("patched_version") or "",
             })
             if cve_id:
-                cve_to_packages.setdefault(cve_id, []).append(name)
+                cve_to_packages.setdefault(cve_id, []).append(node_id)
             if cve_id and len(cve_lines) < 10:
                 cve_lines.append(f"{cve_id} ({v_sev})")
 
@@ -330,6 +358,7 @@ def build_graph(
 
         tooltip = (
             f"<b>{name}</b><br>"
+            f"Version: {version}<br>"
             f"Format: {pkg.get('format', 'N/A')}<br>"
             f"Severity: {max_sev or 'None'}<br>"
             f"Vulnerabilities: {vuln_count} ({breakdown})<br>"
@@ -343,7 +372,7 @@ def build_graph(
 
         sev_clr = severity_color(max_sev)
         G.add_node(
-            name,
+            node_id,
             label=name,
             shape="box",
             size=node_size,
@@ -354,15 +383,25 @@ def build_graph(
             font={"color": "white", "size": 12},
         )
         # Edge from repo to package
-        G.add_edge(repo_label, name)
-        slug_to_name[slug] = name
+        G.add_edge(repo_label, node_id)
+        slug_to_name[slug] = node_id
+        name_to_node_ids.setdefault(name, []).append(node_id)
 
         # Store structured data for the HTML detail panel
-        node_data[name] = {
+        node_data[node_id] = {
             "cves": cve_records,
             "max_severity": max_sev or "None",
             "pkg_format": pkg.get("format", "N/A"),
             "vuln_count": vuln_count,
+            "version": pkg.get("version", "N/A"),
+            "license": pkg.get("license") or pkg.get("spdx_expression") or "N/A",
+            "size": pkg.get("size", 0),
+            "pkg_type": pkg.get("type_display") or pkg.get("package_type") or pkg.get("format", "N/A"),
+            "downloads": downloads,
+            "scan_status": scan_status,
+            "uploaded_at": pkg.get("uploaded_at") or pkg.get("created_at") or "N/A",
+            "repository": pkg.get("repository", "N/A"),
+            "slug": slug,
         }
 
         # Accumulate stats
@@ -409,7 +448,7 @@ def build_graph(
             for dep in deps:
                 dep_name = dep.get("name", dep.get("identifier", "unknown"))
                 dep_version = dep.get("version", "")
-                dep_label = f"{dep_name}@{dep_version}" if dep_version else dep_name
+                dep_label = dep_name
 
                 if dep_label not in G:
                     G.add_node(
@@ -477,7 +516,8 @@ def build_graph(
 
     with console.status("[bold cyan]Rendering graph…", spinner="dots"):
         net.save_graph(output)
-        _inject_ui(output, node_data)
+        name_groups = {k: v for k, v in name_to_node_ids.items() if len(v) > 1}
+        _inject_ui(output, node_data, name_groups)
 
     # --- Summary output ---
     console.print()
@@ -521,9 +561,10 @@ def _print_summary(output: str, G: nx.Graph, stats: dict[str, int], total_cves: 
     )
 
 
-def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
+def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str, list[str]]) -> None:
     """Inject legend, detail panel, CVE search, and click-to-filter JS."""
     node_data_json = json.dumps(node_data, separators=(",", ":"))
+    name_groups_json = json.dumps(name_groups, separators=(",", ":"))
     inject = r"""
 <!-- Rootly: graph-paper background -->
 <style>
@@ -661,6 +702,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 <script>
 (function() {
   var ROOTLY_DATA = """ + node_data_json + r""";
+  var NAME_GROUPS = """ + name_groups_json + r""";
   var SEV_COLORS = {
     Critical:'#ff4d4d', High:'#ff8c1a', Medium:'#ffd11a',
     Low:'#79b8ff', None:'#28a745', Unknown:'#666666'
@@ -704,6 +746,43 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
   function attachHandlers() {
     var allNodes = network.body.data.nodes;
+
+    /* --- CLUSTER same-name packages --- */
+    Object.keys(NAME_GROUPS).forEach(function(name) {
+      var nodeIds = NAME_GROUPS[name];
+      if (nodeIds.length < 2) return;
+      network.cluster({
+        joinCondition: function(nodeOptions) {
+          return nodeIds.indexOf(nodeOptions.id) !== -1;
+        },
+        clusterNodeProperties: {
+          label: name + ' (' + nodeIds.length + ')',
+          shape: 'box',
+          level: 1,
+          borderWidth: 3,
+          color: { background:'#3a2a4a', border:'#9b59b6', highlight:{ background:'#4a3a5a', border:'#ffffff' } },
+          font: { color:'white', size:13 },
+          title: '<b>' + name + '</b><br>' + nodeIds.length + ' versions<br><i>Click to expand</i>',
+        },
+        clusterEdgeProperties: {
+          color: '#555555',
+          width: 1,
+        },
+      });
+    });
+
+    /* Double-click to expand a cluster */
+    network.on('doubleClick', function(params) {
+      if (params.nodes.length === 1) {
+        var clickedId = params.nodes[0];
+        if (network.isCluster(clickedId)) {
+          network.openCluster(clickedId);
+          setTimeout(function() {
+            network.fit({ animation:{ duration:400, easingFunction:'easeInOutQuad' } });
+          }, 200);
+        }
+      }
+    });
 
     /* --- CLICK: focus on node + show panel --- */
     network.on('click', function(params) {
@@ -1009,18 +1088,60 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
   function showPanel(node, neighborIds, allNodes) {
     panel.style.display = 'block';
-    var nodeId = node.label || node.id;
-    panelTitle.textContent = nodeId;
+    /* Use node.id for ROOTLY_DATA lookup (name@version), label for display */
+    var dataKey = node.id;
+    var displayName = node.label || node.id;
+    panelTitle.textContent = displayName;
 
-    var meta = ROOTLY_DATA[nodeId] || {};
+    var meta = ROOTLY_DATA[dataKey] || {};
+    /* If clicked a cluster node, show grouped info */
+    if (!meta.version && network.isCluster(node.id)) {
+      var clusterNodes = network.getNodesInCluster(node.id);
+      panelMeta.innerHTML = '<div style="font-size:12px; color:#aaa;"><b>Grouped package</b> \u2014 ' + clusterNodes.length + ' versions. Double-click on the node to expand.</div>';
+      var listHtml = '<h3 style="margin:8px 0 6px; font-size:14px; color:#ccc;">Versions</h3>';
+      listHtml += '<div style="max-height:300px; overflow-y:auto;">';
+      clusterNodes.forEach(function(nid) {
+        var m = ROOTLY_DATA[nid] || {};
+        var sc = SEV_COLORS[m.max_severity] || '#28a745';
+        listHtml += '<div style="padding:6px 8px; margin-bottom:4px; background:#2a2a2a; border-radius:4px; border-left:3px solid ' + sc + '; cursor:pointer;" onclick="network.openCluster(\'' + esc(node.id).replace(/'/g,"\\'") + '\'); setTimeout(function(){network.selectNodes([\'' + esc(nid).replace(/'/g,"\\'") + '\']);},300);">';
+        listHtml += '<b>' + esc(m.version || nid) + '</b>';
+        listHtml += ' <span style="color:' + sc + '; font-size:11px;">' + esc(m.max_severity || 'Safe') + '</span>';
+        if (m.vuln_count) listHtml += ' \u2014 ' + m.vuln_count + ' vuln' + (m.vuln_count > 1 ? 's' : '');
+        listHtml += '</div>';
+      });
+      listHtml += '</div>';
+      panelNbrs.innerHTML = listHtml;
+      panelCves.innerHTML = '';
+      return;
+    }
     var sev  = meta.max_severity || 'None';
     var fmt  = meta.pkg_format   || '';
     var vc   = meta.vuln_count   != null ? meta.vuln_count : '\u2014';
-    panelMeta.innerHTML =
-      '<b>Format:</b> ' + esc(fmt) +
-      ' &nbsp;|&nbsp; <b>Severity:</b> <span style="color:' +
-      (SEV_COLORS[sev]||'#28a745') + '">' + esc(sev) + '</span>' +
-      ' &nbsp;|&nbsp; <b>Vulns:</b> ' + vc;
+    var ver  = meta.version      || '';
+    var lic  = meta.license      || '';
+    var dl   = meta.downloads    != null ? meta.downloads : '\u2014';
+    var scan = meta.scan_status  || '';
+    var upl  = meta.uploaded_at  || '';
+    var sz   = meta.size         || 0;
+    var szStr = sz > 1048576 ? (sz / 1048576).toFixed(1) + ' MB' : sz > 1024 ? (sz / 1024).toFixed(1) + ' KB' : sz + ' B';
+    if (!sz) szStr = '\u2014';
+
+    var metaHtml = '<div style="display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12px;">';
+    metaHtml += '<span style="color:#888;">Version</span><span>' + esc(ver) + '</span>';
+    metaHtml += '<span style="color:#888;">Format</span><span>' + esc(fmt) + '</span>';
+    metaHtml += '<span style="color:#888;">Severity</span><span style="color:' + (SEV_COLORS[sev]||'#28a745') + '; font-weight:bold;">' + esc(sev) + '</span>';
+    metaHtml += '<span style="color:#888;">Vulnerabilities</span><span>' + vc + '</span>';
+    metaHtml += '<span style="color:#888;">License</span><span>' + esc(lic) + '</span>';
+    metaHtml += '<span style="color:#888;">Size</span><span>' + szStr + '</span>';
+    metaHtml += '<span style="color:#888;">Downloads</span><span>' + dl + '</span>';
+    metaHtml += '<span style="color:#888;">Scan Status</span><span>' + esc(scan) + '</span>';
+    if (upl && upl !== 'N/A') {
+      var upDate = new Date(upl);
+      var upStr = isNaN(upDate) ? upl : upDate.toLocaleDateString() + ' ' + upDate.toLocaleTimeString();
+      metaHtml += '<span style="color:#888;">Uploaded</span><span>' + esc(upStr) + '</span>';
+    }
+    metaHtml += '</div>';
+    panelMeta.innerHTML = metaHtml;
 
     /* Neighbors section */
     var nbrs = [];
@@ -1046,34 +1167,59 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
     /* CVE section */
     var cves = meta.cves || [];
+    var totalVulns = meta.vuln_count || 0;
     if (cves.length) {
-      var h = '<h3 style="margin:0 0 6px; font-size:14px; color:#ccc;">CVEs (' + cves.length + ')</h3>';
+      var h = '<h3 style="margin:0 0 6px; font-size:14px; color:#ccc;">CVEs (' + cves.length;
+      if (totalVulns > cves.length) h += ' of ' + totalVulns;
+      h += ')</h3>';
       h += '<div style="max-height:400px; overflow-y:auto;">';
       cves.forEach(function(cv) {
         var sc = SEV_COLORS[cv.severity] || '#666';
-        h += '<div style="padding:8px; margin-bottom:6px; background:#2a2a2a; border-radius:4px; border-left:3px solid ' + sc + ';">';
-        var label = esc(cv.id || 'Unknown');
-        if (cv.url) {
-          h += '<a href="' + esc(cv.url) + '" target="_blank" rel="noopener" style="color:#6cb6ff; text-decoration:none; font-weight:bold;">' + label + '</a>';
-        } else {
-          h += '<b>' + label + '</b>';
-        }
-        h += ' <span style="color:' + sc + '; font-size:11px; font-weight:bold;">' + esc(cv.severity) + '</span>';
-        /* Show which other packages share this CVE */
-        var shared = cveIndex[(cv.id||'').toUpperCase()] || [];
-        var others = shared.filter(function(s) { return s !== nodeId; });
-        if (others.length) {
-          h += '<div style="margin-top:3px; font-size:11px; color:#e8a845;">\u26a0 Shared with: ' + others.map(esc).join(', ') + '</div>';
-        }
-        if (cv.description) {
-          h += '<div style="margin-top:4px; color:#999; font-size:12px;">' + esc(cv.description).substring(0, 200);
-          if (cv.description.length > 200) h += '\u2026';
+        h += '<div style="padding:10px; margin-bottom:8px; background:#2a2a2a; border-radius:6px; border-left:3px solid ' + sc + ';">';
+        /* CVE ID header */
+        h += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">';
+        h += '<b style="font-size:13px;">' + esc(cv.id || 'Unknown') + '</b>';
+        h += ' <span style="color:' + sc + '; font-size:11px; font-weight:bold; background:rgba(255,255,255,0.06); padding:1px 6px; border-radius:3px;">' + esc(cv.severity) + '</span>';
+        h += '</div>';
+        /* Affected dependency */
+        if (cv.affected) {
+          h += '<div style="margin-top:5px; font-size:12px; color:#ccc;">\u{1F4E6} <b>Affected:</b> ' + esc(cv.affected);
+          if (cv.affected_version) h += ' @ ' + esc(cv.affected_version);
           h += '</div>';
+        }
+        if (cv.fixed_in) {
+          h += '<div style="font-size:12px; color:#8bc78b;">\u2705 <b>Fixed in:</b> ' + esc(cv.fixed_in) + '</div>';
+        }
+        /* Description */
+        if (cv.description) {
+          h += '<div style="margin-top:5px; color:#999; font-size:12px; line-height:1.4;">' + esc(cv.description).substring(0, 300);
+          if (cv.description.length > 300) h += '\u2026';
+          h += '</div>';
+        }
+        /* Advisory links */
+        h += '<div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">';
+        if (cv.nvd_url) {
+          h += '<a href="' + esc(cv.nvd_url) + '" target="_blank" rel="noopener" style="color:#6cb6ff; font-size:11px; text-decoration:none; background:#1a2a3a; padding:2px 8px; border-radius:3px;">\u{1F6E1} NVD</a>';
+        }
+        if (cv.ghsa_url) {
+          h += '<a href="' + esc(cv.ghsa_url) + '" target="_blank" rel="noopener" style="color:#6cb6ff; font-size:11px; text-decoration:none; background:#1a2a3a; padding:2px 8px; border-radius:3px;">\u{1F4CB} GitHub Advisory</a>';
+        }
+        if (cv.url && cv.url !== cv.nvd_url && cv.url !== cv.ghsa_url) {
+          h += '<a href="' + esc(cv.url) + '" target="_blank" rel="noopener" style="color:#6cb6ff; font-size:11px; text-decoration:none; background:#1a2a3a; padding:2px 8px; border-radius:3px;">\u{1F517} Advisory</a>';
+        }
+        h += '</div>';
+        /* Shared-with info */
+        var shared = cveIndex[(cv.id||'').toUpperCase()] || [];
+        var others = shared.filter(function(s) { return s !== dataKey; });
+        if (others.length) {
+          h += '<div style="margin-top:4px; font-size:11px; color:#e8a845;">\u26a0 Also affects: ' + others.map(esc).join(', ') + '</div>';
         }
         h += '</div>';
       });
       h += '</div>';
       panelCves.innerHTML = h;
+    } else if (totalVulns > 0) {
+      panelCves.innerHTML = '<p style="color:#e8a845;">\u26a0 ' + totalVulns + ' vulnerabilities detected but details could not be retrieved from the API.</p>';
     } else {
       panelCves.innerHTML = '<p style="color:#666;">No CVEs recorded for this package.</p>';
     }
