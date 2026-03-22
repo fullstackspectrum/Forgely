@@ -359,8 +359,6 @@ def build_graph(
     node_data: dict[str, dict] = {}
     # CVE -> list of package node IDs that contain it (for shared-CVE edges)
     cve_to_packages: dict[str, list[str]] = {}
-    # Track packages by name for grouping duplicates
-    name_to_node_ids: dict[str, list[str]] = {}
 
     console.print()
     progress_cols = [
@@ -487,7 +485,6 @@ def build_graph(
         # Edge from repo to package
         G.add_edge(repo_label, node_id)
         slug_to_name[slug] = node_id
-        name_to_node_ids.setdefault(name, []).append(node_id)
 
         # Store structured data for the HTML detail panel
         node_data[node_id] = {
@@ -610,8 +607,7 @@ def build_graph(
 
     with console.status("[bold cyan]Rendering graph…", spinner="dots"):
         net.save_graph(output)
-        name_groups = {k: v for k, v in name_to_node_ids.items() if len(v) > 1}
-        _inject_ui(output, node_data, name_groups)
+        _inject_ui(output, node_data)
 
     # --- Summary output ---
     console.print()
@@ -655,10 +651,9 @@ def _print_summary(output: str, G: nx.Graph, stats: dict[str, int], total_cves: 
     )
 
 
-def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str, list[str]]) -> None:
+def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
     """Inject legend, detail panel, CVE search, and click-to-filter JS."""
     node_data_json = json.dumps(node_data, separators=(",", ":"))
-    name_groups_json = json.dumps(name_groups, separators=(",", ":"))
     inject = r"""
 <!-- Rootly: graph-paper background -->
 <style>
@@ -796,7 +791,6 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
 <script>
 (function() {
   var ROOTLY_DATA = """ + node_data_json + r""";
-  var NAME_GROUPS = """ + name_groups_json + r""";
   var SEV_COLORS = {
     Critical:'#ff4d4d', High:'#ff8c1a', Medium:'#ffd11a',
     Low:'#79b8ff', None:'#28a745', Unknown:'#666666'
@@ -840,43 +834,6 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
 
   function attachHandlers() {
     var allNodes = network.body.data.nodes;
-
-    /* --- CLUSTER same-name packages --- */
-    Object.keys(NAME_GROUPS).forEach(function(name) {
-      var nodeIds = NAME_GROUPS[name];
-      if (nodeIds.length < 2) return;
-      network.cluster({
-        joinCondition: function(nodeOptions) {
-          return nodeIds.indexOf(nodeOptions.id) !== -1;
-        },
-        clusterNodeProperties: {
-          label: name + ' (' + nodeIds.length + ')',
-          shape: 'box',
-          level: 1,
-          borderWidth: 3,
-          color: { background:'#3a2a4a', border:'#9b59b6', highlight:{ background:'#4a3a5a', border:'#ffffff' } },
-          font: { color:'white', size:13 },
-          title: '<b>' + name + '</b><br>' + nodeIds.length + ' versions<br><i>Click to expand</i>',
-        },
-        clusterEdgeProperties: {
-          color: '#555555',
-          width: 1,
-        },
-      });
-    });
-
-    /* Double-click to expand a cluster */
-    network.on('doubleClick', function(params) {
-      if (params.nodes.length === 1) {
-        var clickedId = params.nodes[0];
-        if (network.isCluster(clickedId)) {
-          network.openCluster(clickedId);
-          setTimeout(function() {
-            network.fit({ animation:{ duration:400, easingFunction:'easeInOutQuad' } });
-          }, 200);
-        }
-      }
-    });
 
     /* --- CLICK: focus on node + show panel --- */
     network.on('click', function(params) {
@@ -1191,26 +1148,6 @@ def _inject_ui(html_path: str, node_data: dict[str, dict], name_groups: dict[str
     panelTitle.textContent = displayName;
 
     var meta = ROOTLY_DATA[dataKey] || {};
-    /* If clicked a cluster node, show grouped info */
-    if (!meta.version && network.isCluster(node.id)) {
-      var clusterNodes = network.getNodesInCluster(node.id);
-      panelMeta.innerHTML = '<div style="font-size:12px; color:#aaa;"><b>Grouped package</b> \u2014 ' + clusterNodes.length + ' versions. Double-click on the node to expand.</div>';
-      var listHtml = '<h3 style="margin:8px 0 6px; font-size:14px; color:#ccc;">Versions</h3>';
-      listHtml += '<div style="max-height:300px; overflow-y:auto;">';
-      clusterNodes.forEach(function(nid) {
-        var m = ROOTLY_DATA[nid] || {};
-        var sc = SEV_COLORS[m.max_severity] || '#28a745';
-        listHtml += '<div style="padding:6px 8px; margin-bottom:4px; background:#2a2a2a; border-radius:4px; border-left:3px solid ' + sc + '; cursor:pointer;" onclick="network.openCluster(\'' + esc(node.id).replace(/'/g,"\\'") + '\'); setTimeout(function(){network.selectNodes([\'' + esc(nid).replace(/'/g,"\\'") + '\']);},300);">';
-        listHtml += '<b>' + esc(m.version || nid) + '</b>';
-        listHtml += ' <span style="color:' + sc + '; font-size:11px;">' + esc(m.max_severity || 'Safe') + '</span>';
-        if (m.vuln_count) listHtml += ' \u2014 ' + m.vuln_count + ' vuln' + (m.vuln_count > 1 ? 's' : '');
-        listHtml += '</div>';
-      });
-      listHtml += '</div>';
-      panelNbrs.innerHTML = listHtml;
-      panelCves.innerHTML = '';
-      return;
-    }
     var sev  = meta.max_severity || 'None';
     var fmt  = meta.pkg_format   || '';
     var vc   = meta.vuln_count   != null ? meta.vuln_count : '\u2014';
