@@ -44,7 +44,6 @@ python rootly.py                          # uses .env values
 python rootly.py -o myorg -r myrepo       # override org/repo
 python rootly.py --no-deps                # skip dependency fetching (faster)
 python rootly.py --output my_graph.html   # custom output filename
-python rootly.py -v                       # verbose / debug logging
 ```
 
 Open the generated `cloudsmith_security_map.html` in your browser.
@@ -81,7 +80,6 @@ rootly/
 | `-k, --api-key` | `CLOUDSMITH_API_KEY` | API key for authentication |
 | `--output` | — | Output HTML filename (default: `cloudsmith_security_map.html`) |
 | `--no-deps` | — | Skip per-package dependency fetching |
-| `-v, --verbose` | — | Enable debug-level logging |
 
 ## License
 
