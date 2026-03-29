@@ -158,7 +158,7 @@ export default function App() {
           >
             ×
           </button>
-          <SidePanel data={data} nodeId={selectedNode} />
+          <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
         </div>
       )}
 

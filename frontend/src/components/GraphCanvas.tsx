@@ -5,6 +5,7 @@ import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
+import { NodeSquareProgram } from "@sigma/node-square";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -279,9 +280,11 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
-        ...(nodeImage
-          ? { type: "image", image: nodeImage }
-          : {}),
+        ...(node.type === "dependency"
+          ? { type: "square" }
+          : nodeImage
+            ? { type: "image", image: nodeImage }
+            : {}),
       });
       nodeData[node.id] = node.data;
     }
@@ -323,7 +326,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
-      nodeProgramClasses: { image: NodeImageProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
