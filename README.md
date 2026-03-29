@@ -1,28 +1,27 @@
 # 🌳 Artigraphly
 
-**Artigraphly** is a Python-powered visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
+**Artigraphly** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
 ![Example – Tree Layout](example1.png)
 
 ![Example – Force Layout](example2.png)
 
-## ✨ Key Features
+## Architecture
 
-- **Vulnerability Scanning** – Queries the Cloudsmith vulnerability API to surface CVEs per package, with severity, affected dependency, NVD and GitHub Advisory links.
-- **Security Heatmap** – Node borders colored Red → Orange → Yellow → Blue → Green by CVE severity.
-- **Interactive Graph** – Fullscreen, graph-paper–styled HTML output with drag, zoom, hover tooltips, and click-to-inspect.
-- **5 Layout Modes** – Switch between Tree (top-down), Force-directed, Radial, Horizontal (left-right), and Clustered layouts from the UI.
-- **Vulnerability Filters** – Filter the graph to show only Vulnerable, Safe, or specific severity (Critical / High / Medium / Low) packages. Non-matching nodes are fully hidden.
-- **CVE Search** – Search by CVE ID with partial matching; highlights affected packages and focuses the view.
-- **Package Grouping** – Packages with the same name but different versions are automatically clustered. Click to inspect, double-click to expand.
-- **Detail Panel** – Click any node to open a side panel showing version, format, license, size, downloads, scan status, upload date, and full CVE listing with advisory links.
-- **Shared-CVE Edges** – Red dashed edges connect packages that share the same CVE.
-- **Dependency Mapping** – Traces per-package dependency trees from the Cloudsmith API.
-- **Cloudsmith Branding** – Repository hub node uses the Cloudsmith logo.
-- **Rich Terminal UI** – Styled CLI output with progress bars, spinners, severity summary table, and configuration panel via the Rich library.
-- **Rate-Limit Aware** – Automatic retries with exponential back-off on 429 responses.
-- **CLI & Env Config** – Pass owner/repo/key via flags or `.env` file — nothing hardcoded.
-- **Zero-DB** – Fetches directly from the Cloudsmith API — no database required.
+- **Backend** (`backend/`) — FastAPI server that fetches Cloudsmith data and serves it as a JSON API (`/api/graph`, `/api/config`, `/api/health`), with in-memory caching (5 min TTL)
+- **Frontend** (`frontend/`) — React + Vite app using [Sigma.js](https://www.sigmajs.org/) (WebGL) for graph rendering via [graphology](https://graphology.github.io/)
+
+## Key Features
+
+- **WebGL rendering** via Sigma.js — smooth 60fps pan/zoom, GPU-accelerated, handles thousands of nodes
+- **Edge bundling** — curved edges via `@sigma/edge-curve`, with varying curvature for shared-CVE vs dependency edges
+- **Hover glow effects** — node highlighting + size boost on hover via Sigma reducers; un-hovered edges dim out
+- **Side panel** — click any node to get a polished detail panel (animated slide-in) with metadata grid, CVE cards with severity badges, advisory links, and shared-CVE cross-references
+- **CVE search** — search bar with exact and substring matching, highlights affected nodes
+- **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low
+- **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial
+- **Refresh button** — force re-fetch from Cloudsmith API
+- **Dark security-product theme** — graph-paper grid background, glassmorphism toolbars, custom scrollbars
 
 ## 🚀 Quick Start
 
@@ -31,8 +30,21 @@
 ```bash
 git clone https://github.com/your-user/Artigraphly.git
 cd Artigraphly
+```
+
+**Backend:**
+
+```bash
+cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+**Frontend:**
+
+```bash
+cd frontend
+npm install
 ```
 
 ### 2. Configure credentials
@@ -42,22 +54,17 @@ cp .env.example .env
 # Edit .env with your Cloudsmith API key, org, and repo
 ```
 
-Or pass them directly:
+### 3. Run
 
 ```bash
-python Artigraphly.py --api-key YOUR_KEY --owner YOUR_ORG --repo YOUR_REPO
+# Terminal 1 — Backend
+cd backend && .venv/bin/uvicorn main:app --port 8000
+
+# Terminal 2 — Frontend
+cd frontend && npm run dev
 ```
 
-### 3. Generate the graph
-
-```bash
-python Artigraphly.py                          # uses .env values
-python Artigraphly.py -o myorg -r myrepo       # override org/repo
-python Artigraphly.py --no-deps                # skip dependency fetching (faster)
-python Artigraphly.py --output my_graph.html   # custom output filename
-```
-
-Open the generated `cloudsmith_security_map.html` in your browser.
+Open **http://localhost:3000** in your browser.
 
 ## 🎨 Severity Color Key
 
@@ -85,27 +92,48 @@ Open the generated `cloudsmith_security_map.html` in your browser.
 
 ```
 Artigraphly/
-├── Artigraphly.py             # Main application
-├── requirements.txt      # Python dependencies (requests, networkx, pyvis, python-dotenv, rich)
-├── .env.example          # Template for credentials
+├── backend/
+│   ├── main.py               # FastAPI application
+│   ├── cloudsmith.py          # Cloudsmith API client
+│   ├── models.py              # Pydantic response models
+│   └── requirements.txt       # Python dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── components/        # React components (GraphCanvas, SidePanel, FilterBar, etc.)
+│   │   ├── hooks/             # Custom hooks (useGraphData)
+│   │   ├── types/             # TypeScript type definitions
+│   │   ├── App.tsx            # Root component
+│   │   ├── main.tsx           # Entry point
+│   │   └── index.css          # Global styles
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── artigraphly.py             # Legacy CLI tool
+├── .env                       # Credentials (not committed)
 ├── assets/
-│   └── cloudsmith.png    # Cloudsmith logo for repo hub node
-├── example1.png          # Screenshot – tree layout
-├── example2.png          # Screenshot – force layout
-├── .gitignore
+│   └── cloudsmith.png
 ├── LICENSE
 └── README.md
 ```
 
-## ⚙️ CLI Reference
+## API Endpoints
 
-| Flag | Env Variable | Description |
-|------|-------------|-------------|
-| `-o, --owner` | `CLOUDSMITH_OWNER` | Cloudsmith organisation / owner |
-| `-r, --repo` | `CLOUDSMITH_REPO` | Repository name |
-| `-k, --api-key` | `CLOUDSMITH_API_KEY` | API key for authentication |
-| `--output` | — | Output HTML filename (default: `cloudsmith_security_map.html`) |
-| `--no-deps` | — | Skip per-package dependency fetching |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/config` | GET | Returns configured owner and repo |
+| `/api/graph` | GET | Fetch graph data (cached for 5 min) |
+| `/api/graph/refresh` | POST | Force re-fetch from Cloudsmith |
+
+## ⚙️ Configuration
+
+Set the following in your `.env` file:
+
+| Variable | Description |
+|----------|-------------|
+| `CLOUDSMITH_API_KEY` | Cloudsmith API key |
+| `CLOUDSMITH_OWNER` | Cloudsmith organisation / owner |
+| `CLOUDSMITH_REPO` | Repository name |
 
 ## License
 
