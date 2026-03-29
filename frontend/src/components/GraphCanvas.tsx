@@ -3,7 +3,7 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
-import type { GraphResponse, FilterType, LayoutType, NodeData } from "../types";
+import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
 /* Load curved-edge program; resolved before first render via the promise. */
@@ -90,6 +90,7 @@ interface Props {
   hoveredNode: string | null;
   filter: FilterType;
   layout: LayoutType;
+  edgeStyle: EdgeStyle;
   searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
@@ -101,6 +102,7 @@ export default function GraphCanvas({
   hoveredNode,
   filter,
   layout,
+  edgeStyle,
   searchResults,
   onNodeSelect,
   onNodeHover,
@@ -171,6 +173,24 @@ export default function GraphCanvas({
     sigma.getCamera().animatedReset({ duration: 400 });
   }, [layout, data]);
 
+  /* Switch edge style (curved ↔ straight) */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+
+    const newType =
+      edgeStyle === "curved" && CurvedEdgeProgram ? "curvedArrow" : "arrow";
+    graph.forEachEdge((edge) => {
+      graph.setEdgeAttribute(edge, "type", newType);
+    });
+    sigma.setSetting(
+      "defaultEdgeType",
+      newType,
+    );
+    sigma.refresh();
+  }, [edgeStyle]);
+
   /* Build graph + sigma on data change */
   useEffect(() => {
     if (!containerRef.current || !data) return;
@@ -223,6 +243,7 @@ export default function GraphCanvas({
     }
 
     /* --- Add edges --- */
+    const useCurved = edgeStyle === "curved" && !!CurvedEdgeProgram;
     let edgeIdx = 0;
     for (const edge of data.edges) {
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
@@ -231,7 +252,7 @@ export default function GraphCanvas({
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.8 : 1.2,
         color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "#333" : "#555",
-        type: CurvedEdgeProgram ? "curvedArrow" : "arrow",
+        type: useCurved ? "curvedArrow" : "arrow",
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -265,7 +286,7 @@ export default function GraphCanvas({
       allowInvalidContainer: true,
       renderEdgeLabels: false,
       enableEdgeEvents: true,
-      defaultEdgeType: CurvedEdgeProgram ? "curvedArrow" : "arrow",
+      defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: edgeProgClasses,
       nodeProgramClasses: nodeProgClasses,
       labelDensity: 0.12,
