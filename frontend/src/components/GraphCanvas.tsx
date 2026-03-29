@@ -8,13 +8,81 @@ import { SEVERITY_COLORS } from "../types";
 
 /* Load curved-edge program; resolved before first render via the promise. */
 let CurvedEdgeProgram: any = null;
-const edgeCurveReady = import("@sigma/edge-curve")
-  .then((m) => {
-    CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
-  })
-  .catch(() => {
-    /* fall back to sigma's built-in arrow */
+let NodeImageProgram: any = null;
+const depsReady = Promise.all([
+  import("@sigma/edge-curve")
+    .then((m) => {
+      CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
+    })
+    .catch(() => {}),
+  import("@sigma/node-image")
+    .then((m) => {
+      NodeImageProgram = m.NodeImageProgram;
+    })
+    .catch(() => {}),
+]);
+
+/**
+ * BFS-based hierarchical layout.
+ * Places the repo node at root, packages at depth 1, dependencies at depth 2+.
+ * @param horizontal – if true, tree grows left-to-right; otherwise top-to-bottom.
+ */
+function assignTreeLayout(graph: Graph, horizontal: boolean) {
+  const visited = new Set<string>();
+  const levels: string[][] = [];
+
+  /* Find root (repo node) or fall back to first node */
+  let root: string | null = null;
+  graph.forEachNode((node, attrs) => {
+    if (attrs.nodeType === "repo") root = node;
   });
+  if (!root) {
+    root = graph.nodes()[0];
+    if (!root) return;
+  }
+
+  /* BFS to assign depths */
+  const queue: { id: string; depth: number }[] = [{ id: root, depth: 0 }];
+  visited.add(root);
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!;
+    if (!levels[depth]) levels[depth] = [];
+    levels[depth].push(id);
+    graph.forEachOutNeighbor(id, (neighbor) => {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push({ id: neighbor, depth: depth + 1 });
+      }
+    });
+  }
+
+  /* Place any disconnected nodes at the deepest level */
+  graph.forEachNode((node) => {
+    if (!visited.has(node)) {
+      const d = levels.length;
+      if (!levels[d]) levels[d] = [];
+      levels[d].push(node);
+    }
+  });
+
+  /* Assign coordinates */
+  const levelSpacing = 120;
+  for (let d = 0; d < levels.length; d++) {
+    const nodes = levels[d];
+    const span = nodes.length * 60;
+    for (let i = 0; i < nodes.length; i++) {
+      const cross = -span / 2 + i * 60;
+      const main = d * levelSpacing;
+      if (horizontal) {
+        graph.setNodeAttribute(nodes[i], "x", main);
+        graph.setNodeAttribute(nodes[i], "y", cross);
+      } else {
+        graph.setNodeAttribute(nodes[i], "x", cross);
+        graph.setNodeAttribute(nodes[i], "y", main);
+      }
+    }
+  }
+}
 
 interface Props {
   data: GraphResponse;
@@ -95,6 +163,8 @@ export default function GraphCanvas({
           graph.setNodeAttribute(node, "y", 0);
         }
       });
+    } else if (layout === "tree" || layout === "horizontal") {
+      assignTreeLayout(graph, layout === "horizontal");
     }
 
     sigma.refresh();
@@ -108,7 +178,7 @@ export default function GraphCanvas({
     let cancelled = false;
     const container = containerRef.current;
 
-    edgeCurveReady.then(() => {
+    depsReady.then(() => {
       if (cancelled || !container) return;
       buildSigma(container);
     });
@@ -145,6 +215,9 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
+        ...(node.type === "repo" && NodeImageProgram
+          ? { type: "image", image: "/cloudsmith.png" }
+          : {}),
       });
       nodeData[node.id] = node.data;
     }
@@ -183,6 +256,10 @@ export default function GraphCanvas({
     if (CurvedEdgeProgram) {
       edgeProgClasses.curvedArrow = CurvedEdgeProgram;
     }
+    const nodeProgClasses: Record<string, any> = {};
+    if (NodeImageProgram) {
+      nodeProgClasses.image = NodeImageProgram;
+    }
 
     const sigma = new Sigma(graph, el, {
       allowInvalidContainer: true,
@@ -190,6 +267,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: CurvedEdgeProgram ? "curvedArrow" : "arrow",
       edgeProgramClasses: edgeProgClasses,
+      nodeProgramClasses: nodeProgClasses,
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
