@@ -38,6 +38,20 @@ def _api_get(session: requests.Session, url: str, params: dict | None = None) ->
     raise RuntimeError(f"Max retries exceeded for {url}")
 
 
+def fetch_namespaces(session: requests.Session) -> list[dict]:
+    """Fetch all namespaces (orgs) the authenticated user belongs to."""
+    url = f"{BASE_URL}/namespaces/"
+    data = _api_get(session, url)
+    return data if isinstance(data, list) else []
+
+
+def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
+    """Fetch all repositories within a namespace."""
+    url = f"{BASE_URL}/repos/{owner}/"
+    data = _api_get(session, url)
+    return data if isinstance(data, list) else []
+
+
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
     url = f"{BASE_URL}/packages/{owner}/{repo}/"
     page = 1
