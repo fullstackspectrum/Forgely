@@ -19,7 +19,8 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCo
 from rich.table import Table
 from rich.text import Text
 
-load_dotenv()
+_dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+_dotenv_loaded = load_dotenv(_dotenv_path, override=True)
 
 console = Console()
 
@@ -29,6 +30,13 @@ log.setLevel(logging.DEBUG)
 _fh = logging.FileHandler("artigraphly.log", mode="w", encoding="utf-8")
 _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S"))
 log.addHandler(_fh)
+
+log.debug("dotenv path: %s (exists=%s, loaded=%s)", _dotenv_path, os.path.exists(_dotenv_path), _dotenv_loaded)
+_raw_key = os.getenv("CLOUDSMITH_API_KEY", "")
+log.debug("CLOUDSMITH_API_KEY from env: length=%d, first4=%s, last4=%s",
+          len(_raw_key), _raw_key[:4] if _raw_key else '(empty)', _raw_key[-4:] if _raw_key else '(empty)')
+log.debug("CLOUDSMITH_OWNER from env: %s", os.getenv("CLOUDSMITH_OWNER", "(not set)"))
+log.debug("CLOUDSMITH_REPO from env: %s", os.getenv("CLOUDSMITH_REPO", "(not set)"))
 
 # ---------------------------------------------------------------------------
 # Cloudsmith API client
@@ -41,6 +49,8 @@ RETRY_BACKOFF = 2  # seconds, doubles each retry
 
 def _session(api_key: str) -> requests.Session:
     """Return a configured requests session with auth headers."""
+    log.debug("Creating session with API key: length=%d, first4=%s, last4=%s",
+              len(api_key), api_key[:4] if api_key else '(empty)', api_key[-4:] if api_key else '(empty)')
     s = requests.Session()
     s.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
     return s
@@ -1332,6 +1342,8 @@ def main(argv: list[str] | None = None) -> None:
     console.print(f"  [bold]Output:[/] [cyan]{args.output}[/]")
     console.print()
 
+    log.debug("args.api_key: length=%d, first4=%s, last4=%s, repr=%r",
+              len(args.api_key), args.api_key[:4], args.api_key[-4:], args.api_key)
     session = _session(args.api_key)
     build_graph(session, args.owner, args.repo, args.output, include_deps=not args.no_deps)
 
