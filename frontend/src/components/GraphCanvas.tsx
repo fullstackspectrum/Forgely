@@ -6,6 +6,7 @@ import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
+import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -221,6 +222,7 @@ export default function GraphCanvas({
     const newType =
       edgeStyle === "curved" ? "curvedArrow" : "arrow";
     graph.forEachEdge((edge) => {
+      if (graph.getEdgeAttribute(edge, "edgeKind") === "dependency") return;
       graph.setEdgeAttribute(edge, "type", newType);
     });
     sigma.setSetting(
@@ -297,9 +299,9 @@ export default function GraphCanvas({
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
-        size: isSharedCve ? 2.5 : isDep ? 1.5 : 2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(100,149,237,0.5)" : "rgba(70,130,210,0.6)",
-        type: useCurved ? "curvedArrow" : "arrow",
+        size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
+        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
+        type: isSharedCve ? (useCurved ? "curvedArrow" : "arrow") : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -325,7 +327,7 @@ export default function GraphCanvas({
       renderEdgeLabels: false,
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
-      edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
+      edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
       nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
