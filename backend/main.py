@@ -15,6 +15,8 @@ from cloudsmith import (
     create_session,
     fetch_all_packages,
     fetch_dependencies,
+    fetch_namespaces,
+    fetch_repos,
     get_package_vulnerabilities,
 )
 from models import (
@@ -51,27 +53,61 @@ _cache: dict[str, dict] = {}
 CACHE_TTL = 300  # 5 minutes
 
 
-def _get_config():
+def _get_api_key() -> str:
     api_key = os.getenv("CLOUDSMITH_API_KEY", "")
-    owner = os.getenv("CLOUDSMITH_OWNER", "")
-    repo = os.getenv("CLOUDSMITH_REPO", "")
-    if not api_key or not owner or not repo:
-        raise HTTPException(
-            status_code=500,
-            detail="Missing CLOUDSMITH_API_KEY, CLOUDSMITH_OWNER, or CLOUDSMITH_REPO in .env",
-        )
-    return api_key, owner, repo
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Missing CLOUDSMITH_API_KEY in .env")
+    return api_key
+
+
+def _get_defaults() -> tuple[str, str]:
+    """Return the default owner/repo from env (may be empty)."""
+    return os.getenv("CLOUDSMITH_OWNER", ""), os.getenv("CLOUDSMITH_REPO", "")
 
 
 @app.get("/api/config")
 def get_config():
-    _, owner, repo = _get_config()
+    api_key = _get_api_key()
+    owner, repo = _get_defaults()
     return {"owner": owner, "repo": repo}
 
 
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/namespaces")
+def list_namespaces():
+    """List all Cloudsmith workspaces/orgs the user belongs to."""
+    api_key = _get_api_key()
+    session = create_session(api_key)
+    raw = fetch_namespaces(session)
+    return [
+        {
+            "slug": ns.get("slug", ""),
+            "name": ns.get("name", ns.get("slug", "")),
+            "type": ns.get("type_name", ns.get("type", "")),
+        }
+        for ns in raw
+    ]
+
+
+@app.get("/api/repos/{owner}")
+def list_repos(owner: str):
+    """List all repos within a workspace/org."""
+    api_key = _get_api_key()
+    session = create_session(api_key)
+    raw = fetch_repos(session, owner)
+    return [
+        {
+            "slug": r.get("slug", ""),
+            "name": r.get("name", r.get("slug", "")),
+            "description": r.get("description", ""),
+            "package_count": r.get("package_count", 0),
+        }
+        for r in raw
+    ]
 
 
 def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
@@ -212,8 +248,14 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
 
 @app.get("/api/graph", response_model=GraphResponse)
-def get_graph():
-    api_key, owner, repo = _get_config()
+def get_graph(owner: str | None = None, repo: str | None = None):
+    api_key = _get_api_key()
+    default_owner, default_repo = _get_defaults()
+    owner = owner or default_owner
+    repo = repo or default_repo
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail="owner and repo are required")
+
     cache_key = f"{owner}/{repo}"
 
     if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
@@ -227,8 +269,14 @@ def get_graph():
 
 
 @app.post("/api/graph/refresh", response_model=GraphResponse)
-def refresh_graph():
-    api_key, owner, repo = _get_config()
+def refresh_graph(owner: str | None = None, repo: str | None = None):
+    api_key = _get_api_key()
+    default_owner, default_repo = _get_defaults()
+    owner = owner or default_owner
+    repo = repo or default_repo
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail="owner and repo are required")
+
     cache_key = f"{owner}/{repo}"
     log.info("Force-refreshing graph for %s/%s", owner, repo)
     result = _build_graph(api_key, owner, repo)
