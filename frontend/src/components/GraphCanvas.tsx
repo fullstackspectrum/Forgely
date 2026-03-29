@@ -22,6 +22,68 @@ const depsReady = Promise.all([
     .catch(() => {}),
 ]);
 
+/**
+ * BFS-based hierarchical layout.
+ * Places the repo node at root, packages at depth 1, dependencies at depth 2+.
+ * @param horizontal – if true, tree grows left-to-right; otherwise top-to-bottom.
+ */
+function assignTreeLayout(graph: Graph, horizontal: boolean) {
+  const visited = new Set<string>();
+  const levels: string[][] = [];
+
+  /* Find root (repo node) or fall back to first node */
+  let root: string | null = null;
+  graph.forEachNode((node, attrs) => {
+    if (attrs.nodeType === "repo") root = node;
+  });
+  if (!root) {
+    root = graph.nodes()[0];
+    if (!root) return;
+  }
+
+  /* BFS to assign depths */
+  const queue: { id: string; depth: number }[] = [{ id: root, depth: 0 }];
+  visited.add(root);
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!;
+    if (!levels[depth]) levels[depth] = [];
+    levels[depth].push(id);
+    graph.forEachOutNeighbor(id, (neighbor) => {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push({ id: neighbor, depth: depth + 1 });
+      }
+    });
+  }
+
+  /* Place any disconnected nodes at the deepest level */
+  graph.forEachNode((node) => {
+    if (!visited.has(node)) {
+      const d = levels.length;
+      if (!levels[d]) levels[d] = [];
+      levels[d].push(node);
+    }
+  });
+
+  /* Assign coordinates */
+  const levelSpacing = 120;
+  for (let d = 0; d < levels.length; d++) {
+    const nodes = levels[d];
+    const span = nodes.length * 60;
+    for (let i = 0; i < nodes.length; i++) {
+      const cross = -span / 2 + i * 60;
+      const main = d * levelSpacing;
+      if (horizontal) {
+        graph.setNodeAttribute(nodes[i], "x", main);
+        graph.setNodeAttribute(nodes[i], "y", cross);
+      } else {
+        graph.setNodeAttribute(nodes[i], "x", cross);
+        graph.setNodeAttribute(nodes[i], "y", main);
+      }
+    }
+  }
+}
+
 interface Props {
   data: GraphResponse;
   selectedNode: string | null;
@@ -101,6 +163,8 @@ export default function GraphCanvas({
           graph.setNodeAttribute(node, "y", 0);
         }
       });
+    } else if (layout === "tree" || layout === "horizontal") {
+      assignTreeLayout(graph, layout === "horizontal");
     }
 
     sigma.refresh();

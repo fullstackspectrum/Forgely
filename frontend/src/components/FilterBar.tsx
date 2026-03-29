@@ -23,6 +23,8 @@ const LAYOUTS: { key: LayoutType; label: string }[] = [
   { key: "force", label: "💥 Force" },
   { key: "circular", label: "◎ Circular" },
   { key: "radial", label: "🎯 Radial" },
+  { key: "tree", label: "🌳 Tree" },
+  { key: "horizontal", label: "↔ Horizontal" },
 ];
 
 export default function FilterBar({
