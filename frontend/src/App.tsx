@@ -77,6 +77,12 @@ export default function App() {
     return idx;
   }, [data]);
 
+  /* All node IDs currently in the graph */
+  const graphNodeIds = useMemo(() => {
+    if (!data) return [];
+    return data.nodes.map((n) => n.id);
+  }, [data]);
+
   return (
     <div className="app">
       {/* Left control panel */}
@@ -98,8 +104,15 @@ export default function App() {
           currentRepo={repo}
           onSelect={handleRepoSelect}
         />
-        {data && (
-          <SearchBar onSearch={setSearchResults} cveIndex={cveIndex} />
+        {owner && repo && (
+          <SearchBar
+            owner={owner}
+            repo={repo}
+            graphNodeIds={graphNodeIds}
+            onHighlight={setSearchResults}
+            onNodeSelect={setSelectedNode}
+            cveIndex={cveIndex}
+          />
         )}
       </div>
 
