@@ -8,13 +8,19 @@ import { SEVERITY_COLORS } from "../types";
 
 /* Load curved-edge program; resolved before first render via the promise. */
 let CurvedEdgeProgram: any = null;
-const edgeCurveReady = import("@sigma/edge-curve")
-  .then((m) => {
-    CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
-  })
-  .catch(() => {
-    /* fall back to sigma's built-in arrow */
-  });
+let NodeImageProgram: any = null;
+const depsReady = Promise.all([
+  import("@sigma/edge-curve")
+    .then((m) => {
+      CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
+    })
+    .catch(() => {}),
+  import("@sigma/node-image")
+    .then((m) => {
+      NodeImageProgram = m.NodeImageProgram;
+    })
+    .catch(() => {}),
+]);
 
 interface Props {
   data: GraphResponse;
@@ -108,7 +114,7 @@ export default function GraphCanvas({
     let cancelled = false;
     const container = containerRef.current;
 
-    edgeCurveReady.then(() => {
+    depsReady.then(() => {
       if (cancelled || !container) return;
       buildSigma(container);
     });
@@ -145,6 +151,9 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
+        ...(node.type === "repo" && NodeImageProgram
+          ? { type: "image", image: "/cloudsmith.png" }
+          : {}),
       });
       nodeData[node.id] = node.data;
     }
@@ -183,6 +192,10 @@ export default function GraphCanvas({
     if (CurvedEdgeProgram) {
       edgeProgClasses.curvedArrow = CurvedEdgeProgram;
     }
+    const nodeProgClasses: Record<string, any> = {};
+    if (NodeImageProgram) {
+      nodeProgClasses.image = NodeImageProgram;
+    }
 
     const sigma = new Sigma(graph, el, {
       allowInvalidContainer: true,
@@ -190,6 +203,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: CurvedEdgeProgram ? "curvedArrow" : "arrow",
       edgeProgramClasses: edgeProgClasses,
+      nodeProgramClasses: nodeProgClasses,
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
