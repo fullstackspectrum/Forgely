@@ -4,9 +4,11 @@ import { SEVERITY_COLORS } from "../types";
 interface Props {
   data: GraphResponse;
   nodeId: string;
+  owner: string;
+  repo: string;
 }
 
-export default function SidePanel({ data, nodeId }: Props) {
+export default function SidePanel({ data, nodeId, owner, repo }: Props) {
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -37,16 +39,35 @@ export default function SidePanel({ data, nodeId }: Props) {
     }
   }
 
+  const cloudsmithUrl = node.type === "package" && d.slug
+    ? `https://app.cloudsmith.com/${owner}/r/${repo}/package-group/${d.format}/${encodeURIComponent(node.label)}/${d.slug}`
+    : null;
+
   return (
     <div className="side-panel">
       <div className="panel-header">
-        <div>
-          <h2 className="panel-title">{node.label}</h2>
-          <span className="panel-version">{d.version}</span>
-        </div>
+        <h2 className="panel-title">{node.label}</h2>
+        <span className="panel-version">{d.version}</span>
+      </div>
+
+      <div className="panel-status-row">
         <span className="severity-badge" style={{ background: sevColor }}>
           {sev}
         </span>
+        <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
+          {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
+        </span>
+        {cloudsmithUrl && (
+          <a
+            className="cloudsmith-view-btn"
+            href={cloudsmithUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View in Cloudsmith"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+        )}
       </div>
 
       {/* Metadata grid */}
@@ -57,11 +78,6 @@ export default function SidePanel({ data, nodeId }: Props) {
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
         <MetaRow label="Scan Status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
-        <MetaRow
-          label="Vulnerabilities"
-          value={String(d.vuln_count)}
-          valueColor={d.vuln_count > 0 ? sevColor : undefined}
-        />
       </div>
 
       {/* CVE list */}
