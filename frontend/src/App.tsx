@@ -66,30 +66,6 @@ export default function App() {
     return idx;
   }, [data]);
 
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <div className="spinner" />
-        <p>Fetching Cloudsmith data…</p>
-        <p className="loading-sub">
-          Scanning packages and vulnerabilities
-        </p>
-      </div>
-    );
-  }
-
-  if (error && !data) {
-    return (
-      <div className="error-screen">
-        <h2>Connection Error</h2>
-        <p>{error}</p>
-        <button className="btn btn-accent" onClick={handleRefresh}>
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       {/* Left control panel */}
@@ -115,7 +91,21 @@ export default function App() {
       </div>
 
       {/* Graph */}
-      {data ? (
+      {loading ? (
+        <div className="graph-loading">
+          <div className="spinner" />
+          <p>Fetching Cloudsmith data…</p>
+          <p className="loading-sub">Scanning packages and vulnerabilities</p>
+        </div>
+      ) : error && !data ? (
+        <div className="graph-loading">
+          <h2>Connection Error</h2>
+          <p>{error}</p>
+          <button className="btn btn-accent" onClick={handleRefresh}>
+            Retry
+          </button>
+        </div>
+      ) : data ? (
         <GraphCanvas
           data={data}
           selectedNode={selectedNode}
