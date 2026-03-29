@@ -67,7 +67,7 @@ export type FilterType =
   | "Medium"
   | "Low";
 
-export type LayoutType = "force" | "circular" | "radial";
+export type LayoutType = "force" | "circular" | "radial" | "tree" | "horizontal";
 
 export const SEVERITY_COLORS: Record<string, string> = {
   Critical: "#ff4d4d",

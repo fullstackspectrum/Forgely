@@ -1,10 +1,16 @@
-# 🌳 Artigraphly
+
+
+![Artigraphly](assets/readme/artigraphly-logo-banner.png)
+
+---
+
+
 
 **Artigraphly** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
-![Example – Tree Layout](example1.png)
+![Example – Tree Layout](assets/readme/example1.png)
 
-![Example – Force Layout](example2.png)
+![Example – Force Layout](assets/readme/example2.png)
 
 ## Architecture
 
@@ -134,6 +140,7 @@ Set the following in your `.env` file:
 | `CLOUDSMITH_API_KEY` | Cloudsmith API key |
 | `CLOUDSMITH_OWNER` | Cloudsmith organisation / owner |
 | `CLOUDSMITH_REPO` | Repository name |
+
 
 ## License
 
