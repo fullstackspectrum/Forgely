@@ -135,6 +135,7 @@ export default function GraphCanvas({
     filter,
     searchResults,
     neighbors: new Set<string>(),
+    searchConnected: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
   });
 
@@ -144,6 +145,25 @@ export default function GraphCanvas({
     if (selectedNode && graphRef.current) {
       graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
+
+    /* Nodes connected to search results via shared_cve or dependency edges */
+    const searchConnected = new Set<string>();
+    if (searchResults.length > 0 && graphRef.current) {
+      const g = graphRef.current;
+      for (const nodeId of searchResults) {
+        if (!g.hasNode(nodeId)) continue;
+        g.forEachEdge(nodeId, (_edge, attrs, source, target) => {
+          const kind = attrs.edgeKind;
+          if (kind === "shared_cve" || kind === "dependency") {
+            const other = source === nodeId ? target : source;
+            if (!searchResults.includes(other)) {
+              searchConnected.add(other);
+            }
+          }
+        });
+      }
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
@@ -151,6 +171,7 @@ export default function GraphCanvas({
       filter,
       searchResults,
       neighbors,
+      searchConnected,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, searchResults]);
@@ -273,8 +294,8 @@ export default function GraphCanvas({
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
-        size: isSharedCve ? 2.5 : isDep ? 0.8 : 1.2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "#333" : "#555",
+        size: isSharedCve ? 2.5 : isDep ? 1.5 : 2,
+        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(100,149,237,0.5)" : "rgba(70,130,210,0.6)",
         type: useCurved ? "curvedArrow" : "arrow",
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -330,14 +351,12 @@ export default function GraphCanvas({
           }
         }
 
-        /* --- Search highlighting --- */
+        /* --- Search filtering --- */
         if (st.searchResults.length > 0) {
-          if (st.searchResults.includes(node)) {
-            res.highlighted = true;
-            res.zIndex = 1;
+          if (st.searchResults.includes(node) || st.searchConnected.has(node) || attrs.nodeType === "repo") {
+            /* keep visible */
           } else {
-            res.color = "#1a1a2e";
-            res.label = "";
+            res.hidden = true;
           }
           return res;
         }
@@ -365,6 +384,18 @@ export default function GraphCanvas({
       edgeReducer: (edge, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Hide edges not connected to search-visible nodes */
+        if (st.searchResults.length > 0) {
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          const srcVisible = st.searchResults.includes(src) || st.searchConnected.has(src) || graph.getNodeAttribute(src, "nodeType") === "repo";
+          const tgtVisible = st.searchResults.includes(tgt) || st.searchConnected.has(tgt) || graph.getNodeAttribute(tgt, "nodeType") === "repo";
+          if (!srcVisible || !tgtVisible) {
+            res.hidden = true;
+          }
+          return res;
+        }
 
         if (st.selectedNode) {
           const src = graph.source(edge);
