@@ -16,6 +16,7 @@ env/
 
 # Generated output
 *.html
+*.log
 
 # IDE
 .vscode/
