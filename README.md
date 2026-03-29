@@ -1,4 +1,10 @@
-# 🌳 Artigraphly
+
+
+![Artigraphly](assets/readme/artigraphly-logo-banner.png)
+
+---
+
+
 
 **Artigraphly** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
