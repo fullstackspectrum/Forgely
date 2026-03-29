@@ -3,24 +3,41 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
+import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
+import { NodeImageProgram } from "@sigma/node-image";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
-/* Load curved-edge program; resolved before first render via the promise. */
-let CurvedEdgeProgram: any = null;
-let NodeImageProgram: any = null;
-const depsReady = Promise.all([
-  import("@sigma/edge-curve")
-    .then((m) => {
-      CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
-    })
-    .catch(() => {}),
-  import("@sigma/node-image")
-    .then((m) => {
-      NodeImageProgram = m.NodeImageProgram;
-    })
-    .catch(() => {}),
-]);
+/** Map Cloudsmith package format → Devicon SVG URL (jsDelivr CDN).
+ *  Using .svg URLs so @sigma/node-image detects them as SVGs and
+ *  uses the dedicated SVG→bitmap loading path for best rendering. */
+const DI = "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons";
+const FORMAT_ICONS: Record<string, string> = {
+  docker:    `${DI}/docker/docker-original.svg`,
+  npm:       `${DI}/npm/npm-original-wordmark.svg`,
+  python:    `${DI}/python/python-original.svg`,
+  maven:     `${DI}/maven/maven-original.svg`,
+  nuget:     `${DI}/nuget/nuget-original.svg`,
+  ruby:      `${DI}/ruby/ruby-original.svg`,
+  go:        `${DI}/go/go-original.svg`,
+  cargo:     `${DI}/rust/rust-line.svg`,
+  helm:      `${DI}/helm/helm-original.svg`,
+  deb:       `${DI}/debian/debian-original.svg`,
+  debian:    `${DI}/debian/debian-original.svg`,
+  rpm:       `${DI}/redhat/redhat-original.svg`,
+  composer:  `${DI}/composer/composer-line.svg`,
+  swift:     `${DI}/swift/swift-original.svg`,
+  dart:      `${DI}/dart/dart-original.svg`,
+  terraform: `${DI}/terraform/terraform-original.svg`,
+  cran:      `${DI}/r/r-original.svg`,
+  conan:     `${DI}/cplusplus/cplusplus-original.svg`,
+  hex:       `${DI}/elixir/elixir-original.svg`,
+  luarocks:  `${DI}/lua/lua-original.svg`,
+};
+
+function getFormatIcon(format: string): string | null {
+  return FORMAT_ICONS[format.toLowerCase()] ?? null;
+}
 
 /**
  * BFS-based hierarchical layout.
@@ -180,7 +197,7 @@ export default function GraphCanvas({
     if (!graph || !sigma) return;
 
     const newType =
-      edgeStyle === "curved" && CurvedEdgeProgram ? "curvedArrow" : "arrow";
+      edgeStyle === "curved" ? "curvedArrow" : "arrow";
     graph.forEachEdge((edge) => {
       graph.setEdgeAttribute(edge, "type", newType);
     });
@@ -198,12 +215,10 @@ export default function GraphCanvas({
     let cancelled = false;
     const container = containerRef.current;
 
-    depsReady.then(() => {
-      if (cancelled || !container) return;
-      buildSigma(container);
-    });
+    buildSigma(container);
 
     function buildSigma(el: HTMLDivElement) {
+      if (cancelled) return;
 
     const graph = new Graph({ multi: true, type: "directed" });
     const nodeData: Record<string, NodeData> = {};
@@ -221,6 +236,14 @@ export default function GraphCanvas({
             ? 6
             : Math.max(10, Math.min(30, 10 + (node.data.downloads || 0) / 200));
 
+      /* Resolve icon for this node */
+      let nodeImage: string | null = null;
+      if (node.type === "repo") {
+        nodeImage = "/cloudsmith.png";
+      } else {
+        nodeImage = getFormatIcon(node.data.format);
+      }
+
       graph.addNode(node.id, {
         label: node.label,
         size,
@@ -235,15 +258,15 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
-        ...(node.type === "repo" && NodeImageProgram
-          ? { type: "image", image: "/cloudsmith.png" }
+        ...(nodeImage
+          ? { type: "image", image: nodeImage }
           : {}),
       });
       nodeData[node.id] = node.data;
     }
 
     /* --- Add edges --- */
-    const useCurved = edgeStyle === "curved" && !!CurvedEdgeProgram;
+    const useCurved = edgeStyle === "curved";
     let edgeIdx = 0;
     for (const edge of data.edges) {
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
@@ -273,22 +296,13 @@ export default function GraphCanvas({
     stateRef.current.nodeData = nodeData;
 
     /* --- Sigma --- */
-    const edgeProgClasses: Record<string, any> = {};
-    if (CurvedEdgeProgram) {
-      edgeProgClasses.curvedArrow = CurvedEdgeProgram;
-    }
-    const nodeProgClasses: Record<string, any> = {};
-    if (NodeImageProgram) {
-      nodeProgClasses.image = NodeImageProgram;
-    }
-
     const sigma = new Sigma(graph, el, {
       allowInvalidContainer: true,
       renderEdgeLabels: false,
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
-      edgeProgramClasses: edgeProgClasses,
-      nodeProgramClasses: nodeProgClasses,
+      edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
+      nodeProgramClasses: { image: NodeImageProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,

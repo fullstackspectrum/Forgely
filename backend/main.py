@@ -282,3 +282,30 @@ def refresh_graph(owner: str | None = None, repo: str | None = None):
     result = _build_graph(api_key, owner, repo)
     _cache[cache_key] = {"data": result, "ts": time.time()}
     return result
+
+
+@app.get("/api/search")
+def search_packages(owner: str, repo: str, query: str):
+    """Proxy the Cloudsmith query filter to search packages by name, version, format, etc."""
+    if not query.strip():
+        return []
+    api_key = _get_api_key()
+    session = create_session(api_key)
+    url = f"https://api.cloudsmith.io/v1/packages/{owner}/{repo}/"
+    try:
+        resp = session.get(url, params={"query": query, "page": 1, "page_size": 50}, timeout=15)
+        resp.raise_for_status()
+        results = resp.json()
+    except Exception as exc:
+        log.warning("Search failed: %s", exc)
+        return []
+    return [
+        {
+            "name": p.get("name", ""),
+            "version": p.get("version", ""),
+            "format": p.get("format", ""),
+            "slug": p.get("slug_perm", ""),
+            "node_id": f"{p.get('name', '')}@{p.get('version', '')}" if p.get("version") else p.get("name", ""),
+        }
+        for p in (results if isinstance(results, list) else [])
+    ]
