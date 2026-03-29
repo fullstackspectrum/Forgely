@@ -6,7 +6,7 @@ import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
 import Legend from "./components/Legend";
-import type { FilterType, LayoutType } from "./types";
+import type { FilterType, LayoutType, EdgeStyle } from "./types";
 
 export default function App() {
   const { data, loading, error, fetchGraph } = useGraphData();
@@ -17,7 +17,18 @@ export default function App() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [layout, setLayout] = useState<LayoutType>("force");
+  const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+
+  /* Auto-switch edge style when layout changes */
+  const handleLayoutChange = useCallback((l: LayoutType) => {
+    setLayout(l);
+    if (l === "tree" || l === "horizontal") {
+      setEdgeStyle("straight");
+    } else {
+      setEdgeStyle("curved");
+    }
+  }, []);
 
   /* Load defaults from backend config on mount */
   useEffect(() => {
@@ -66,15 +77,23 @@ export default function App() {
     return idx;
   }, [data]);
 
+  /* All node IDs currently in the graph */
+  const graphNodeIds = useMemo(() => {
+    if (!data) return [];
+    return data.nodes.map((n) => n.id);
+  }, [data]);
+
   return (
     <div className="app">
       {/* Left control panel */}
       <FilterBar
         filter={filter}
         layout={layout}
+        edgeStyle={edgeStyle}
         stats={data?.stats ?? null}
         onFilterChange={setFilter}
-        onLayoutChange={setLayout}
+        onLayoutChange={handleLayoutChange}
+        onEdgeStyleChange={setEdgeStyle}
         onRefresh={handleRefresh}
       />
 
@@ -85,8 +104,15 @@ export default function App() {
           currentRepo={repo}
           onSelect={handleRepoSelect}
         />
-        {data && (
-          <SearchBar onSearch={setSearchResults} cveIndex={cveIndex} />
+        {owner && repo && (
+          <SearchBar
+            owner={owner}
+            repo={repo}
+            graphNodeIds={graphNodeIds}
+            onHighlight={setSearchResults}
+            onNodeSelect={setSelectedNode}
+            cveIndex={cveIndex}
+          />
         )}
       </div>
 
@@ -112,6 +138,7 @@ export default function App() {
           hoveredNode={hoveredNode}
           filter={filter}
           layout={layout}
+          edgeStyle={edgeStyle}
           searchResults={searchResults}
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
@@ -131,7 +158,7 @@ export default function App() {
           >
             ×
           </button>
-          <SidePanel data={data} nodeId={selectedNode} />
+          <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
         </div>
       )}
 

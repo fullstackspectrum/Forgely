@@ -25,52 +25,62 @@
 - **Side panel** — click any node to get a polished detail panel (animated slide-in) with metadata grid, CVE cards with severity badges, advisory links, and shared-CVE cross-references
 - **CVE search** — search bar with exact and substring matching, highlights affected nodes
 - **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low
-- **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial
+- **Layout switcher** — Force-directed, Circular, Radial, Tree (top-down), Horizontal (left-to-right)
 - **Refresh button** — force re-fetch from Cloudsmith API
 - **Dark security-product theme** — graph-paper grid background, glassmorphism toolbars, custom scrollbars
 
 ## 🚀 Quick Start
 
-### 1. Clone & install
+### 1. Clone
 
 ```bash
 git clone https://github.com/your-user/Artigraphly.git
 cd Artigraphly
 ```
 
-**Backend:**
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Frontend:**
-
-```bash
-cd frontend
-npm install
-```
-
 ### 2. Configure credentials
 
+Create a `.env` file in the project root:
+
 ```bash
-cp .env.example .env
-# Edit .env with your Cloudsmith API key, org, and repo
+CLOUDSMITH_API_KEY=your_api_key_here
+CLOUDSMITH_OWNER=your_org
+CLOUDSMITH_REPO=your_repo
 ```
 
 ### 3. Run
 
-```bash
-# Terminal 1 — Backend
-cd backend && .venv/bin/uvicorn main:app --port 8000
+The start script handles virtual environment creation, dependency installation, and launches both servers:
 
-# Terminal 2 — Frontend
-cd frontend && npm run dev
+```bash
+./start.sh
 ```
 
-Open **http://localhost:3000** in your browser.
+This will:
+- Create a Python virtual environment and install backend dependencies
+- Install frontend npm packages (if not already installed)
+- Start the backend on **http://localhost:8000**
+- Start the frontend on **http://localhost:3000**
+
+Open **http://localhost:3000** in your browser. Press `Ctrl+C` to stop both servers.
+
+<details>
+<summary>Manual start (without script)</summary>
+
+```bash
+# Terminal 1 — Backend
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 8000
+
+# Terminal 2 — Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+</details>
 
 ## 🎨 Severity Color Key
 
@@ -88,11 +98,11 @@ Open **http://localhost:3000** in your browser.
 
 | Layout | Description |
 |--------|-------------|
-| 🌲 Tree | Hierarchical top-down — repo at top, packages below, deps at bottom |
-| 💥 Force | Force-directed — organic clustering by gravity |
-| ◎ Radial | Repo pinned to center, packages orbit around it |
-| → Horizontal | Left-to-right tree layout |
-| ⬡ Cluster | Repulsion-based — nodes group by connectivity |
+| 💥 Force | Force-directed (ForceAtlas2) — organic clustering by gravity |
+| ◎ Circular | Nodes arranged in a circle |
+| 🎯 Radial | Repo pinned to center, packages orbit around it |
+| 🌳 Tree | Hierarchical top-down — repo at top, packages below, deps at bottom |
+| ↔ Horizontal | Left-to-right tree layout |
 
 ## 📂 Project Structure
 
@@ -115,9 +125,12 @@ Artigraphly/
 │   ├── tsconfig.json
 │   └── vite.config.ts
 ├── artigraphly.py             # Legacy CLI tool
+├── start.sh                   # Start script (backend + frontend)
 ├── .env                       # Credentials (not committed)
 ├── assets/
-│   └── cloudsmith.png
+│   ├── cloudsmith.png
+│   └── readme/                # README images
+├── CHANGELOG.md
 ├── LICENSE
 └── README.md
 ```
@@ -128,6 +141,8 @@ Artigraphly/
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
 | `/api/config` | GET | Returns configured owner and repo |
+| `/api/namespaces` | GET | List available Cloudsmith workspaces |
+| `/api/repos/{owner}` | GET | List repositories for a workspace |
 | `/api/graph` | GET | Fetch graph data (cached for 5 min) |
 | `/api/graph/refresh` | POST | Force re-fetch from Cloudsmith |
 

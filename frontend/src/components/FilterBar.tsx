@@ -1,11 +1,13 @@
-import type { FilterType, LayoutType, GraphStats } from "../types";
+import type { FilterType, LayoutType, EdgeStyle, GraphStats } from "../types";
 
 interface Props {
   filter: FilterType;
   layout: LayoutType;
+  edgeStyle: EdgeStyle;
   stats: GraphStats | null;
   onFilterChange: (f: FilterType) => void;
   onLayoutChange: (l: LayoutType) => void;
+  onEdgeStyleChange: (e: EdgeStyle) => void;
   onRefresh: () => void;
 }
 
@@ -30,9 +32,11 @@ const LAYOUTS: { key: LayoutType; label: string }[] = [
 export default function FilterBar({
   filter,
   layout,
+  edgeStyle,
   stats,
   onFilterChange,
   onLayoutChange,
+  onEdgeStyleChange,
   onRefresh,
 }: Props) {
   return (
@@ -105,6 +109,24 @@ export default function FilterBar({
               {l.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="left-panel-section">
+        <span className="left-panel-section-title">Edge Style</span>
+        <div className="left-panel-btn-group">
+          <button
+            className={`btn btn-block ${edgeStyle === "curved" ? "btn-active" : "btn-muted"}`}
+            onClick={() => onEdgeStyleChange("curved")}
+          >
+            ∿ Curved
+          </button>
+          <button
+            className={`btn btn-block ${edgeStyle === "straight" ? "btn-active" : "btn-muted"}`}
+            onClick={() => onEdgeStyleChange("straight")}
+          >
+            — Straight
+          </button>
         </div>
       </div>
 

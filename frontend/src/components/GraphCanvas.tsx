@@ -3,24 +3,43 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
-import type { GraphResponse, FilterType, LayoutType, NodeData } from "../types";
+import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
+import { NodeImageProgram } from "@sigma/node-image";
+import { NodeSquareProgram } from "@sigma/node-square";
+import EdgeDottedProgram from "../programs/EdgeDottedProgram";
+import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
-/* Load curved-edge program; resolved before first render via the promise. */
-let CurvedEdgeProgram: any = null;
-let NodeImageProgram: any = null;
-const depsReady = Promise.all([
-  import("@sigma/edge-curve")
-    .then((m) => {
-      CurvedEdgeProgram = m.EdgeCurvedArrowProgram;
-    })
-    .catch(() => {}),
-  import("@sigma/node-image")
-    .then((m) => {
-      NodeImageProgram = m.NodeImageProgram;
-    })
-    .catch(() => {}),
-]);
+/** Map Cloudsmith package format → Devicon SVG URL (jsDelivr CDN).
+ *  Using .svg URLs so @sigma/node-image detects them as SVGs and
+ *  uses the dedicated SVG→bitmap loading path for best rendering. */
+const DI = "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons";
+const FORMAT_ICONS: Record<string, string> = {
+  docker:    `${DI}/docker/docker-original.svg`,
+  npm:       `${DI}/npm/npm-original-wordmark.svg`,
+  python:    `${DI}/python/python-original.svg`,
+  maven:     `${DI}/maven/maven-original.svg`,
+  nuget:     `${DI}/nuget/nuget-original.svg`,
+  ruby:      `${DI}/ruby/ruby-original.svg`,
+  go:        `${DI}/go/go-original.svg`,
+  cargo:     `${DI}/rust/rust-line.svg`,
+  helm:      `${DI}/helm/helm-original.svg`,
+  deb:       `${DI}/debian/debian-original.svg`,
+  debian:    `${DI}/debian/debian-original.svg`,
+  rpm:       `${DI}/redhat/redhat-original.svg`,
+  composer:  `${DI}/composer/composer-line.svg`,
+  swift:     `${DI}/swift/swift-original.svg`,
+  dart:      `${DI}/dart/dart-original.svg`,
+  terraform: `${DI}/terraform/terraform-original.svg`,
+  cran:      `${DI}/r/r-original.svg`,
+  conan:     `${DI}/cplusplus/cplusplus-original.svg`,
+  hex:       `${DI}/elixir/elixir-original.svg`,
+  luarocks:  `${DI}/lua/lua-original.svg`,
+};
+
+function getFormatIcon(format: string): string | null {
+  return FORMAT_ICONS[format.toLowerCase()] ?? null;
+}
 
 /**
  * BFS-based hierarchical layout.
@@ -90,6 +109,7 @@ interface Props {
   hoveredNode: string | null;
   filter: FilterType;
   layout: LayoutType;
+  edgeStyle: EdgeStyle;
   searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
@@ -101,6 +121,7 @@ export default function GraphCanvas({
   hoveredNode,
   filter,
   layout,
+  edgeStyle,
   searchResults,
   onNodeSelect,
   onNodeHover,
@@ -116,6 +137,7 @@ export default function GraphCanvas({
     filter,
     searchResults,
     neighbors: new Set<string>(),
+    searchConnected: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
   });
 
@@ -125,6 +147,25 @@ export default function GraphCanvas({
     if (selectedNode && graphRef.current) {
       graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
+
+    /* Nodes connected to search results via shared_cve or dependency edges */
+    const searchConnected = new Set<string>();
+    if (searchResults.length > 0 && graphRef.current) {
+      const g = graphRef.current;
+      for (const nodeId of searchResults) {
+        if (!g.hasNode(nodeId)) continue;
+        g.forEachEdge(nodeId, (_edge, attrs, source, target) => {
+          const kind = attrs.edgeKind;
+          if (kind === "shared_cve" || kind === "dependency") {
+            const other = source === nodeId ? target : source;
+            if (!searchResults.includes(other)) {
+              searchConnected.add(other);
+            }
+          }
+        });
+      }
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
@@ -132,6 +173,7 @@ export default function GraphCanvas({
       filter,
       searchResults,
       neighbors,
+      searchConnected,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, searchResults]);
@@ -171,6 +213,25 @@ export default function GraphCanvas({
     sigma.getCamera().animatedReset({ duration: 400 });
   }, [layout, data]);
 
+  /* Switch edge style (curved ↔ straight) */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+
+    const newType =
+      edgeStyle === "curved" ? "curvedArrow" : "arrow";
+    graph.forEachEdge((edge) => {
+      if (graph.getEdgeAttribute(edge, "edgeKind") === "dependency") return;
+      graph.setEdgeAttribute(edge, "type", newType);
+    });
+    sigma.setSetting(
+      "defaultEdgeType",
+      newType,
+    );
+    sigma.refresh();
+  }, [edgeStyle]);
+
   /* Build graph + sigma on data change */
   useEffect(() => {
     if (!containerRef.current || !data) return;
@@ -178,12 +239,10 @@ export default function GraphCanvas({
     let cancelled = false;
     const container = containerRef.current;
 
-    depsReady.then(() => {
-      if (cancelled || !container) return;
-      buildSigma(container);
-    });
+    buildSigma(container);
 
     function buildSigma(el: HTMLDivElement) {
+      if (cancelled) return;
 
     const graph = new Graph({ multi: true, type: "directed" });
     const nodeData: Record<string, NodeData> = {};
@@ -201,6 +260,14 @@ export default function GraphCanvas({
             ? 6
             : Math.max(10, Math.min(30, 10 + (node.data.downloads || 0) / 200));
 
+      /* Resolve icon for this node */
+      let nodeImage: string | null = null;
+      if (node.type === "repo") {
+        nodeImage = "/cloudsmith.png";
+      } else {
+        nodeImage = getFormatIcon(node.data.format);
+      }
+
       graph.addNode(node.id, {
         label: node.label,
         size,
@@ -215,23 +282,26 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
-        ...(node.type === "repo" && NodeImageProgram
-          ? { type: "image", image: "/cloudsmith.png" }
-          : {}),
+        ...(node.type === "dependency"
+          ? { type: "square" }
+          : nodeImage
+            ? { type: "image", image: nodeImage }
+            : {}),
       });
       nodeData[node.id] = node.data;
     }
 
     /* --- Add edges --- */
+    const useCurved = edgeStyle === "curved";
     let edgeIdx = 0;
     for (const edge of data.edges) {
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
-        size: isSharedCve ? 2.5 : isDep ? 0.8 : 1.2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "#333" : "#555",
-        type: CurvedEdgeProgram ? "curvedArrow" : "arrow",
+        size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
+        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
+        type: isSharedCve ? (useCurved ? "curvedArrow" : "arrow") : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -252,22 +322,13 @@ export default function GraphCanvas({
     stateRef.current.nodeData = nodeData;
 
     /* --- Sigma --- */
-    const edgeProgClasses: Record<string, any> = {};
-    if (CurvedEdgeProgram) {
-      edgeProgClasses.curvedArrow = CurvedEdgeProgram;
-    }
-    const nodeProgClasses: Record<string, any> = {};
-    if (NodeImageProgram) {
-      nodeProgClasses.image = NodeImageProgram;
-    }
-
     const sigma = new Sigma(graph, el, {
       allowInvalidContainer: true,
       renderEdgeLabels: false,
       enableEdgeEvents: true,
-      defaultEdgeType: CurvedEdgeProgram ? "curvedArrow" : "arrow",
-      edgeProgramClasses: edgeProgClasses,
-      nodeProgramClasses: nodeProgClasses,
+      defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
+      edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -295,14 +356,12 @@ export default function GraphCanvas({
           }
         }
 
-        /* --- Search highlighting --- */
+        /* --- Search filtering --- */
         if (st.searchResults.length > 0) {
-          if (st.searchResults.includes(node)) {
-            res.highlighted = true;
-            res.zIndex = 1;
+          if (st.searchResults.includes(node) || st.searchConnected.has(node) || attrs.nodeType === "repo") {
+            /* keep visible */
           } else {
-            res.color = "#1a1a2e";
-            res.label = "";
+            res.hidden = true;
           }
           return res;
         }
@@ -330,6 +389,18 @@ export default function GraphCanvas({
       edgeReducer: (edge, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Hide edges not connected to search-visible nodes */
+        if (st.searchResults.length > 0) {
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          const srcVisible = st.searchResults.includes(src) || st.searchConnected.has(src) || graph.getNodeAttribute(src, "nodeType") === "repo";
+          const tgtVisible = st.searchResults.includes(tgt) || st.searchConnected.has(tgt) || graph.getNodeAttribute(tgt, "nodeType") === "repo";
+          if (!srcVisible || !tgtVisible) {
+            res.hidden = true;
+          }
+          return res;
+        }
 
         if (st.selectedNode) {
           const src = graph.source(edge);
