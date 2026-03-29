@@ -90,7 +90,7 @@ export default function RepoSelector({
           <option value="">
             {loadingNs ? "Loading…" : "Select workspace"}
           </option>
-          {namespaces.map((ns) => (
+          {[...namespaces].sort((a, b) => a.name.localeCompare(b.name)).map((ns) => (
             <option key={ns.slug} value={ns.slug}>
               {ns.name}
               {ns.type ? ` (${ns.type})` : ""}
@@ -114,7 +114,7 @@ export default function RepoSelector({
                 ? "Select workspace first"
                 : "Select repository"}
           </option>
-          {repos.map((r) => (
+          {[...repos].sort((a, b) => a.name.localeCompare(b.name)).map((r) => (
             <option key={r.slug} value={r.slug}>
               {r.name}
               {r.package_count ? ` (${r.package_count} pkgs)` : ""}
