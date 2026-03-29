@@ -1,6 +1,6 @@
-# 🌳 Rootly
+# 🌳 Artigraphly
 
-**Rootly** is a Python-powered visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
+**Artigraphly** is a Python-powered visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
 ![Example – Tree Layout](example1.png)
 
@@ -29,8 +29,8 @@
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-user/rootly.git
-cd rootly
+git clone https://github.com/your-user/Artigraphly.git
+cd Artigraphly
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -45,16 +45,16 @@ cp .env.example .env
 Or pass them directly:
 
 ```bash
-python rootly.py --api-key YOUR_KEY --owner YOUR_ORG --repo YOUR_REPO
+python Artigraphly.py --api-key YOUR_KEY --owner YOUR_ORG --repo YOUR_REPO
 ```
 
 ### 3. Generate the graph
 
 ```bash
-python rootly.py                          # uses .env values
-python rootly.py -o myorg -r myrepo       # override org/repo
-python rootly.py --no-deps                # skip dependency fetching (faster)
-python rootly.py --output my_graph.html   # custom output filename
+python Artigraphly.py                          # uses .env values
+python Artigraphly.py -o myorg -r myrepo       # override org/repo
+python Artigraphly.py --no-deps                # skip dependency fetching (faster)
+python Artigraphly.py --output my_graph.html   # custom output filename
 ```
 
 Open the generated `cloudsmith_security_map.html` in your browser.
@@ -84,8 +84,8 @@ Open the generated `cloudsmith_security_map.html` in your browser.
 ## 📂 Project Structure
 
 ```
-rootly/
-├── rootly.py             # Main application
+Artigraphly/
+├── Artigraphly.py             # Main application
 ├── requirements.txt      # Python dependencies (requests, networkx, pyvis, python-dotenv, rich)
 ├── .env.example          # Template for credentials
 ├── assets/

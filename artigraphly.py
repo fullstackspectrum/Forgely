@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rootly – Cloudsmith artifact dependency & security visualizer."""
+"""Artigraphly – Cloudsmith artifact dependency & security visualizer."""
 
 import argparse
 import base64
@@ -23,10 +23,10 @@ load_dotenv()
 
 console = Console()
 
-# File logger – writes to rootly.log for diagnostics
-log = logging.getLogger("rootly")
+# File logger – writes to artigraphly.log for diagnostics
+log = logging.getLogger("artigraphly")
 log.setLevel(logging.DEBUG)
-_fh = logging.FileHandler("rootly.log", mode="w", encoding="utf-8")
+_fh = logging.FileHandler("artigraphly.log", mode="w", encoding="utf-8")
 _fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S"))
 log.addHandler(_fh)
 
@@ -645,7 +645,7 @@ def _print_summary(output: str, G: nx.Graph, stats: dict[str, int], total_cves: 
         Panel(
             f"[green]✔[/] Graph saved to [bold cyan]{output}[/]\n"
             f"  Open in your browser to explore the interactive map.",
-            title="Rootly",
+            title="Artigraphly",
             border_style="green",
         )
     )
@@ -655,7 +655,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
     """Inject legend, detail panel, CVE search, and click-to-filter JS."""
     node_data_json = json.dumps(node_data, separators=(",", ":"))
     inject = r"""
-<!-- Rootly: graph-paper background -->
+<!-- Artigraphly: graph-paper background -->
 <style>
   html, body { margin:0; padding:0; overflow:hidden; height:100%; width:100%; background:#1a1a2e; }
   #mynetwork {
@@ -671,12 +671,12 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   }
   #mynetwork canvas { background: transparent !important; }
 </style>
-<!-- Rootly: legend -->
-<div id="rootly-legend" style="
+<!-- Artigraphly: legend -->
+<div id="Artigraphly-legend" style="
     position:fixed; bottom:16px; right:16px; background:#222; color:#eee;
     padding:14px 18px; border-radius:8px; font-family:sans-serif; font-size:13px;
     box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:9999;">
-  <b style="font-size:14px;">Rootly – Legend</b>
+  <b style="font-size:14px;">Artigraphly – Legend</b>
   <div style="margin-top:8px;">
     <span style="color:#fff;">&#x2605;</span> Repository &nbsp;
     <span style="color:#ff4d4d;">&#x25C6;</span> Critical &nbsp;
@@ -692,8 +692,8 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   </div>
 </div>
 
-<!-- Rootly: CVE search bar -->
-<div id="rootly-search" style="
+<!-- Artigraphly: CVE search bar -->
+<div id="Artigraphly-search" style="
     position:fixed; top:16px; left:50%; transform:translateX(-50%);
     background:#222; border-radius:8px; padding:10px 16px;
     box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:9999;
@@ -711,65 +711,65 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   <span id="cve-result" style="color:#aaa; font-size:12px; margin-left:4px;"></span>
 </div>
 
-<!-- Rootly: vulnerability filter bar -->
-<div id="rootly-filters" style="
+<!-- Artigraphly: vulnerability filter bar -->
+<div id="Artigraphly-filters" style="
     position:fixed; top:60px; left:50%; transform:translateX(-50%);
     background:#222; border-radius:8px; padding:8px 14px;
     box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:9999;
     font-family:sans-serif; display:flex; align-items:center; gap:6px; font-size:12px;">
   <span style="color:#aaa; margin-right:4px;">Filter:</span>
-  <button class="rootly-filter-btn" data-filter="all" style="
+  <button class="Artigraphly-filter-btn" data-filter="all" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">All</button>
-  <button class="rootly-filter-btn" data-filter="vulnerable" style="
+  <button class="Artigraphly-filter-btn" data-filter="vulnerable" style="
     background:#4a90d9; border:none; border-radius:4px; color:#fff;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x26A0; Vulnerable</button>
-  <button class="rootly-filter-btn" data-filter="safe" style="
+  <button class="Artigraphly-filter-btn" data-filter="safe" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x2714; Safe</button>
   <span style="color:#333; margin:0 2px;">|</span>
-  <button class="rootly-filter-btn" data-filter="Critical" style="
+  <button class="Artigraphly-filter-btn" data-filter="Critical" style="
     background:#444; border:none; border-radius:4px; color:#ff4d4d;
     padding:5px 10px; font-size:12px; cursor:pointer;">Critical</button>
-  <button class="rootly-filter-btn" data-filter="High" style="
+  <button class="Artigraphly-filter-btn" data-filter="High" style="
     background:#444; border:none; border-radius:4px; color:#ff8c1a;
     padding:5px 10px; font-size:12px; cursor:pointer;">High</button>
-  <button class="rootly-filter-btn" data-filter="Medium" style="
+  <button class="Artigraphly-filter-btn" data-filter="Medium" style="
     background:#444; border:none; border-radius:4px; color:#ffd11a;
     padding:5px 10px; font-size:12px; cursor:pointer;">Medium</button>
-  <button class="rootly-filter-btn" data-filter="Low" style="
+  <button class="Artigraphly-filter-btn" data-filter="Low" style="
     background:#444; border:none; border-radius:4px; color:#79b8ff;
     padding:5px 10px; font-size:12px; cursor:pointer;">Low</button>
   <span id="filter-count" style="color:#aaa; font-size:11px; margin-left:6px;"></span>
 </div>
 
-<!-- Rootly: layout switcher -->
-<div id="rootly-layouts" style="
+<!-- Artigraphly: layout switcher -->
+<div id="Artigraphly-layouts" style="
     position:fixed; top:104px; left:50%; transform:translateX(-50%);
     background:#222; border-radius:8px; padding:8px 14px;
     box-shadow:0 2px 10px rgba(0,0,0,.5); z-index:9999;
     font-family:sans-serif; display:flex; align-items:center; gap:6px; font-size:12px;">
   <span style="color:#aaa; margin-right:4px;">Layout:</span>
-  <button class="rootly-layout-btn" data-layout="tree" style="
+  <button class="Artigraphly-layout-btn" data-layout="tree" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F332; Tree</button>
-  <button class="rootly-layout-btn" data-layout="force" style="
+  <button class="Artigraphly-layout-btn" data-layout="force" style="
     background:#4a90d9; border:none; border-radius:4px; color:#fff;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x1F4A5; Force</button>
-  <button class="rootly-layout-btn" data-layout="radial" style="
+  <button class="Artigraphly-layout-btn" data-layout="radial" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x25CE; Radial</button>
-  <button class="rootly-layout-btn" data-layout="horizontal" style="
+  <button class="Artigraphly-layout-btn" data-layout="horizontal" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x2192; Horizontal</button>
-  <button class="rootly-layout-btn" data-layout="cluster" style="
+  <button class="Artigraphly-layout-btn" data-layout="cluster" style="
     background:#444; border:none; border-radius:4px; color:#ccc;
     padding:5px 12px; font-size:12px; cursor:pointer;">&#x2B22; Cluster</button>
   <span id="layout-label" style="color:#888; font-size:11px; margin-left:6px;">Force-directed</span>
 </div>
 
-<!-- Rootly: CVE detail panel (hidden by default) -->
-<div id="rootly-panel" style="
+<!-- Artigraphly: CVE detail panel (hidden by default) -->
+<div id="Artigraphly-panel" style="
     display:none; position:fixed; top:0; right:0; width:420px; height:100%;
     background:#1e1e1e; color:#ddd; font-family:sans-serif; font-size:13px;
     box-shadow:-4px 0 20px rgba(0,0,0,.6); z-index:10000;
@@ -787,16 +787,16 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   </div>
 </div>
 
-<!-- Rootly: interaction logic -->
+<!-- Artigraphly: interaction logic -->
 <script>
 (function() {
-  var ROOTLY_DATA = """ + node_data_json + r""";
+  var Artigraphly_DATA = """ + node_data_json + r""";
   var SEV_COLORS = {
     Critical:'#ff4d4d', High:'#ff8c1a', Medium:'#ffd11a',
     Low:'#79b8ff', None:'#28a745', Unknown:'#666666'
   };
 
-  var panel      = document.getElementById('rootly-panel');
+  var panel      = document.getElementById('Artigraphly-panel');
   var panelTitle = document.getElementById('panel-title');
   var panelMeta  = document.getElementById('panel-meta');
   var panelNbrs  = document.getElementById('panel-neighbors');
@@ -807,16 +807,16 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
   var cveClearBtn  = document.getElementById('cve-clear-btn');
   var cveResult  = document.getElementById('cve-result');
   var filterCount = document.getElementById('filter-count');
-  var filterBtns  = document.querySelectorAll('.rootly-filter-btn');
-  var layoutBtns   = document.querySelectorAll('.rootly-layout-btn');
+  var filterBtns  = document.querySelectorAll('.Artigraphly-filter-btn');
+  var layoutBtns   = document.querySelectorAll('.Artigraphly-layout-btn');
   var layoutLabel  = document.getElementById('layout-label');
   var activeFilter = 'vulnerable';
   var activeLayout = 'force';
 
   /* Build reverse index: CVE ID -> [node IDs] */
   var cveIndex = {};
-  Object.keys(ROOTLY_DATA).forEach(function(nodeId) {
-    var cves = ROOTLY_DATA[nodeId].cves || [];
+  Object.keys(Artigraphly_DATA).forEach(function(nodeId) {
+    var cves = Artigraphly_DATA[nodeId].cves || [];
     cves.forEach(function(cv) {
       if (!cv.id) return;
       var key = cv.id.toUpperCase();
@@ -923,7 +923,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
     network.body.data.edges.forEach(function(e) { originalEdges.push(Object.assign({}, e)); });
 
     function nodeMatchesFilter(nodeId, filter) {
-      var meta = ROOTLY_DATA[nodeId];
+      var meta = Artigraphly_DATA[nodeId];
       if (!meta) return true; /* repo node / external deps always visible */
       var vc = meta.vuln_count || 0;
       var sev = meta.max_severity || 'None';
@@ -961,7 +961,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
       /* Always keep repo node visible */
       originalNodes.forEach(function(n) {
-        if (!ROOTLY_DATA[n.id] && (n.shape === 'image' || n.shape === 'database')) keepIds.add(n.id);
+        if (!Artigraphly_DATA[n.id] && (n.shape === 'image' || n.shape === 'database')) keepIds.add(n.id);
       });
 
       /* Update nodes: add/remove based on filter */
@@ -1044,7 +1044,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
         },
         afterStabilize: function() {
           /* Pin repo node to center */
-          var repoId = originalNodes.find(function(n){ return !ROOTLY_DATA[n.id]; });
+          var repoId = originalNodes.find(function(n){ return !Artigraphly_DATA[n.id]; });
           if (repoId) {
             network.moveNode(repoId.id, 0, 0);
             allNodes.update({id:repoId.id, fixed:{x:true,y:true}});
@@ -1142,12 +1142,12 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
   function showPanel(node, neighborIds, allNodes) {
     panel.style.display = 'block';
-    /* Use node.id for ROOTLY_DATA lookup (name@version), label for display */
+    /* Use node.id for Artigraphly_DATA lookup (name@version), label for display */
     var dataKey = node.id;
     var displayName = node.label || node.id;
     panelTitle.textContent = displayName;
 
-    var meta = ROOTLY_DATA[dataKey] || {};
+    var meta = Artigraphly_DATA[dataKey] || {};
     var sev  = meta.max_severity || 'None';
     var fmt  = meta.pkg_format   || '';
     var vc   = meta.vuln_count   != null ? meta.vuln_count : '\u2014';
@@ -1281,7 +1281,7 @@ def _inject_ui(html_path: str, node_data: dict[str, dict]) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="rootly",
+        prog="Artigraphly",
         description="Visualize Cloudsmith artifact dependencies & security status.",
     )
     p.add_argument("-o", "--owner", default=os.getenv("CLOUDSMITH_OWNER"), help="Cloudsmith org/owner (env: CLOUDSMITH_OWNER)")
