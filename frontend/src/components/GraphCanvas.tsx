@@ -504,6 +504,29 @@ export default function GraphCanvas({
             onEdgeStyleChange={onEdgeStyleChange}
           />
         )}
+        <button
+          className="graph-recenter-btn"
+          onClick={() => {
+            const sigma = sigmaRef.current;
+            const graph = graphRef.current;
+            if (!sigma || !graph) return;
+            let repoNode: string | null = null;
+            graph.forEachNode((node, attrs) => {
+              if (attrs.nodeType === "repo") repoNode = node;
+            });
+            if (!repoNode) return;
+            const pos = sigma.getNodeDisplayData(repoNode);
+            if (pos) {
+              sigma.getCamera().animate(
+                { x: pos.x, y: pos.y, ratio: 0.4 },
+                { duration: 400 }
+              );
+            }
+          }}
+          title="Recenter on Repo"
+        >
+          ⊙
+        </button>
         {onRefresh && (
           <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">
             ↻

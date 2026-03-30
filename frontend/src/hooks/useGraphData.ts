@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { GraphResponse } from "../types";
+import { apiFetch } from "../lib/auth";
 
 export function useGraphData() {
   const [data, setData] = useState<GraphResponse | null>(null);
@@ -14,8 +15,8 @@ export function useGraphData() {
         const params = new URLSearchParams({ owner, repo });
         const base = refresh ? "/api/graph/refresh" : "/api/graph";
         const url = `${base}?${params}`;
-        const opts = refresh ? { method: "POST" } : {};
-        const resp = await fetch(url, opts);
+        const opts: RequestInit = refresh ? { method: "POST" } : {};
+        const resp = await apiFetch(url, opts);
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
           throw new Error(body.detail || `HTTP ${resp.status}`);

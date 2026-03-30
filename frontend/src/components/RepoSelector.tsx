@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/auth";
 
 interface Namespace {
   slug: string;
@@ -16,12 +17,14 @@ interface Repo {
 interface Props {
   currentOwner: string;
   currentRepo: string;
+  refreshKey: number;
   onSelect: (owner: string, repo: string) => void;
 }
 
 export default function RepoSelector({
   currentOwner,
   currentRepo,
+  refreshKey,
   onSelect,
 }: Props) {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -31,15 +34,15 @@ export default function RepoSelector({
   const [loadingNs, setLoadingNs] = useState(false);
   const [loadingRepos, setLoadingRepos] = useState(false);
 
-  /* Fetch namespaces on mount */
+  /* Fetch namespaces on mount or when refreshKey changes */
   useEffect(() => {
     setLoadingNs(true);
-    fetch("/api/namespaces")
+    apiFetch("/api/namespaces")
       .then((r) => r.json())
       .then((data) => setNamespaces(Array.isArray(data) ? data : []))
       .catch(() => setNamespaces([]))
       .finally(() => setLoadingNs(false));
-  }, []);
+  }, [refreshKey]);
 
   /* Fetch repos when owner changes */
   useEffect(() => {
@@ -48,7 +51,7 @@ export default function RepoSelector({
       return;
     }
     setLoadingRepos(true);
-    fetch(`/api/repos/${encodeURIComponent(owner)}`)
+    apiFetch(`/api/repos/${encodeURIComponent(owner)}`)
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
