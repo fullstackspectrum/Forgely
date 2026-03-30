@@ -7,6 +7,8 @@ import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
+import ConnectModal from "./components/ConnectModal";
+import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import type { FilterType, LayoutType, EdgeStyle } from "./types";
 
 export default function App() {
@@ -21,6 +23,8 @@ export default function App() {
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [hasKey, setHasKey] = useState(!!getApiKey());
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -34,13 +38,13 @@ export default function App() {
 
   /* Load defaults from backend config on mount */
   useEffect(() => {
-    fetch("/api/config")
+    apiFetch("/api/config")
       .then((r) => r.json())
       .then((cfg) => {
+        if (cfg.has_key || getApiKey()) setHasKey(true);
         if (cfg.owner) setOwner(cfg.owner);
         if (cfg.repo) setRepo(cfg.repo);
-        /* Auto-load graph if defaults are set */
-        if (cfg.owner && cfg.repo) {
+        if (cfg.owner && cfg.repo && (cfg.has_key || getApiKey())) {
           fetchGraph(cfg.owner, cfg.repo);
         }
       })
@@ -92,8 +96,11 @@ export default function App() {
         filter={filter}
         stats={data?.stats ?? null}
         hideSharedCveEdges={hideSharedCveEdges}
+        hasKey={hasKey}
         onFilterChange={setFilter}
         onHideSharedCveEdgesChange={setHideSharedCveEdges}
+        onConnectClick={() => setConnectOpen(true)}
+        onDisconnect={() => { clearApiKey(); setHasKey(false); }}
       />
 
       {/* Top bar: repo selector + search */}
@@ -114,6 +121,12 @@ export default function App() {
           />
         )}
       </div>
+
+      <ConnectModal
+        open={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        onConnected={() => { setHasKey(!!getApiKey()); setConnectOpen(false); }}
+      />
 
       {/* Graph */}
       {loading ? (

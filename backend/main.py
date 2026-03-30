@@ -7,7 +7,7 @@ import os
 import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from cloudsmith import (
@@ -54,10 +54,13 @@ _cache: dict[str, dict] = {}
 CACHE_TTL = 300  # 5 minutes
 
 
-def _get_api_key() -> str:
+def _get_api_key(request: Request | None = None) -> str:
+    # Prefer key from request header, fall back to .env
+    if request and request.headers.get("X-Api-Key"):
+        return request.headers["X-Api-Key"]
     api_key = os.getenv("CLOUDSMITH_API_KEY", "")
     if not api_key:
-        raise HTTPException(status_code=500, detail="Missing CLOUDSMITH_API_KEY in .env")
+        raise HTTPException(status_code=401, detail="No API key configured. Use the Connect button to add your Cloudsmith API key.")
     return api_key
 
 
@@ -67,10 +70,14 @@ def _get_defaults() -> tuple[str, str]:
 
 
 @app.get("/api/config")
-def get_config():
-    api_key = _get_api_key()
+def get_config(request: Request):
+    try:
+        _get_api_key(request)
+        has_key = True
+    except HTTPException:
+        has_key = False
     owner, repo = _get_defaults()
-    return {"owner": owner, "repo": repo}
+    return {"owner": owner, "repo": repo, "has_key": has_key}
 
 
 @app.get("/api/health")
@@ -79,9 +86,9 @@ def health():
 
 
 @app.get("/api/namespaces")
-def list_namespaces():
+def list_namespaces(request: Request):
     """List all Cloudsmith workspaces/orgs the user belongs to."""
-    api_key = _get_api_key()
+    api_key = _get_api_key(request)
     session = create_session(api_key)
     raw = fetch_namespaces(session)
     return [
@@ -95,9 +102,9 @@ def list_namespaces():
 
 
 @app.get("/api/repos/{owner}")
-def list_repos(owner: str):
+def list_repos(owner: str, request: Request):
     """List all repos within a workspace/org."""
-    api_key = _get_api_key()
+    api_key = _get_api_key(request)
     session = create_session(api_key)
     raw = fetch_repos(session, owner)
     return [
@@ -249,8 +256,8 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
 
 @app.get("/api/graph", response_model=GraphResponse)
-def get_graph(owner: str | None = None, repo: str | None = None):
-    api_key = _get_api_key()
+def get_graph(request: Request, owner: str | None = None, repo: str | None = None):
+    api_key = _get_api_key(request)
     default_owner, default_repo = _get_defaults()
     owner = owner or default_owner
     repo = repo or default_repo
@@ -270,8 +277,8 @@ def get_graph(owner: str | None = None, repo: str | None = None):
 
 
 @app.post("/api/graph/refresh", response_model=GraphResponse)
-def refresh_graph(owner: str | None = None, repo: str | None = None):
-    api_key = _get_api_key()
+def refresh_graph(request: Request, owner: str | None = None, repo: str | None = None):
+    api_key = _get_api_key(request)
     default_owner, default_repo = _get_defaults()
     owner = owner or default_owner
     repo = repo or default_repo
@@ -286,11 +293,11 @@ def refresh_graph(owner: str | None = None, repo: str | None = None):
 
 
 @app.get("/api/search")
-def search_packages(owner: str, repo: str, query: str):
+def search_packages(owner: str, repo: str, query: str, request: Request):
     """Proxy the Cloudsmith query filter to search packages by name, version, format, etc."""
     if not query.strip():
         return []
-    api_key = _get_api_key()
+    api_key = _get_api_key(request)
     session = create_session(api_key)
     url = f"https://api.cloudsmith.io/v1/packages/{owner}/{repo}/"
     try:
@@ -310,3 +317,27 @@ def search_packages(owner: str, repo: str, query: str):
         }
         for p in (results if isinstance(results, list) else [])
     ]
+
+
+@app.post("/api/auth/validate")
+def validate_api_key(request: Request):
+    """Validate a Cloudsmith API key by hitting the /v1/user/self/ endpoint."""
+    api_key = request.headers.get("X-Api-Key", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No API key provided")
+    session = create_session(api_key)
+    try:
+        resp = session.get("https://api.cloudsmith.io/v1/user/self/", timeout=10)
+        if resp.status_code == 401:
+            return {"valid": False, "error": "Invalid API key"}
+        resp.raise_for_status()
+        user = resp.json()
+        return {
+            "valid": True,
+            "name": user.get("name", ""),
+            "slug": user.get("slug", ""),
+            "email": user.get("email", ""),
+        }
+    except Exception as exc:
+        log.warning("API key validation failed: %s", exc)
+        return {"valid": False, "error": str(exc)}

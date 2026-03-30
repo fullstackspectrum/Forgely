@@ -1355,3 +1355,285 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-dim);
 }
+
+/* ===== Connect button (left panel) ===== */
+
+.left-panel-connection {
+  margin-top: auto;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connect-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.connect-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.connect-btn.connected {
+  border-color: var(--safe);
+  color: var(--text-primary);
+}
+.connect-btn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.connect-btn.connected .connect-btn-dot {
+  background: var(--safe);
+  box-shadow: 0 0 6px var(--safe);
+}
+
+.disconnect-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.disconnect-btn:hover {
+  border-color: var(--critical);
+  color: var(--critical);
+  background: rgba(255, 77, 77, 0.1);
+}
+
+/* ===== Modal ===== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+.modal-content {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.2s ease;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ===== Connect modal internals ===== */
+
+.connect-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.connect-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.connect-status.connected .connect-dot {
+  background: var(--safe);
+  box-shadow: 0 0 8px var(--safe);
+}
+.connect-status.disconnected .connect-dot {
+  background: var(--text-dim);
+}
+
+.connect-user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+}
+.connect-user-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.connect-user-email {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.connect-key-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.connect-key-label {
+  color: var(--text-muted);
+}
+.connect-key-masked {
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.connect-input-row {
+  display: flex;
+  gap: 8px;
+}
+.connect-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.connect-input:focus {
+  border-color: var(--accent);
+}
+.connect-input::placeholder {
+  color: var(--text-dim);
+}
+
+.connect-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.connect-error {
+  font-size: 12px;
+  color: var(--critical);
+  padding: 6px 10px;
+  background: rgba(255, 77, 77, 0.1);
+  border-radius: var(--radius-sm);
+}
+
+.connect-divider {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.connect-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.connect-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.connect-hint a:hover {
+  text-decoration: underline;
+}
+
+/* ===== Button variants ===== */
+
+.btn {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn:hover {
+  background: var(--bg-card);
+  border-color: var(--text-dim);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-accent:hover {
+  background: #3a7ec9;
+}
+.btn-muted {
+  background: var(--bg-primary);
+  color: var(--text-muted);
+}
+.btn-danger {
+  background: rgba(255, 77, 77, 0.15);
+  border-color: var(--critical);
+  color: var(--critical);
+}
+.btn-danger:hover {
+  background: rgba(255, 77, 77, 0.25);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}

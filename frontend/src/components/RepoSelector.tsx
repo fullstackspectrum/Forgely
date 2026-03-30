@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/auth";
 
 interface Namespace {
   slug: string;
@@ -34,7 +35,7 @@ export default function RepoSelector({
   /* Fetch namespaces on mount */
   useEffect(() => {
     setLoadingNs(true);
-    fetch("/api/namespaces")
+    apiFetch("/api/namespaces")
       .then((r) => r.json())
       .then((data) => setNamespaces(Array.isArray(data) ? data : []))
       .catch(() => setNamespaces([]))
@@ -48,7 +49,7 @@ export default function RepoSelector({
       return;
     }
     setLoadingRepos(true);
-    fetch(`/api/repos/${encodeURIComponent(owner)}`)
+    apiFetch(`/api/repos/${encodeURIComponent(owner)}`)
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
