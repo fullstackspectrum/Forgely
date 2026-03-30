@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../lib/auth";
 
 interface SearchResult {
   name: string;
@@ -77,7 +78,7 @@ export default function SearchBar({
       /* Cloudsmith API search */
       if (!owner || !repo) return;
       setLoading(true);
-      fetch(`/api/search?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&query=${encodeURIComponent(trimmed)}`)
+      apiFetch(`/api/search?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&query=${encodeURIComponent(trimmed)}`)
         .then((r) => r.json())
         .then((data: SearchResult[]) => {
           setResults(data);

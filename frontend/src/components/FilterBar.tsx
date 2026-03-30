@@ -4,8 +4,11 @@ interface Props {
   filter: FilterType;
   stats: GraphStats | null;
   hideSharedCveEdges: boolean;
+  hasKey: boolean;
   onFilterChange: (f: FilterType) => void;
   onHideSharedCveEdgesChange: (v: boolean) => void;
+  onConnectClick: () => void;
+  onDisconnect: () => void;
 }
 
 const FILTERS: { key: FilterType; label: string; color?: string }[] = [
@@ -23,8 +26,11 @@ export default function FilterBar({
   filter,
   stats,
   hideSharedCveEdges,
+  hasKey,
   onFilterChange,
   onHideSharedCveEdgesChange,
+  onConnectClick,
+  onDisconnect,
 }: Props) {
   return (
     <div className="left-panel">
@@ -94,6 +100,25 @@ export default function FilterBar({
           />
           <span>Hide shared CVE edges</span>
         </label>
+      </div>
+
+      <div className="left-panel-connection">
+        <button
+          className={`connect-btn ${hasKey ? "connected" : ""}`}
+          onClick={onConnectClick}
+        >
+          <span className="connect-btn-dot" />
+          {hasKey ? "Connected" : "Connect"}
+        </button>
+        {hasKey && (
+          <button
+            className="disconnect-btn"
+            title="Disconnect"
+            onClick={onDisconnect}
+          >
+            ×
+          </button>
+        )}
       </div>
     </div>
   );
