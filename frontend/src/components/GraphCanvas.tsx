@@ -138,6 +138,7 @@ export default function GraphCanvas({
     searchResults,
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
+    sharedCveNodes: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
   });
 
@@ -166,6 +167,17 @@ export default function GraphCanvas({
       }
     }
 
+    /* Nodes connected by shared_cve edges */
+    const sharedCveNodes = new Set<string>();
+    if (graphRef.current) {
+      graphRef.current.forEachEdge((_edge, attrs, source, target) => {
+        if (attrs.edgeKind === "shared_cve") {
+          sharedCveNodes.add(source);
+          sharedCveNodes.add(target);
+        }
+      });
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
@@ -174,6 +186,7 @@ export default function GraphCanvas({
       searchResults,
       neighbors,
       searchConnected,
+      sharedCveNodes,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, searchResults]);
@@ -350,6 +363,7 @@ export default function GraphCanvas({
           let show = true;
           if (st.filter === "vulnerable") show = vc > 0;
           else if (st.filter === "safe") show = vc === 0;
+          else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
           else show = sev === st.filter;
           if (!show) {
             res.hidden = true;
