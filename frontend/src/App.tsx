@@ -6,6 +6,7 @@ import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
 import Legend from "./components/Legend";
+import LoadingIndicator from "./components/LoadingIndicator";
 import type { FilterType, LayoutType, EdgeStyle } from "./types";
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutType>("force");
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -88,13 +90,10 @@ export default function App() {
       {/* Left control panel */}
       <FilterBar
         filter={filter}
-        layout={layout}
-        edgeStyle={edgeStyle}
         stats={data?.stats ?? null}
+        hideSharedCveEdges={hideSharedCveEdges}
         onFilterChange={setFilter}
-        onLayoutChange={handleLayoutChange}
-        onEdgeStyleChange={setEdgeStyle}
-        onRefresh={handleRefresh}
+        onHideSharedCveEdgesChange={setHideSharedCveEdges}
       />
 
       {/* Top bar: repo selector + search */}
@@ -118,11 +117,7 @@ export default function App() {
 
       {/* Graph */}
       {loading ? (
-        <div className="graph-loading">
-          <div className="spinner" />
-          <p>Fetching Cloudsmith data…</p>
-          <p className="loading-sub">Scanning packages and vulnerabilities</p>
-        </div>
+        <LoadingIndicator />
       ) : error && !data ? (
         <div className="graph-loading">
           <h2>Connection Error</h2>
@@ -140,8 +135,12 @@ export default function App() {
           layout={layout}
           edgeStyle={edgeStyle}
           searchResults={searchResults}
+          hideSharedCveEdges={hideSharedCveEdges}
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
+          onRefresh={handleRefresh}
+          onLayoutChange={handleLayoutChange}
+          onEdgeStyleChange={setEdgeStyle}
         />
       ) : (
         <div className="empty-state">

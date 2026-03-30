@@ -1,49 +1,36 @@
-import type { FilterType, LayoutType, EdgeStyle, GraphStats } from "../types";
+import type { FilterType, GraphStats } from "../types";
 
 interface Props {
   filter: FilterType;
-  layout: LayoutType;
-  edgeStyle: EdgeStyle;
   stats: GraphStats | null;
+  hideSharedCveEdges: boolean;
   onFilterChange: (f: FilterType) => void;
-  onLayoutChange: (l: LayoutType) => void;
-  onEdgeStyleChange: (e: EdgeStyle) => void;
-  onRefresh: () => void;
+  onHideSharedCveEdgesChange: (v: boolean) => void;
 }
 
 const FILTERS: { key: FilterType; label: string; color?: string }[] = [
   { key: "all", label: "All" },
   { key: "vulnerable", label: "⚠ Vulnerable" },
   { key: "safe", label: "✔ Safe" },
+  { key: "shared_cve", label: "🔗 Shared CVEs" },
   { key: "Critical", label: "Critical", color: "#ff4d4d" },
   { key: "High", label: "High", color: "#ff8c1a" },
   { key: "Medium", label: "Medium", color: "#ffd11a" },
   { key: "Low", label: "Low", color: "#79b8ff" },
 ];
 
-const LAYOUTS: { key: LayoutType; label: string }[] = [
-  { key: "force", label: "💥 Force" },
-  { key: "circular", label: "◎ Circular" },
-  { key: "radial", label: "🎯 Radial" },
-  { key: "tree", label: "🌳 Tree" },
-  { key: "horizontal", label: "↔ Horizontal" },
-];
-
 export default function FilterBar({
   filter,
-  layout,
-  edgeStyle,
   stats,
+  hideSharedCveEdges,
   onFilterChange,
-  onLayoutChange,
-  onEdgeStyleChange,
-  onRefresh,
+  onHideSharedCveEdgesChange,
 }: Props) {
   return (
     <div className="left-panel">
       <div className="left-panel-header">
-        <span className="left-panel-title">Artigraphly</span>
-        <span className="left-panel-sub">Security Map</span>
+        <img src="/artigraphly-logo.png" alt="Artigraphly" className="left-panel-logo" />
+        <span className="left-panel-sub">Artifact Security Graph</span>
       </div>
 
       {stats && (
@@ -98,42 +85,15 @@ export default function FilterBar({
       </div>
 
       <div className="left-panel-section">
-        <span className="left-panel-section-title">Layout</span>
-        <div className="left-panel-btn-group">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l.key}
-              className={`btn btn-block ${layout === l.key ? "btn-active" : "btn-muted"}`}
-              onClick={() => onLayoutChange(l.key)}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="left-panel-section">
-        <span className="left-panel-section-title">Edge Style</span>
-        <div className="left-panel-btn-group">
-          <button
-            className={`btn btn-block ${edgeStyle === "curved" ? "btn-active" : "btn-muted"}`}
-            onClick={() => onEdgeStyleChange("curved")}
-          >
-            ∿ Curved
-          </button>
-          <button
-            className={`btn btn-block ${edgeStyle === "straight" ? "btn-active" : "btn-muted"}`}
-            onClick={() => onEdgeStyleChange("straight")}
-          >
-            — Straight
-          </button>
-        </div>
-      </div>
-
-      <div className="left-panel-section">
-        <button className="btn btn-accent btn-block" onClick={onRefresh}>
-          ↻ Refresh Data
-        </button>
+        <span className="left-panel-section-title">Visibility</span>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={hideSharedCveEdges}
+            onChange={(e) => onHideSharedCveEdgesChange(e.target.checked)}
+          />
+          <span>Hide shared CVE edges</span>
+        </label>
       </div>
     </div>
   );
