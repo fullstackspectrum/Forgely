@@ -1,4 +1,4 @@
-"""Cloudsmith API client – extracted from artigraphly.py for the backend."""
+"""Cloudsmith API client for the Artigraphly backend."""
 
 from __future__ import annotations
 

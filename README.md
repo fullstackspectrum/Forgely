@@ -31,24 +31,29 @@
 
 ## 🚀 Quick Start
 
-### 1. Clone
+### 1. Prerequisites
+
+- **Python 3.10+** — [python.org](https://www.python.org/downloads/)
+- **Node.js 18+** and **npm** — [nodejs.org](https://nodejs.org/)
+- A **Cloudsmith API key** — [Generate one here](https://app.cloudsmith.com/user/settings/api/)
+
+### 2. Clone
 
 ```bash
 git clone https://github.com/your-user/Artigraphly.git
 cd Artigraphly
 ```
 
-### 2. Configure credentials
+### 3. Configure credentials
 
-Create a `.env` file in the project root:
+Copy the example env file and fill in your API key:
 
 ```bash
-CLOUDSMITH_API_KEY=your_api_key_here
-CLOUDSMITH_OWNER=your_org
-CLOUDSMITH_REPO=your_repo
+cp .env.example .env
+# Edit .env with your Cloudsmith API key
 ```
 
-### 3. Run
+### 4. Run
 
 The start script handles virtual environment creation, dependency installation, and launches both servers:
 
@@ -124,11 +129,10 @@ Artigraphly/
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── vite.config.ts
-├── artigraphly.py             # Legacy CLI tool
 ├── start.sh                   # Start script (backend + frontend)
 ├── .env                       # Credentials (not committed)
+├── .env.example               # Environment variable template
 ├── assets/
-│   ├── cloudsmith.png
 │   └── readme/                # README images
 ├── CHANGELOG.md
 ├── LICENSE
