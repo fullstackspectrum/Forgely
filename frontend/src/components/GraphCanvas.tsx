@@ -270,11 +270,11 @@ export default function GraphCanvas({
       }
 
       graph.addNode(node.id, {
-        label: node.label,
+        label: node.type === "repo" ? "" : node.label,
         size,
         color:
           node.type === "repo"
-            ? "#4a90d9"
+            ? "#000000"
             : node.type === "dependency"
               ? "#555"
               : sevColor,
