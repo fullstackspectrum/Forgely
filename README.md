@@ -124,11 +124,10 @@ Artigraphly/
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── vite.config.ts
-├── artigraphly.py             # Legacy CLI tool
 ├── start.sh                   # Start script (backend + frontend)
 ├── .env                       # Credentials (not committed)
+├── .env.example               # Environment variable template
 ├── assets/
-│   ├── cloudsmith.png
 │   └── readme/                # README images
 ├── CHANGELOG.md
 ├── LICENSE
