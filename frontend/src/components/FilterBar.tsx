@@ -44,6 +44,7 @@ export default function FilterBar({
     <div className="left-panel">
       <div className="left-panel-header">
         <img src="/artigraphly-logo.png" alt="Artigraphly" className="left-panel-logo" />
+        <span className="left-panel-sub">Artifact Security Graph</span>
       </div>
 
       {stats && (
