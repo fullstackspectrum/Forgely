@@ -3,7 +3,9 @@ import type { FilterType, GraphStats } from "../types";
 interface Props {
   filter: FilterType;
   stats: GraphStats | null;
+  hideSharedCveEdges: boolean;
   onFilterChange: (f: FilterType) => void;
+  onHideSharedCveEdgesChange: (v: boolean) => void;
 }
 
 const FILTERS: { key: FilterType; label: string; color?: string }[] = [
@@ -20,7 +22,9 @@ const FILTERS: { key: FilterType; label: string; color?: string }[] = [
 export default function FilterBar({
   filter,
   stats,
+  hideSharedCveEdges,
   onFilterChange,
+  onHideSharedCveEdgesChange,
 }: Props) {
   return (
     <div className="left-panel">
@@ -78,6 +82,18 @@ export default function FilterBar({
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="left-panel-section">
+        <span className="left-panel-section-title">Visibility</span>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={hideSharedCveEdges}
+            onChange={(e) => onHideSharedCveEdgesChange(e.target.checked)}
+          />
+          <span>Hide shared CVE edges</span>
+        </label>
       </div>
     </div>
   );

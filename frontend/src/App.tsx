@@ -20,6 +20,7 @@ export default function App() {
   const [layout, setLayout] = useState<LayoutType>("force");
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
   const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -90,7 +91,9 @@ export default function App() {
       <FilterBar
         filter={filter}
         stats={data?.stats ?? null}
+        hideSharedCveEdges={hideSharedCveEdges}
         onFilterChange={setFilter}
+        onHideSharedCveEdgesChange={setHideSharedCveEdges}
       />
 
       {/* Top bar: repo selector + search */}
@@ -132,6 +135,7 @@ export default function App() {
           layout={layout}
           edgeStyle={edgeStyle}
           searchResults={searchResults}
+          hideSharedCveEdges={hideSharedCveEdges}
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
           onRefresh={handleRefresh}
