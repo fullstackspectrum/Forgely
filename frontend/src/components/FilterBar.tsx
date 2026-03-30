@@ -15,6 +15,7 @@ const FILTERS: { key: FilterType; label: string; color?: string }[] = [
   { key: "all", label: "All" },
   { key: "vulnerable", label: "⚠ Vulnerable" },
   { key: "safe", label: "✔ Safe" },
+  { key: "shared_cve", label: "🔗 Shared CVEs" },
   { key: "Critical", label: "Critical", color: "#ff4d4d" },
   { key: "High", label: "High", color: "#ff8c1a" },
   { key: "Medium", label: "Medium", color: "#ffd11a" },
