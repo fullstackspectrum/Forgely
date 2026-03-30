@@ -89,13 +89,8 @@ export default function App() {
       {/* Left control panel */}
       <FilterBar
         filter={filter}
-        layout={layout}
-        edgeStyle={edgeStyle}
         stats={data?.stats ?? null}
         onFilterChange={setFilter}
-        onLayoutChange={handleLayoutChange}
-        onEdgeStyleChange={setEdgeStyle}
-        onRefresh={handleRefresh}
       />
 
       {/* Top bar: repo selector + search */}
@@ -140,6 +135,8 @@ export default function App() {
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
           onRefresh={handleRefresh}
+          onLayoutChange={handleLayoutChange}
+          onEdgeStyleChange={setEdgeStyle}
         />
       ) : (
         <div className="empty-state">
