@@ -130,12 +130,6 @@ export default function FilterBar({
           </button>
         </div>
       </div>
-
-      <div className="left-panel-section">
-        <button className="btn btn-accent btn-block" onClick={onRefresh}>
-          ↻ Refresh Data
-        </button>
-      </div>
     </div>
   );
 }
