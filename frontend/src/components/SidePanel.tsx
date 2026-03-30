@@ -1,5 +1,7 @@
-import type { GraphResponse, CVERecord } from "../types";
-import { SEVERITY_COLORS } from "../types";
+import { useMemo } from "react";
+import { useState } from "react";
+import type { GraphResponse, GraphNode, CVERecord } from "../types";
+import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 
 interface Props {
   data: GraphResponse;
@@ -9,8 +11,14 @@ interface Props {
 }
 
 export default function SidePanel({ data, nodeId, owner, repo }: Props) {
+  const [sevFilter, setSevFilter] = useState<string>("All");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
+
+  /* Repo node gets a completely different detail view */
+  if (node.type === "repo") {
+    return <RepoDetail data={data} node={node} owner={owner} repo={repo} />;
+  }
 
   const d = node.data;
   const sev = d.max_severity || "None";
@@ -81,25 +89,51 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
       </div>
 
       {/* CVE list */}
-      {d.cves.length > 0 && (
-        <div className="panel-section">
-          <h3 className="section-title">
-            CVEs ({d.cves.length}
-            {d.vuln_count > d.cves.length ? ` of ${d.vuln_count}` : ""})
-          </h3>
-          <div className="cve-list">
-            {d.cves.map((cve, i) => (
-              <CveCard
-                key={`${cve.id}-${i}`}
-                cve={cve}
-                otherPackages={(cveIndex[cve.id] || []).filter(
-                  (id) => id !== nodeId,
-                )}
-              />
-            ))}
+      {d.cves.length > 0 && (() => {
+        const sorted = [...d.cves].sort(
+          (a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0)
+        );
+        const sevCounts: Record<string, number> = {};
+        for (const c of sorted) {
+          sevCounts[c.severity] = (sevCounts[c.severity] || 0) + 1;
+        }
+        const filtered = sevFilter === "All" ? sorted : sorted.filter((c) => c.severity === sevFilter);
+        const filterOptions = ["All", "Critical", "High", "Medium", "Low"].filter(
+          (s) => s === "All" || sevCounts[s]
+        );
+
+        return (
+          <div className="panel-section">
+            <h3 className="section-title">
+              CVEs ({filtered.length}{filtered.length !== d.cves.length ? ` of ${d.cves.length}` : ""}
+              {d.vuln_count > d.cves.length ? ` — ${d.vuln_count} total` : ""})
+            </h3>
+            <div className="cve-filter-bar">
+              {filterOptions.map((s) => (
+                <button
+                  key={s}
+                  className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
+                  style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
+                  onClick={() => setSevFilter(s)}
+                >
+                  {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
+                </button>
+              ))}
+            </div>
+            <div className="cve-list">
+              {filtered.map((cve, i) => (
+                <CveCard
+                  key={`${cve.id}-${i}`}
+                  cve={cve}
+                  otherPackages={(cveIndex[cve.id] || []).filter(
+                    (id) => id !== nodeId,
+                  )}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {d.vuln_count > 0 && d.cves.length === 0 && (
         <div className="panel-section">
@@ -195,6 +229,162 @@ function CveCard({
       {otherPackages.length > 0 && (
         <div className="cve-shared">
           ⚠ Also affects: {otherPackages.join(", ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================
+   Repo Detail View
+   ================================================================ */
+
+function RepoDetail({
+  data,
+  node,
+  owner,
+  repo,
+}: {
+  data: GraphResponse;
+  node: GraphNode;
+  owner: string;
+  repo: string;
+}) {
+  const stats = useMemo(() => {
+    const packages = data.nodes.filter((n) => n.type === "package");
+    const deps = data.nodes.filter((n) => n.type === "dependency");
+
+    /* Format breakdown */
+    const formatCounts: Record<string, number> = {};
+    for (const p of packages) {
+      const f = p.data.format || "unknown";
+      formatCounts[f] = (formatCounts[f] || 0) + 1;
+    }
+    const formats = Object.entries(formatCounts)
+      .sort((a, b) => b[1] - a[1]);
+
+    /* Vulnerability breakdown */
+    let totalVulns = 0;
+    const sevCounts: Record<string, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    const allCves = new Set<string>();
+    for (const p of packages) {
+      totalVulns += p.data.vuln_count;
+      for (const c of p.data.cves) {
+        if (c.id) allCves.add(c.id);
+        if (sevCounts[c.severity] !== undefined) {
+          sevCounts[c.severity]++;
+        }
+      }
+    }
+
+    /* Packages with most vulns */
+    const topVuln = [...packages]
+      .filter((p) => p.data.vuln_count > 0)
+      .sort((a, b) => b.data.vuln_count - a.data.vuln_count)
+      .slice(0, 5);
+
+    return { packages, deps, formats, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
+  }, [data]);
+
+  const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
+
+  return (
+    <div className="side-panel">
+      <div className="panel-header">
+        <div className="repo-header-row">
+          <img src="/cloudsmith.png" alt="" className="repo-header-logo" />
+          <div>
+            <h2 className="panel-title">{node.label}</h2>
+            <span className="panel-version">{owner}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel-status-row">
+        <a
+          className="cloudsmith-view-btn"
+          href={repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View in Cloudsmith"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
+      </div>
+
+      {/* Overview cards */}
+      <div className="repo-cards">
+        <div className="repo-card">
+          <span className="repo-card-value">{stats.packages.length}</span>
+          <span className="repo-card-label">Packages</span>
+        </div>
+        <div className="repo-card">
+          <span className="repo-card-value">{stats.deps.length}</span>
+          <span className="repo-card-label">Dependencies</span>
+        </div>
+        <div className="repo-card">
+          <span className="repo-card-value">{stats.uniqueCves}</span>
+          <span className="repo-card-label">Unique CVEs</span>
+        </div>
+        <div className="repo-card">
+          <span className="repo-card-value">{stats.totalVulns}</span>
+          <span className="repo-card-label">Total Findings</span>
+        </div>
+      </div>
+
+      {/* Severity breakdown */}
+      <div className="panel-section">
+        <h3 className="section-title">Severity Breakdown</h3>
+        <div className="repo-sev-bars">
+          {(["Critical", "High", "Medium", "Low"] as const).map((s) => {
+            const count = stats.sevCounts[s];
+            const max = Math.max(...Object.values(stats.sevCounts), 1);
+            return (
+              <div key={s} className="repo-sev-row">
+                <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
+                <div className="repo-sev-track">
+                  <div
+                    className="repo-sev-fill"
+                    style={{ width: `${(count / max) * 100}%`, background: SEVERITY_COLORS[s] }}
+                  />
+                </div>
+                <span className="repo-sev-count">{count}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Format breakdown */}
+      <div className="panel-section">
+        <h3 className="section-title">Package Formats</h3>
+        <div className="repo-format-list">
+          {stats.formats.map(([fmt, count]) => (
+            <div key={fmt} className="repo-format-row">
+              <span className="repo-format-name">{fmt}</span>
+              <span className="repo-format-count">{count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Most vulnerable packages */}
+      {stats.topVuln.length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Most Vulnerable</h3>
+          <div className="repo-top-vuln">
+            {stats.topVuln.map((p) => {
+              const s = p.data.max_severity || "None";
+              return (
+                <div key={p.id} className="repo-vuln-row">
+                  <span className="repo-vuln-name">{p.label}</span>
+                  <span className="repo-vuln-badge" style={{ background: SEVERITY_COLORS[s] }}>
+                    {p.data.vuln_count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

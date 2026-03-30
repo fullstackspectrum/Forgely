@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
@@ -111,8 +111,12 @@ interface Props {
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   searchResults: string[];
+  hideSharedCveEdges?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
+  onRefresh?: () => void;
+  onLayoutChange?: (l: LayoutType) => void;
+  onEdgeStyleChange?: (e: EdgeStyle) => void;
 }
 
 export default function GraphCanvas({
@@ -123,8 +127,12 @@ export default function GraphCanvas({
   layout,
   edgeStyle,
   searchResults,
+  hideSharedCveEdges = false,
   onNodeSelect,
   onNodeHover,
+  onRefresh,
+  onLayoutChange,
+  onEdgeStyleChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -136,8 +144,10 @@ export default function GraphCanvas({
     hoveredNode,
     filter,
     searchResults,
+    hideSharedCveEdges,
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
+    sharedCveNodes: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
   });
 
@@ -166,17 +176,30 @@ export default function GraphCanvas({
       }
     }
 
+    /* Nodes connected by shared_cve edges */
+    const sharedCveNodes = new Set<string>();
+    if (graphRef.current) {
+      graphRef.current.forEachEdge((_edge, attrs, source, target) => {
+        if (attrs.edgeKind === "shared_cve") {
+          sharedCveNodes.add(source);
+          sharedCveNodes.add(target);
+        }
+      });
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
       hoveredNode,
       filter,
       searchResults,
+      hideSharedCveEdges,
       neighbors,
       searchConnected,
+      sharedCveNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -222,7 +245,8 @@ export default function GraphCanvas({
     const newType =
       edgeStyle === "curved" ? "curvedArrow" : "arrow";
     graph.forEachEdge((edge) => {
-      if (graph.getEdgeAttribute(edge, "edgeKind") === "dependency") return;
+      const kind = graph.getEdgeAttribute(edge, "edgeKind");
+      if (kind === "dependency" || kind === "shared_cve") return;
       graph.setEdgeAttribute(edge, "type", newType);
     });
     sigma.setSetting(
@@ -238,6 +262,14 @@ export default function GraphCanvas({
 
     let cancelled = false;
     const container = containerRef.current;
+
+    /* Wait for container to have dimensions before initializing sigma */
+    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+      const raf = requestAnimationFrame(() => {
+        if (!cancelled) buildSigma(container);
+      });
+      return () => { cancelled = true; cancelAnimationFrame(raf); };
+    }
 
     buildSigma(container);
 
@@ -269,11 +301,11 @@ export default function GraphCanvas({
       }
 
       graph.addNode(node.id, {
-        label: node.label,
+        label: node.type === "repo" ? "" : node.label,
         size,
         color:
           node.type === "repo"
-            ? "#4a90d9"
+            ? "#000000"
             : node.type === "dependency"
               ? "#555"
               : sevColor,
@@ -301,7 +333,7 @@ export default function GraphCanvas({
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
         color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
-        type: isSharedCve ? (useCurved ? "curvedArrow" : "arrow") : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
+        type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -349,6 +381,7 @@ export default function GraphCanvas({
           let show = true;
           if (st.filter === "vulnerable") show = vc > 0;
           else if (st.filter === "safe") show = vc === 0;
+          else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
           else show = sev === st.filter;
           if (!show) {
             res.hidden = true;
@@ -389,6 +422,12 @@ export default function GraphCanvas({
       edgeReducer: (edge, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Hide shared CVE edges if toggled */
+        if (st.hideSharedCveEdges && graph.getEdgeAttribute(edge, "edgeKind") === "shared_cve") {
+          res.hidden = true;
+          return res;
+        }
 
         /* Hide edges not connected to search-visible nodes */
         if (st.searchResults.length > 0) {
@@ -453,5 +492,101 @@ export default function GraphCanvas({
     };
   }, [data]);
 
-  return <div ref={containerRef} className="graph-container" />;
+  return (
+    <div className="graph-wrapper">
+      <div ref={containerRef} className="graph-container" />
+      <div className="graph-controls">
+        {onLayoutChange && onEdgeStyleChange && (
+          <LayoutPopout
+            layout={layout}
+            edgeStyle={edgeStyle}
+            onLayoutChange={onLayoutChange}
+            onEdgeStyleChange={onEdgeStyleChange}
+          />
+        )}
+        {onRefresh && (
+          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">
+            ↻
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================
+   Layout / Edge Style Floating Control
+   ================================================================ */
+
+const LAYOUTS: { key: LayoutType; icon: string; label: string }[] = [
+  { key: "force", icon: "⚛", label: "Force" },
+  { key: "circular", icon: "◎", label: "Circular" },
+  { key: "radial", icon: "◉", label: "Radial" },
+  { key: "tree", icon: "⏛", label: "Tree" },
+  { key: "horizontal", icon: "⇥", label: "Horizontal" },
+];
+
+function LayoutPopout({
+  layout,
+  edgeStyle,
+  onLayoutChange,
+  onEdgeStyleChange,
+}: {
+  layout: LayoutType;
+  edgeStyle: EdgeStyle;
+  onLayoutChange: (l: LayoutType) => void;
+  onEdgeStyleChange: (e: EdgeStyle) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = LAYOUTS.find((l) => l.key === layout);
+
+  return (
+    <div className="layout-popout">
+      <button
+        className="layout-popout-trigger"
+        onClick={() => setOpen(!open)}
+        title="Layout & Edge Style"
+      >
+        <span className="layout-popout-icon">{current?.icon ?? "⚛"}</span>
+        <span className="layout-popout-label">{current?.label ?? "Layout"}</span>
+        <span className={`layout-popout-chevron${open ? " open" : ""}`}>▾</span>
+      </button>
+
+      {open && (
+        <div className="layout-popout-menu">
+          <div className="layout-popout-section">
+            <span className="layout-popout-section-title">Layout</span>
+            {LAYOUTS.map((l) => (
+              <button
+                key={l.key}
+                className={`layout-popout-item${layout === l.key ? " active" : ""}`}
+                onClick={() => { onLayoutChange(l.key); setOpen(false); }}
+              >
+                <span className="layout-popout-item-icon">{l.icon}</span>
+                {l.label}
+              </button>
+            ))}
+          </div>
+          <div className="layout-popout-divider" />
+          <div className="layout-popout-section">
+            <span className="layout-popout-section-title">Edges</span>
+            <button
+              className={`layout-popout-item${edgeStyle === "curved" ? " active" : ""}`}
+              onClick={() => { onEdgeStyleChange("curved"); setOpen(false); }}
+            >
+              <span className="layout-popout-item-icon">∿</span>
+              Curved
+            </button>
+            <button
+              className={`layout-popout-item${edgeStyle === "straight" ? " active" : ""}`}
+              onClick={() => { onEdgeStyleChange("straight"); setOpen(false); }}
+            >
+              <span className="layout-popout-item-icon">—</span>
+              Straight
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
