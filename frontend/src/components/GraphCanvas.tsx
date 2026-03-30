@@ -222,7 +222,8 @@ export default function GraphCanvas({
     const newType =
       edgeStyle === "curved" ? "curvedArrow" : "arrow";
     graph.forEachEdge((edge) => {
-      if (graph.getEdgeAttribute(edge, "edgeKind") === "dependency") return;
+      const kind = graph.getEdgeAttribute(edge, "edgeKind");
+      if (kind === "dependency" || kind === "shared_cve") return;
       graph.setEdgeAttribute(edge, "type", newType);
     });
     sigma.setSetting(
@@ -301,7 +302,7 @@ export default function GraphCanvas({
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
         color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
-        type: isSharedCve ? (useCurved ? "curvedArrow" : "arrow") : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
+        type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
