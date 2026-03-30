@@ -1,14 +1,9 @@
-import type { FilterType, LayoutType, EdgeStyle, GraphStats } from "../types";
+import type { FilterType, GraphStats } from "../types";
 
 interface Props {
   filter: FilterType;
-  layout: LayoutType;
-  edgeStyle: EdgeStyle;
   stats: GraphStats | null;
   onFilterChange: (f: FilterType) => void;
-  onLayoutChange: (l: LayoutType) => void;
-  onEdgeStyleChange: (e: EdgeStyle) => void;
-  onRefresh: () => void;
 }
 
 const FILTERS: { key: FilterType; label: string; color?: string }[] = [
@@ -22,23 +17,10 @@ const FILTERS: { key: FilterType; label: string; color?: string }[] = [
   { key: "Low", label: "Low", color: "#79b8ff" },
 ];
 
-const LAYOUTS: { key: LayoutType; label: string }[] = [
-  { key: "force", label: "💥 Force" },
-  { key: "circular", label: "◎ Circular" },
-  { key: "radial", label: "🎯 Radial" },
-  { key: "tree", label: "🌳 Tree" },
-  { key: "horizontal", label: "↔ Horizontal" },
-];
-
 export default function FilterBar({
   filter,
-  layout,
-  edgeStyle,
   stats,
   onFilterChange,
-  onLayoutChange,
-  onEdgeStyleChange,
-  onRefresh,
 }: Props) {
   return (
     <div className="left-panel">
@@ -95,39 +77,6 @@ export default function FilterBar({
               {f.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className="left-panel-section">
-        <span className="left-panel-section-title">Layout</span>
-        <div className="left-panel-btn-group">
-          {LAYOUTS.map((l) => (
-            <button
-              key={l.key}
-              className={`btn btn-block ${layout === l.key ? "btn-active" : "btn-muted"}`}
-              onClick={() => onLayoutChange(l.key)}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="left-panel-section">
-        <span className="left-panel-section-title">Edge Style</span>
-        <div className="left-panel-btn-group">
-          <button
-            className={`btn btn-block ${edgeStyle === "curved" ? "btn-active" : "btn-muted"}`}
-            onClick={() => onEdgeStyleChange("curved")}
-          >
-            ∿ Curved
-          </button>
-          <button
-            className={`btn btn-block ${edgeStyle === "straight" ? "btn-active" : "btn-muted"}`}
-            onClick={() => onEdgeStyleChange("straight")}
-          >
-            — Straight
-          </button>
         </div>
       </div>
     </div>
