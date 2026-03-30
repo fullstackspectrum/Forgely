@@ -6,6 +6,7 @@ import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
 import Legend from "./components/Legend";
+import LoadingIndicator from "./components/LoadingIndicator";
 import type { FilterType, LayoutType, EdgeStyle } from "./types";
 
 export default function App() {
@@ -118,11 +119,7 @@ export default function App() {
 
       {/* Graph */}
       {loading ? (
-        <div className="graph-loading">
-          <div className="spinner" />
-          <p>Fetching Cloudsmith data…</p>
-          <p className="loading-sub">Scanning packages and vulnerabilities</p>
-        </div>
+        <LoadingIndicator />
       ) : error && !data ? (
         <div className="graph-loading">
           <h2>Connection Error</h2>
