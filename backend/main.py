@@ -41,9 +41,10 @@ log = logging.getLogger("artigraphly.api")
 
 app = FastAPI(title="Artigraphly API", version="2.0.0")
 
+_allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
