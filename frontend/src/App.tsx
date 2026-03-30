@@ -25,6 +25,7 @@ export default function App() {
   const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
+  const [repoRefreshKey, setRepoRefreshKey] = useState(0);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -108,6 +109,7 @@ export default function App() {
         <RepoSelector
           currentOwner={owner}
           currentRepo={repo}
+          refreshKey={repoRefreshKey}
           onSelect={handleRepoSelect}
         />
         {owner && repo && (
@@ -125,7 +127,7 @@ export default function App() {
       <ConnectModal
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
-        onConnected={() => { setHasKey(!!getApiKey()); setConnectOpen(false); }}
+        onConnected={() => { setHasKey(!!getApiKey()); setRepoRefreshKey((k) => k + 1); setConnectOpen(false); }}
       />
 
       {/* Graph */}
