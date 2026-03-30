@@ -111,6 +111,7 @@ interface Props {
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   searchResults: string[];
+  hideSharedCveEdges?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -126,6 +127,7 @@ export default function GraphCanvas({
   layout,
   edgeStyle,
   searchResults,
+  hideSharedCveEdges = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -142,6 +144,7 @@ export default function GraphCanvas({
     hoveredNode,
     filter,
     searchResults,
+    hideSharedCveEdges,
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
@@ -190,12 +193,13 @@ export default function GraphCanvas({
       hoveredNode,
       filter,
       searchResults,
+      hideSharedCveEdges,
       neighbors,
       searchConnected,
       sharedCveNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -418,6 +422,12 @@ export default function GraphCanvas({
       edgeReducer: (edge, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Hide shared CVE edges if toggled */
+        if (st.hideSharedCveEdges && graph.getEdgeAttribute(edge, "edgeKind") === "shared_cve") {
+          res.hidden = true;
+          return res;
+        }
 
         /* Hide edges not connected to search-visible nodes */
         if (st.searchResults.length > 0) {
