@@ -56,12 +56,20 @@ body {
 
 /* ===== Graph canvas ===== */
 
-.graph-container {
+.graph-wrapper {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 260px;
+}
+
+.graph-container {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background-color: var(--bg-primary);
   background-image: linear-gradient(
       rgba(100, 149, 237, 0.05) 1px,
@@ -71,6 +79,32 @@ body {
     linear-gradient(rgba(100, 149, 237, 0.12) 1px, transparent 1px),
     linear-gradient(90deg, rgba(100, 149, 237, 0.12) 1px, transparent 1px);
   background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+}
+
+.graph-refresh-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--accent);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.graph-refresh-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: rotate(90deg);
 }
 
 /* ===== Left control panel ===== */

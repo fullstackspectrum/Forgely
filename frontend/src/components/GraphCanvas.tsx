@@ -113,6 +113,7 @@ interface Props {
   searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
+  onRefresh?: () => void;
 }
 
 export default function GraphCanvas({
@@ -125,6 +126,7 @@ export default function GraphCanvas({
   searchResults,
   onNodeSelect,
   onNodeHover,
+  onRefresh,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -468,5 +470,14 @@ export default function GraphCanvas({
     };
   }, [data]);
 
-  return <div ref={containerRef} className="graph-container" />;
+  return (
+    <div className="graph-wrapper">
+      <div ref={containerRef} className="graph-container" />
+      {onRefresh && (
+        <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">
+          ↻
+        </button>
+      )}
+    </div>
+  );
 }

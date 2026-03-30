@@ -139,6 +139,7 @@ export default function App() {
           searchResults={searchResults}
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
+          onRefresh={handleRefresh}
         />
       ) : (
         <div className="empty-state">
