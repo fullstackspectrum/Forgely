@@ -17,12 +17,14 @@ interface Repo {
 interface Props {
   currentOwner: string;
   currentRepo: string;
+  refreshKey: number;
   onSelect: (owner: string, repo: string) => void;
 }
 
 export default function RepoSelector({
   currentOwner,
   currentRepo,
+  refreshKey,
   onSelect,
 }: Props) {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -32,7 +34,7 @@ export default function RepoSelector({
   const [loadingNs, setLoadingNs] = useState(false);
   const [loadingRepos, setLoadingRepos] = useState(false);
 
-  /* Fetch namespaces on mount */
+  /* Fetch namespaces on mount or when refreshKey changes */
   useEffect(() => {
     setLoadingNs(true);
     apiFetch("/api/namespaces")
@@ -40,7 +42,7 @@ export default function RepoSelector({
       .then((data) => setNamespaces(Array.isArray(data) ? data : []))
       .catch(() => setNamespaces([]))
       .finally(() => setLoadingNs(false));
-  }, []);
+  }, [refreshKey]);
 
   /* Fetch repos when owner changes */
   useEffect(() => {
