@@ -92,11 +92,17 @@ body {
 }
 
 .left-panel-header {
-  padding: 20px 18px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+}
+
+.left-panel-logo {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .left-panel-title {

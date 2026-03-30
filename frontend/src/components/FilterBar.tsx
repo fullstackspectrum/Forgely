@@ -42,8 +42,7 @@ export default function FilterBar({
   return (
     <div className="left-panel">
       <div className="left-panel-header">
-        <span className="left-panel-title">Artigraphly</span>
-        <span className="left-panel-sub">Security Map</span>
+        <img src="/artigraphly-logo.png" alt="Artigraphly" className="left-panel-logo" />
       </div>
 
       {stats && (
