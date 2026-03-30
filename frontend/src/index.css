@@ -619,6 +619,37 @@ body {
   margin-bottom: 8px;
 }
 
+/* CVE filter bar */
+.cve-filter-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.cve-filter-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cve-filter-btn:hover {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.cve-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* CVE list */
 .cve-list {
   display: flex;

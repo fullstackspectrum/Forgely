@@ -1,5 +1,6 @@
+import { useState } from "react";
 import type { GraphResponse, CVERecord } from "../types";
-import { SEVERITY_COLORS } from "../types";
+import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 
 interface Props {
   data: GraphResponse;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function SidePanel({ data, nodeId, owner, repo }: Props) {
+  const [sevFilter, setSevFilter] = useState<string>("All");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -81,25 +83,51 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
       </div>
 
       {/* CVE list */}
-      {d.cves.length > 0 && (
-        <div className="panel-section">
-          <h3 className="section-title">
-            CVEs ({d.cves.length}
-            {d.vuln_count > d.cves.length ? ` of ${d.vuln_count}` : ""})
-          </h3>
-          <div className="cve-list">
-            {d.cves.map((cve, i) => (
-              <CveCard
-                key={`${cve.id}-${i}`}
-                cve={cve}
-                otherPackages={(cveIndex[cve.id] || []).filter(
-                  (id) => id !== nodeId,
-                )}
-              />
-            ))}
+      {d.cves.length > 0 && (() => {
+        const sorted = [...d.cves].sort(
+          (a, b) => (SEVERITY_RANK[b.severity] ?? 0) - (SEVERITY_RANK[a.severity] ?? 0)
+        );
+        const sevCounts: Record<string, number> = {};
+        for (const c of sorted) {
+          sevCounts[c.severity] = (sevCounts[c.severity] || 0) + 1;
+        }
+        const filtered = sevFilter === "All" ? sorted : sorted.filter((c) => c.severity === sevFilter);
+        const filterOptions = ["All", "Critical", "High", "Medium", "Low"].filter(
+          (s) => s === "All" || sevCounts[s]
+        );
+
+        return (
+          <div className="panel-section">
+            <h3 className="section-title">
+              CVEs ({filtered.length}{filtered.length !== d.cves.length ? ` of ${d.cves.length}` : ""}
+              {d.vuln_count > d.cves.length ? ` — ${d.vuln_count} total` : ""})
+            </h3>
+            <div className="cve-filter-bar">
+              {filterOptions.map((s) => (
+                <button
+                  key={s}
+                  className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
+                  style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
+                  onClick={() => setSevFilter(s)}
+                >
+                  {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
+                </button>
+              ))}
+            </div>
+            <div className="cve-list">
+              {filtered.map((cve, i) => (
+                <CveCard
+                  key={`${cve.id}-${i}`}
+                  cve={cve}
+                  otherPackages={(cveIndex[cve.id] || []).filter(
+                    (id) => id !== nodeId,
+                  )}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {d.vuln_count > 0 && d.cves.length === 0 && (
         <div className="panel-section">
