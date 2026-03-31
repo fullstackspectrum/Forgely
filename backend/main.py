@@ -136,12 +136,20 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     # Repo node
     repo_id = f"{owner}/{repo}"
     nodes.append(GraphNode(id=repo_id, label=repo_id, type="repo", data=NodeData()))
+    seen_ids: set[str] = {repo_id}
 
     for pkg in packages:
         slug = pkg["slug_perm"]
         name = pkg["name"]
         version = pkg.get("version", "")
         node_id = f"{name}@{version}" if version else name
+
+        # Skip duplicate package entries (e.g. multi-arch builds)
+        if node_id in seen_ids:
+            slug_to_id.setdefault(slug, node_id)
+            continue
+        seen_ids.add(node_id)
+
         downloads = pkg.get("downloads", 0)
         scan_status = pkg.get("security_scan_status", "Unknown")
 
@@ -233,12 +241,11 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     for slug, src_id in slug_to_id.items():
         log.info("Fetching deps for %s", src_id)
         deps = fetch_dependencies(session, owner, repo, slug)
-        existing_ids = {n.id for n in nodes}
         for dep in deps:
             dep_name = dep.get("name", dep.get("identifier", "unknown"))
-            if dep_name not in existing_ids:
+            if dep_name not in seen_ids:
                 nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData()))
-                existing_ids.add(dep_name)
+                seen_ids.add(dep_name)
             edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency"))
 
     graph_stats = GraphStats(
