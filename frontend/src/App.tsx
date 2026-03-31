@@ -23,6 +23,7 @@ export default function App() {
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
+  const [hideDependencies, setHideDependencies] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
@@ -97,9 +98,11 @@ export default function App() {
         filter={filter}
         stats={data?.stats ?? null}
         hideSharedCveEdges={hideSharedCveEdges}
+        hideDependencies={hideDependencies}
         hasKey={hasKey}
         onFilterChange={setFilter}
         onHideSharedCveEdgesChange={setHideSharedCveEdges}
+        onHideDependenciesChange={setHideDependencies}
         onConnectClick={() => setConnectOpen(true)}
         onDisconnect={() => { clearApiKey(); setHasKey(false); }}
       />
@@ -151,6 +154,7 @@ export default function App() {
           edgeStyle={edgeStyle}
           searchResults={searchResults}
           hideSharedCveEdges={hideSharedCveEdges}
+          hideDependencies={hideDependencies}
           onNodeSelect={setSelectedNode}
           onNodeHover={setHoveredNode}
           onRefresh={handleRefresh}
