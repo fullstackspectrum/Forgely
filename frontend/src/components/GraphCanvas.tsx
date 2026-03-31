@@ -276,11 +276,14 @@ export default function GraphCanvas({
     function buildSigma(el: HTMLDivElement) {
       if (cancelled) return;
 
+    try {
+
     const graph = new Graph({ multi: true, type: "directed" });
     const nodeData: Record<string, NodeData> = {};
 
     /* --- Add nodes --- */
     for (const node of data.nodes) {
+      if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity || "None";
       const sevColor =
         SEVERITY_COLORS[sev] || (node.type === "repo" ? "#4a90d9" : "#666666");
@@ -479,6 +482,18 @@ export default function GraphCanvas({
 
     sigmaRef.current = sigma;
     graphRef.current = graph;
+
+    } catch (err) {
+      console.error("Graph build failed:", err);
+      if (containerRef.current) {
+        containerRef.current.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8888aa;gap:8px;">
+            <span style="font-size:32px;">⚠</span>
+            <span style="font-size:14px;font-weight:600;">Failed to render graph</span>
+            <span style="font-size:12px;color:#555570;">${err instanceof Error ? err.message : "Unknown error"}</span>
+          </div>`;
+      }
+    }
 
     } /* end buildSigma */
 
