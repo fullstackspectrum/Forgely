@@ -287,9 +287,9 @@ export default function GraphCanvas({
     /* --- Add nodes --- */
     for (const node of data.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
-      const sev = node.data.max_severity || "None";
+      const sev = node.data.max_severity ?? "Unknown";
       const sevColor =
-        SEVERITY_COLORS[sev] || (node.type === "repo" ? "#4a90d9" : "#666666");
+        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#666666");
 
       const size =
         node.type === "repo"
