@@ -112,6 +112,7 @@ interface Props {
   edgeStyle: EdgeStyle;
   searchResults: string[];
   hideSharedCveEdges?: boolean;
+  hideDependencies?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -128,6 +129,7 @@ export default function GraphCanvas({
   edgeStyle,
   searchResults,
   hideSharedCveEdges = false,
+  hideDependencies = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -194,12 +196,13 @@ export default function GraphCanvas({
       filter,
       searchResults,
       hideSharedCveEdges,
+      hideDependencies,
       neighbors,
       searchConnected,
       sharedCveNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -377,6 +380,12 @@ export default function GraphCanvas({
         const st = stateRef.current;
         const res = { ...attrs };
 
+        /* --- Hide dependency nodes --- */
+        if (st.hideDependencies && attrs.nodeType === "dependency") {
+          res.hidden = true;
+          return res;
+        }
+
         /* --- Filtering --- */
         if (st.filter !== "all" && attrs.nodeType !== "repo") {
           const vc = (attrs as any).vulnCount ?? 0;
@@ -428,6 +437,12 @@ export default function GraphCanvas({
 
         /* Hide shared CVE edges if toggled */
         if (st.hideSharedCveEdges && graph.getEdgeAttribute(edge, "edgeKind") === "shared_cve") {
+          res.hidden = true;
+          return res;
+        }
+
+        /* Hide dependency edges if toggled */
+        if (st.hideDependencies && graph.getEdgeAttribute(edge, "edgeKind") === "dependency") {
           res.hidden = true;
           return res;
         }
