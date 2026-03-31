@@ -155,6 +155,16 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
         log.info("Scanning %s", node_id)
         max_sev, vuln_count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
+        log.info("  %s → max_sev=%r, vuln_count=%d, scan_status=%s", node_id, max_sev, vuln_count, scan_status)
+
+        # Override scan_status based on actual scan results – the package list
+        # API may report "Awaiting Security Scan" even when scans have completed.
+        # max_sev is Python None only when no scan data exists at all;
+        # it is the string "None" when a scan ran but found 0 vulns.
+        if vuln_count > 0:
+            scan_status = "Scanned (Vulnerable)"
+        elif max_sev is not None:
+            scan_status = "Scanned (Clean)"
 
         cve_records: list[CVERecord] = []
         for v in vulns:
