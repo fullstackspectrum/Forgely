@@ -18,7 +18,6 @@ env/
 node_modules/
 
 # Generated output
-*.html
 *.log
 
 # IDE
