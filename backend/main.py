@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -33,7 +34,7 @@ _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 load_dotenv(_env_path, override=True)
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.WARNING,
     format="%(asctime)s %(levelname)-8s %(name)s  %(message)s",
     datefmt="%H:%M:%S",
 )
@@ -138,24 +139,46 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     nodes.append(GraphNode(id=repo_id, label=repo_id, type="repo", data=NodeData()))
     seen_ids: set[str] = {repo_id}
 
+    # De-duplicate packages and prepare metadata before parallel fetch
+    pkg_metas: list[dict] = []
     for pkg in packages:
         slug = pkg["slug_perm"]
         name = pkg["name"]
         version = pkg.get("version", "")
         node_id = f"{name}@{version}" if version else name
 
-        # Skip duplicate package entries (e.g. multi-arch builds)
         if node_id in seen_ids:
             slug_to_id.setdefault(slug, node_id)
             continue
         seen_ids.add(node_id)
+        slug_to_id[slug] = node_id
+        pkg_metas.append({"pkg": pkg, "slug": slug, "name": name, "version": version, "node_id": node_id})
+
+    # --- Parallel vulnerability scanning ---
+    MAX_WORKERS = 20
+
+    def _scan_vuln(meta: dict) -> tuple[dict, str | None, int, list[dict]]:
+        slug = meta["slug"]
+        return (meta, *get_package_vulnerabilities(session, owner, repo, slug))
+
+    vuln_results: dict[str, tuple[str | None, int, list[dict]]] = {}
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(_scan_vuln, m): m for m in pkg_metas}
+        for fut in as_completed(futures):
+            meta, max_sev, vuln_count, vulns = fut.result()
+            vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
+
+    for meta in pkg_metas:
+        pkg = meta["pkg"]
+        slug = meta["slug"]
+        name = meta["name"]
+        version = meta["version"]
+        node_id = meta["node_id"]
 
         downloads = pkg.get("downloads", 0)
         scan_status = pkg.get("security_scan_status", "Unknown")
 
-        log.info("Scanning %s", node_id)
-        max_sev, vuln_count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
-        log.info("  %s → max_sev=%r, vuln_count=%d, scan_status=%s", node_id, max_sev, vuln_count, scan_status)
+        max_sev, vuln_count, vulns = vuln_results[node_id]
 
         # Override scan_status based on actual scan results – the package list
         # API may report "Awaiting Security Scan" even when scans have completed.
@@ -226,8 +249,6 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             ),
         ))
         edges.append(GraphEdge(source=repo_id, target=node_id, type="repo_package"))
-        slug_to_id[slug] = node_id
-
         total_cves += vuln_count
         if max_sev in stats:
             stats[max_sev] += 1
@@ -247,16 +268,21 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
                     edges.append(GraphEdge(source=a, target=b, type="shared_cve", label=cve_id))
                     seen_pairs.add(pair)
 
-    # Dependency edges
-    for slug, src_id in slug_to_id.items():
-        log.info("Fetching deps for %s", src_id)
-        deps = fetch_dependencies(session, owner, repo, slug)
-        for dep in deps:
-            dep_name = dep.get("name", dep.get("identifier", "unknown"))
-            if dep_name not in seen_ids:
-                nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData()))
-                seen_ids.add(dep_name)
-            edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency"))
+    # --- Parallel dependency fetching ---
+    def _fetch_dep(item: tuple[str, str]) -> tuple[str, list[dict]]:
+        slug, src_id = item
+        return (src_id, fetch_dependencies(session, owner, repo, slug))
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        dep_futures = [pool.submit(_fetch_dep, item) for item in slug_to_id.items()]
+        for fut in as_completed(dep_futures):
+            src_id, deps = fut.result()
+            for dep in deps:
+                dep_name = dep.get("name", dep.get("identifier", "unknown"))
+                if dep_name not in seen_ids:
+                    nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData()))
+                    seen_ids.add(dep_name)
+                edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency"))
 
     graph_stats = GraphStats(
         critical=stats.get("Critical", 0),
