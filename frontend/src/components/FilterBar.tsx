@@ -4,9 +4,11 @@ interface Props {
   filter: FilterType;
   stats: GraphStats | null;
   hideSharedCveEdges: boolean;
+  hideDependencies: boolean;
   hasKey: boolean;
   onFilterChange: (f: FilterType) => void;
   onHideSharedCveEdgesChange: (v: boolean) => void;
+  onHideDependenciesChange: (v: boolean) => void;
   onConnectClick: () => void;
   onDisconnect: () => void;
 }
@@ -26,9 +28,11 @@ export default function FilterBar({
   filter,
   stats,
   hideSharedCveEdges,
+  hideDependencies,
   hasKey,
   onFilterChange,
   onHideSharedCveEdgesChange,
+  onHideDependenciesChange,
   onConnectClick,
   onDisconnect,
 }: Props) {
@@ -99,6 +103,14 @@ export default function FilterBar({
             onChange={(e) => onHideSharedCveEdgesChange(e.target.checked)}
           />
           <span>Hide shared CVE edges</span>
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={hideDependencies}
+            onChange={(e) => onHideDependenciesChange(e.target.checked)}
+          />
+          <span>Hide dependencies</span>
         </label>
       </div>
 

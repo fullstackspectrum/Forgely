@@ -112,6 +112,7 @@ interface Props {
   edgeStyle: EdgeStyle;
   searchResults: string[];
   hideSharedCveEdges?: boolean;
+  hideDependencies?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -128,6 +129,7 @@ export default function GraphCanvas({
   edgeStyle,
   searchResults,
   hideSharedCveEdges = false,
+  hideDependencies = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -194,12 +196,13 @@ export default function GraphCanvas({
       filter,
       searchResults,
       hideSharedCveEdges,
+      hideDependencies,
       neighbors,
       searchConnected,
       sharedCveNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -276,14 +279,17 @@ export default function GraphCanvas({
     function buildSigma(el: HTMLDivElement) {
       if (cancelled) return;
 
+    try {
+
     const graph = new Graph({ multi: true, type: "directed" });
     const nodeData: Record<string, NodeData> = {};
 
     /* --- Add nodes --- */
     for (const node of data.nodes) {
-      const sev = node.data.max_severity || "None";
+      if (graph.hasNode(node.id)) continue;  // skip duplicates
+      const sev = node.data.max_severity ?? "Unknown";
       const sevColor =
-        SEVERITY_COLORS[sev] || (node.type === "repo" ? "#4a90d9" : "#666666");
+        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#666666");
 
       const size =
         node.type === "repo"
@@ -374,6 +380,12 @@ export default function GraphCanvas({
         const st = stateRef.current;
         const res = { ...attrs };
 
+        /* --- Hide dependency nodes --- */
+        if (st.hideDependencies && attrs.nodeType === "dependency") {
+          res.hidden = true;
+          return res;
+        }
+
         /* --- Filtering --- */
         if (st.filter !== "all" && attrs.nodeType !== "repo") {
           const vc = (attrs as any).vulnCount ?? 0;
@@ -429,6 +441,12 @@ export default function GraphCanvas({
           return res;
         }
 
+        /* Hide dependency edges if toggled */
+        if (st.hideDependencies && graph.getEdgeAttribute(edge, "edgeKind") === "dependency") {
+          res.hidden = true;
+          return res;
+        }
+
         /* Hide edges not connected to search-visible nodes */
         if (st.searchResults.length > 0) {
           const src = graph.source(edge);
@@ -479,6 +497,18 @@ export default function GraphCanvas({
 
     sigmaRef.current = sigma;
     graphRef.current = graph;
+
+    } catch (err) {
+      console.error("Graph build failed:", err);
+      if (containerRef.current) {
+        containerRef.current.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8888aa;gap:8px;">
+            <span style="font-size:32px;">⚠</span>
+            <span style="font-size:14px;font-weight:600;">Failed to render graph</span>
+            <span style="font-size:12px;color:#555570;">${err instanceof Error ? err.message : "Unknown error"}</span>
+          </div>`;
+      }
+    }
 
     } /* end buildSigma */
 
