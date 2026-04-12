@@ -206,4 +206,10 @@ def get_package_vulnerabilities(
                 best_rank = rank
                 max_sev = v_sev
 
+    # If scans existed but no severity was determined, the scan completed
+    # cleanly.  Return "None" (string) so callers can distinguish from
+    # "no scans at all" (Python None).
+    if not max_sev:
+        max_sev = "None"
+
     return max_sev, int(api_count), vulns
