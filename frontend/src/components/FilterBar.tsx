@@ -18,6 +18,7 @@ const FILTERS: { key: FilterType; label: string; color?: string }[] = [
   { key: "vulnerable", label: "⚠ Vulnerable" },
   { key: "safe", label: "✔ Safe" },
   { key: "shared_cve", label: "🔗 Shared CVEs" },
+  { key: "has_deps", label: "🔀 Has Dependencies" },
   { key: "Critical", label: "Critical", color: "#ff4d4d" },
   { key: "High", label: "High", color: "#ff8c1a" },
   { key: "Medium", label: "Medium", color: "#ffd11a" },
@@ -77,7 +78,7 @@ export default function FilterBar({
       )}
 
       <div className="left-panel-section">
-        <span className="left-panel-section-title">Severity Filter</span>
+        <span className="left-panel-section-title">Filters</span>
         <div className="left-panel-btn-group">
           {FILTERS.map((f) => (
             <button
