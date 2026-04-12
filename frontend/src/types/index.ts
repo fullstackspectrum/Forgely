@@ -63,6 +63,7 @@ export type FilterType =
   | "vulnerable"
   | "safe"
   | "shared_cve"
+  | "has_deps"
   | "Critical"
   | "High"
   | "Medium"
