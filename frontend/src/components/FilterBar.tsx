@@ -1,11 +1,15 @@
 import type { FilterType, GraphStats } from "../types";
 
+type TabType = "packages" | "organisation";
+
 interface Props {
   filter: FilterType;
   stats: GraphStats | null;
   hideSharedCveEdges: boolean;
   hideDependencies: boolean;
   hasKey: boolean;
+  tab: TabType;
+  onTabChange: (t: TabType) => void;
   onFilterChange: (f: FilterType) => void;
   onHideSharedCveEdgesChange: (v: boolean) => void;
   onHideDependenciesChange: (v: boolean) => void;
@@ -31,6 +35,8 @@ export default function FilterBar({
   hideSharedCveEdges,
   hideDependencies,
   hasKey,
+  tab,
+  onTabChange,
   onFilterChange,
   onHideSharedCveEdgesChange,
   onHideDependenciesChange,
@@ -42,6 +48,21 @@ export default function FilterBar({
       <div className="left-panel-header">
         <img src="/artigraphly-logo.png" alt="Artigraphly" className="left-panel-logo" />
         <span className="left-panel-sub">Artifact Security Graph</span>
+      </div>
+
+      <div className="left-panel-tabs">
+        <button
+          className={`left-panel-tab${tab === "packages" ? " active" : ""}`}
+          onClick={() => onTabChange("packages")}
+        >
+          📦 Packages
+        </button>
+        <button
+          className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}
+          onClick={() => onTabChange("organisation")}
+        >
+          🏢 Organisation
+        </button>
       </div>
 
       {stats && (

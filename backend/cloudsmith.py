@@ -52,6 +52,62 @@ def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def fetch_org_members(session: requests.Session, owner: str) -> list[dict]:
+    """Fetch all members of an organization."""
+    url = f"{BASE_URL}/orgs/{owner}/members/"
+    page = 1
+    members: list[dict] = []
+    while True:
+        data = _api_get(session, url, params={"page": page, "page_size": 100, "is_active": True})
+        if not data:
+            break
+        members.extend(data if isinstance(data, list) else [])
+        if not isinstance(data, list) or len(data) < 100:
+            break
+        page += 1
+    return members
+
+
+def fetch_org_services(session: requests.Session, owner: str) -> list[dict]:
+    """Fetch all service accounts within an organization."""
+    url = f"{BASE_URL}/orgs/{owner}/services/"
+    page = 1
+    services: list[dict] = []
+    while True:
+        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        if not data:
+            break
+        services.extend(data if isinstance(data, list) else [])
+        if not isinstance(data, list) or len(data) < 100:
+            break
+        page += 1
+    return services
+
+
+def fetch_repo_entitlements(session: requests.Session, owner: str, repo: str) -> list[dict]:
+    """Fetch all entitlement tokens for a repository."""
+    url = f"{BASE_URL}/entitlements/{owner}/{repo}/"
+    try:
+        data = _api_get(session, url, params={"page_size": 100})
+        return data if isinstance(data, list) else []
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in (404, 403):
+            return []
+        raise
+
+
+def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> dict:
+    """Fetch privileges (user/team/service access) for a repository."""
+    url = f"{BASE_URL}/repos/{owner}/{repo}/privileges"
+    try:
+        data = _api_get(session, url)
+        return data if isinstance(data, dict) else {}
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in (404, 403):
+            return {}
+        raise
+
+
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
     url = f"{BASE_URL}/packages/{owner}/{repo}/"
     page = 1
