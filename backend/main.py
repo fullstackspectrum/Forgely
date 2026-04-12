@@ -33,7 +33,7 @@ _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 load_dotenv(_env_path, override=True)
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.WARNING,
     format="%(asctime)s %(levelname)-8s %(name)s  %(message)s",
     datefmt="%H:%M:%S",
 )

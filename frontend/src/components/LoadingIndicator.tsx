@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 const STAGES = [
-  { label: "Connecting to Cloudsmith", icon: "🔗" },
   { label: "Fetching packages", icon: "📦" },
   { label: "Scanning vulnerabilities", icon: "🛡" },
   { label: "Resolving dependencies", icon: "🔀" },
