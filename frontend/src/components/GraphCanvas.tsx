@@ -42,13 +42,15 @@ function getFormatIcon(format: string): string | null {
 }
 
 /**
- * BFS-based hierarchical layout.
+ * BFS-based hierarchical layout with adaptive spacing.
  * Places the repo node at root, packages at depth 1, dependencies at depth 2+.
+ * Subtrees are sized proportionally so sibling groups don't overlap.
  * @param horizontal – if true, tree grows left-to-right; otherwise top-to-bottom.
  */
 function assignTreeLayout(graph: Graph, horizontal: boolean) {
   const visited = new Set<string>();
-  const levels: string[][] = [];
+  const children: Record<string, string[]> = {};
+  const depthOf: Record<string, number> = {};
 
   /* Find root (repo node) or fall back to first node */
   let root: string | null = null;
@@ -60,47 +62,101 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
     if (!root) return;
   }
 
-  /* BFS to assign depths */
-  const queue: { id: string; depth: number }[] = [{ id: root, depth: 0 }];
+  /* BFS to build a tree structure */
+  const queue: string[] = [root];
   visited.add(root);
+  depthOf[root] = 0;
+  children[root] = [];
   while (queue.length > 0) {
-    const { id, depth } = queue.shift()!;
-    if (!levels[depth]) levels[depth] = [];
-    levels[depth].push(id);
+    const id = queue.shift()!;
     graph.forEachOutNeighbor(id, (neighbor) => {
       if (!visited.has(neighbor)) {
         visited.add(neighbor);
-        queue.push({ id: neighbor, depth: depth + 1 });
+        depthOf[neighbor] = depthOf[id] + 1;
+        children[neighbor] = [];
+        if (!children[id]) children[id] = [];
+        children[id].push(neighbor);
+        queue.push(neighbor);
       }
     });
   }
 
-  /* Place any disconnected nodes at the deepest level */
+  /* Also check in-neighbors for undirected-style traversal */
+  const bfsQueue2: string[] = [...visited];
+  for (const id of bfsQueue2) {
+    graph.forEachNeighbor(id, (neighbor) => {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        depthOf[neighbor] = depthOf[id] + 1;
+        children[neighbor] = [];
+        if (!children[id]) children[id] = [];
+        children[id].push(neighbor);
+      }
+    });
+  }
+
+  /* Place any fully disconnected nodes under root */
   graph.forEachNode((node) => {
     if (!visited.has(node)) {
-      const d = levels.length;
-      if (!levels[d]) levels[d] = [];
-      levels[d].push(node);
+      visited.add(node);
+      depthOf[node] = 1;
+      children[node] = [];
+      children[root!].push(node);
     }
   });
 
-  /* Assign coordinates */
-  const levelSpacing = 120;
-  for (let d = 0; d < levels.length; d++) {
-    const nodes = levels[d];
-    const span = nodes.length * 60;
-    for (let i = 0; i < nodes.length; i++) {
-      const cross = -span / 2 + i * 60;
-      const main = d * levelSpacing;
-      if (horizontal) {
-        graph.setNodeAttribute(nodes[i], "x", main);
-        graph.setNodeAttribute(nodes[i], "y", cross);
-      } else {
-        graph.setNodeAttribute(nodes[i], "x", cross);
-        graph.setNodeAttribute(nodes[i], "y", main);
-      }
+  /* Adaptive spacing based on graph size */
+  const totalNodes = graph.order;
+  const nodeSpacing = totalNodes > 300 ? 20 : totalNodes > 100 ? 35 : 50;
+  const levelSpacing = totalNodes > 300 ? 180 : totalNodes > 100 ? 200 : 250;
+
+  /* Compute the width (in cross-axis units) each subtree needs */
+  const subtreeWidth: Record<string, number> = {};
+  function computeWidth(id: string): number {
+    const ch = children[id] || [];
+    if (ch.length === 0) {
+      subtreeWidth[id] = nodeSpacing;
+      return nodeSpacing;
+    }
+    let total = 0;
+    for (const c of ch) {
+      total += computeWidth(c);
+    }
+    /* Add a small gap between child subtrees */
+    total += (ch.length - 1) * (nodeSpacing * 0.3);
+    subtreeWidth[id] = Math.max(nodeSpacing, total);
+    return subtreeWidth[id];
+  }
+  computeWidth(root);
+
+  /* Assign positions by walking the tree top-down */
+  function assignPositions(id: string, depth: number, crossCenter: number) {
+    const main = depth * levelSpacing;
+    if (horizontal) {
+      graph.setNodeAttribute(id, "x", main);
+      graph.setNodeAttribute(id, "y", crossCenter);
+    } else {
+      graph.setNodeAttribute(id, "x", crossCenter);
+      graph.setNodeAttribute(id, "y", main);
+    }
+
+    const ch = children[id] || [];
+    if (ch.length === 0) return;
+
+    /* Total width needed by children */
+    let totalChildWidth = 0;
+    for (const c of ch) totalChildWidth += subtreeWidth[c];
+    totalChildWidth += (ch.length - 1) * (nodeSpacing * 0.3);
+
+    /* Lay out children centered under the parent */
+    let cursor = crossCenter - totalChildWidth / 2;
+    for (const c of ch) {
+      const w = subtreeWidth[c];
+      assignPositions(c, depth + 1, cursor + w / 2);
+      cursor += w + nodeSpacing * 0.3;
     }
   }
+  assignPositions(root, 0, 0);
 }
 
 interface Props {
@@ -150,6 +206,7 @@ export default function GraphCanvas({
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
+    hasDepNodes: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
   });
 
@@ -180,11 +237,16 @@ export default function GraphCanvas({
 
     /* Nodes connected by shared_cve edges */
     const sharedCveNodes = new Set<string>();
+    /* Nodes that are sources of dependency edges */
+    const hasDepNodes = new Set<string>();
     if (graphRef.current) {
       graphRef.current.forEachEdge((_edge, attrs, source, target) => {
         if (attrs.edgeKind === "shared_cve") {
           sharedCveNodes.add(source);
           sharedCveNodes.add(target);
+        }
+        if (attrs.edgeKind === "dependency") {
+          hasDepNodes.add(source);
         }
       });
     }
@@ -200,6 +262,7 @@ export default function GraphCanvas({
       neighbors,
       searchConnected,
       sharedCveNodes,
+      hasDepNodes,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies]);
@@ -394,6 +457,7 @@ export default function GraphCanvas({
           if (st.filter === "vulnerable") show = vc > 0;
           else if (st.filter === "safe") show = vc === 0;
           else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
+          else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
           else show = sev === st.filter;
           if (!show) {
             res.hidden = true;
