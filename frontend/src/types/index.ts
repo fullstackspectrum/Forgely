@@ -88,3 +88,45 @@ export const SEVERITY_RANK: Record<string, number> = {
   Medium: 2,
   Low: 1,
 };
+
+/* ===== Org-level graph types ===== */
+
+export type OrgNodeFilter = "all" | "repo" | "user" | "service" | "team" | "entitlement";
+
+export interface OrgGraphNode {
+  id: string;
+  label: string;
+  type: "org" | "repo" | "user" | "service" | "team" | "entitlement";
+  data: Record<string, unknown>;
+}
+
+export interface OrgGraphEdge {
+  source: string;
+  target: string;
+  type: "org_repo" | "member_org" | "service_org" | "access" | "entitlement_repo";
+  label: string;
+}
+
+export interface OrgGraphStats {
+  total_repos: number;
+  total_members: number;
+  total_services: number;
+  total_nodes: number;
+  total_edges: number;
+}
+
+export interface OrgGraphResponse {
+  owner: string;
+  nodes: OrgGraphNode[];
+  edges: OrgGraphEdge[];
+  stats: OrgGraphStats;
+}
+
+export const ORG_NODE_COLORS: Record<string, string> = {
+  org: "#4a90d9",
+  repo: "#28a745",
+  user: "#ff8c1a",
+  service: "#a76dff",
+  team: "#ff4d87",
+  entitlement: "#ffd11a",
+};

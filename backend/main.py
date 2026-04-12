@@ -17,6 +17,10 @@ from cloudsmith import (
     fetch_all_packages,
     fetch_dependencies,
     fetch_namespaces,
+    fetch_org_members,
+    fetch_org_services,
+    fetch_repo_entitlements,
+    fetch_repo_privileges,
     fetch_repos,
     get_package_vulnerabilities,
 )
@@ -384,3 +388,188 @@ def validate_api_key(request: Request):
     except Exception as exc:
         log.warning("API key validation failed: %s", exc)
         return {"valid": False, "error": str(exc)}
+
+
+# ──────────────────────────────────────────────────────────────
+#  Organisation-level graph
+# ──────────────────────────────────────────────────────────────
+
+def _build_org_graph(api_key: str, owner: str) -> dict:
+    """Build an org-level access graph: repos, members, services, entitlements."""
+    session = create_session(api_key)
+
+    repos = fetch_repos(session, owner)
+    members = fetch_org_members(session, owner)
+    services = fetch_org_services(session, owner)
+
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    seen: set[str] = set()
+
+    # Org node
+    org_id = f"org:{owner}"
+    nodes.append({"id": org_id, "label": owner, "type": "org", "data": {}})
+    seen.add(org_id)
+
+    # Repo nodes
+    repo_slugs: list[str] = []
+    for r in repos:
+        slug = r.get("slug", "")
+        if not slug:
+            continue
+        repo_slugs.append(slug)
+        rid = f"repo:{slug}"
+        if rid in seen:
+            continue
+        seen.add(rid)
+        nodes.append({
+            "id": rid,
+            "label": r.get("name", slug),
+            "type": "repo",
+            "data": {
+                "description": r.get("description", ""),
+                "package_count": r.get("package_count", 0),
+                "repo_type": r.get("repository_type_str", r.get("type_str", "")),
+                "slug": slug,
+            },
+        })
+        edges.append({"source": org_id, "target": rid, "type": "org_repo", "label": ""})
+
+    # Member nodes
+    for m in members:
+        user = m.get("user", "")
+        slug = m.get("slug", user)
+        mid = f"user:{slug}"
+        if mid in seen:
+            continue
+        seen.add(mid)
+        role = m.get("role", "Unknown")
+        nodes.append({
+            "id": mid,
+            "label": m.get("user_name", slug),
+            "type": "user",
+            "data": {
+                "role": role,
+                "email": m.get("email", ""),
+                "is_active": m.get("is_active", True),
+                "has_two_factor": m.get("has_two_factor", False),
+                "joined_at": m.get("joined_at", ""),
+                "slug": slug,
+            },
+        })
+        edges.append({"source": mid, "target": org_id, "type": "member_org", "label": role})
+
+    # Service account nodes
+    for s in services:
+        name = s.get("name", "")
+        slug = s.get("slug", name)
+        sid = f"service:{slug}"
+        if sid in seen:
+            continue
+        seen.add(sid)
+        role = s.get("role", "Unknown")
+        nodes.append({
+            "id": sid,
+            "label": name or slug,
+            "type": "service",
+            "data": {
+                "role": role,
+                "description": s.get("description", ""),
+                "created_at": s.get("created_at", ""),
+                "slug": slug,
+                "teams": [t.get("name", t.get("slug", "")) for t in s.get("teams", [])],
+            },
+        })
+        edges.append({"source": sid, "target": org_id, "type": "service_org", "label": role})
+
+    # Fetch privileges for each repo (parallel)
+    MAX_WORKERS = 20
+
+    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict]]:
+        privs = fetch_repo_privileges(session, owner, repo_slug)
+        ents = fetch_repo_entitlements(session, owner, repo_slug)
+        return (repo_slug, privs, ents)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = [pool.submit(_fetch_priv, rs) for rs in repo_slugs]
+        for fut in as_completed(futures):
+            repo_slug, privs, ents = fut.result()
+            rid = f"repo:{repo_slug}"
+
+            # Privileges contain users, teams, services with permission levels
+            for priv_key in ("users", "teams", "services"):
+                priv_list = privs.get(priv_key) or privs.get("permissions", {}).get(priv_key, [])
+                if not isinstance(priv_list, list):
+                    continue
+                for item in priv_list:
+                    permission = item.get("privilege", item.get("role", item.get("permission", "Read")))
+                    if priv_key == "users":
+                        item_slug = item.get("slug", item.get("user", ""))
+                        item_id = f"user:{item_slug}"
+                    elif priv_key == "services":
+                        item_slug = item.get("slug", item.get("name", ""))
+                        item_id = f"service:{item_slug}"
+                    else:
+                        item_slug = item.get("slug", item.get("name", ""))
+                        item_id = f"team:{item_slug}"
+                        if item_id not in seen:
+                            seen.add(item_id)
+                            nodes.append({
+                                "id": item_id,
+                                "label": item.get("name", item_slug),
+                                "type": "team",
+                                "data": {"slug": item_slug},
+                            })
+                    if item_id in seen:
+                        edges.append({
+                            "source": item_id,
+                            "target": rid,
+                            "type": "access",
+                            "label": permission,
+                        })
+
+            # Entitlement tokens
+            for ent in ents:
+                ent_name = ent.get("name", "token")
+                ent_slug = ent.get("slug_perm", ent.get("slug", ""))
+                eid = f"entitlement:{repo_slug}:{ent_slug}"
+                if eid not in seen:
+                    seen.add(eid)
+                    nodes.append({
+                        "id": eid,
+                        "label": ent_name,
+                        "type": "entitlement",
+                        "data": {
+                            "is_active": ent.get("is_active", True),
+                            "limit_num_downloads": ent.get("limit_num_downloads"),
+                            "limit_package_query": ent.get("limit_package_query", ""),
+                            "created_at": ent.get("created_at", ""),
+                            "slug": ent_slug,
+                        },
+                    })
+                edges.append({"source": eid, "target": rid, "type": "entitlement_repo", "label": ""})
+
+    stats = {
+        "total_repos": len(repo_slugs),
+        "total_members": len(members),
+        "total_services": len(services),
+        "total_nodes": len(nodes),
+        "total_edges": len(edges),
+    }
+
+    return {"owner": owner, "nodes": nodes, "edges": edges, "stats": stats}
+
+
+@app.get("/api/org-graph")
+def get_org_graph(owner: str, request: Request):
+    api_key = _get_api_key(request)
+    if not owner:
+        raise HTTPException(status_code=400, detail="owner is required")
+
+    cache_key = f"org:{owner}"
+    if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+        return _cache[cache_key]["data"]
+
+    result = _build_org_graph(api_key, owner)
+    _cache[cache_key] = {"data": result, "ts": time.time()}
+    return result
