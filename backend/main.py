@@ -17,7 +17,14 @@ from cloudsmith import (
     fetch_all_packages,
     fetch_dependencies,
     fetch_namespaces,
+    fetch_org_members,
+    fetch_org_services,
+    fetch_org_teams,
+    fetch_repo_entitlements,
+    fetch_repo_privileges,
+    fetch_repo_upstreams,
     fetch_repos,
+    fetch_team_members,
     get_package_vulnerabilities,
 )
 from models import (
@@ -384,3 +391,335 @@ def validate_api_key(request: Request):
     except Exception as exc:
         log.warning("API key validation failed: %s", exc)
         return {"valid": False, "error": str(exc)}
+
+
+# ──────────────────────────────────────────────────────────────
+#  Organisation-level graph
+# ──────────────────────────────────────────────────────────────
+
+def _build_org_graph(api_key: str, owner: str) -> dict:
+    """Build an org-level access graph: repos, members, services, entitlements."""
+    session = create_session(api_key)
+
+    repos = fetch_repos(session, owner)
+    members = fetch_org_members(session, owner)
+    services = fetch_org_services(session, owner)
+    teams = fetch_org_teams(session, owner)
+
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    seen: set[str] = set()
+
+    # Org node
+    org_id = f"org:{owner}"
+    nodes.append({"id": org_id, "label": owner, "type": "org", "data": {}})
+    seen.add(org_id)
+
+    # Repo nodes
+    repo_slugs: list[str] = []
+    for r in repos:
+        slug = r.get("slug", "")
+        if not slug:
+            continue
+        repo_slugs.append(slug)
+        rid = f"repo:{slug}"
+        if rid in seen:
+            continue
+        seen.add(rid)
+        nodes.append({
+            "id": rid,
+            "label": r.get("name", slug),
+            "type": "repo",
+            "data": {
+                "description": r.get("description", ""),
+                "package_count": r.get("package_count", 0),
+                "repo_type": r.get("repository_type_str", r.get("type_str", "")),
+                "slug": slug,
+            },
+        })
+        edges.append({"source": org_id, "target": rid, "type": "org_repo", "label": ""})
+
+    # Member nodes
+    for m in members:
+        user = m.get("user", "")
+        slug = m.get("slug", user)
+        mid = f"user:{slug}"
+        if mid in seen:
+            continue
+        seen.add(mid)
+        role = m.get("role", "Unknown")
+        nodes.append({
+            "id": mid,
+            "label": m.get("user_name", slug),
+            "type": "user",
+            "data": {
+                "role": role,
+                "email": m.get("email", ""),
+                "is_active": m.get("is_active", True),
+                "has_two_factor": m.get("has_two_factor", False),
+                "joined_at": m.get("joined_at", ""),
+                "slug": slug,
+            },
+        })
+        edges.append({"source": mid, "target": org_id, "type": "member_org", "label": role})
+
+    # Service account nodes
+    for s in services:
+        name = s.get("name", "")
+        slug = s.get("slug", name)
+        sid = f"service:{slug}"
+        if sid in seen:
+            continue
+        seen.add(sid)
+        role = s.get("role", "Unknown")
+        nodes.append({
+            "id": sid,
+            "label": name or slug,
+            "type": "service",
+            "data": {
+                "role": role,
+                "description": s.get("description", ""),
+                "created_at": s.get("created_at", ""),
+                "slug": slug,
+                "teams": [t.get("name", t.get("slug", "")) for t in s.get("teams", [])],
+            },
+        })
+        edges.append({"source": sid, "target": org_id, "type": "service_org", "label": role})
+
+    # Team nodes
+    team_slugs: list[str] = []
+    for t in teams:
+        name = t.get("name", "")
+        slug = t.get("slug", name)
+        team_slugs.append(slug)
+        tid = f"team:{slug}"
+        if tid in seen:
+            continue
+        seen.add(tid)
+        nodes.append({
+            "id": tid,
+            "label": name or slug,
+            "type": "team",
+            "data": {
+                "slug": slug,
+                "description": t.get("description", ""),
+                "created_at": t.get("created_at", ""),
+            },
+        })
+        edges.append({"source": tid, "target": org_id, "type": "team_org", "label": ""})
+
+    # Link services → teams (from service's "teams" field)
+    for s in services:
+        s_slug = s.get("slug", s.get("name", ""))
+        sid = f"service:{s_slug}"
+        for st in s.get("teams", []):
+            t_slug = st.get("slug", st.get("name", ""))
+            tid = f"team:{t_slug}"
+            if tid in seen:
+                edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
+
+    # Fetch team members in parallel and create membership edges
+    MAX_WORKERS = 20
+
+    def _fetch_team_members(team_slug: str) -> tuple[str, list[dict]]:
+        members_list = fetch_team_members(session, owner, team_slug)
+        return (team_slug, members_list)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        team_futures = [pool.submit(_fetch_team_members, ts) for ts in team_slugs]
+        for fut in as_completed(team_futures):
+            t_slug, t_members = fut.result()
+            tid = f"team:{t_slug}"
+            for tm in t_members:
+                # Team members can be users or services
+                user_slug = tm.get("slug", tm.get("user", ""))
+                if not user_slug:
+                    continue
+                uid = f"user:{user_slug}"
+                if uid in seen:
+                    role = tm.get("role", "")
+                    edges.append({"source": uid, "target": tid, "type": "team_member", "label": role})
+
+    # Fetch privileges, entitlements, and upstreams for each repo (parallel)
+    MAX_WORKERS = 20
+
+    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict]]:
+        privs = fetch_repo_privileges(session, owner, repo_slug)
+        ents = fetch_repo_entitlements(session, owner, repo_slug)
+        ups = fetch_repo_upstreams(session, owner, repo_slug)
+        return (repo_slug, privs, ents, ups)
+
+    # Track upstream URLs → which repos use them (for shared-upstream edges)
+    upstream_url_repos: dict[str, list[str]] = {}
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = [pool.submit(_fetch_priv, rs) for rs in repo_slugs]
+        for fut in as_completed(futures):
+            repo_slug, privs, ents, ups = fut.result()
+            rid = f"repo:{repo_slug}"
+
+            # Normalise privileges into a flat list of entries.
+            # The API may return either:
+            #   - a list of {privilege, user?, service?, team?} objects
+            #   - a dict with keys "users", "teams", "services" (or nested under "permissions")
+            priv_entries: list[dict] = []
+            if isinstance(privs, list):
+                priv_entries = privs
+            elif isinstance(privs, dict):
+                for priv_key in ("users", "teams", "services"):
+                    items = privs.get(priv_key) or privs.get("permissions", {}).get(priv_key, [])
+                    if isinstance(items, list):
+                        for item in items:
+                            item["_priv_key"] = priv_key
+                        priv_entries.extend(items)
+
+            for item in priv_entries:
+                permission = item.get("privilege", item.get("role", item.get("permission", "Read")))
+
+                # Determine the entity type and slug from the entry
+                priv_key = item.get("_priv_key", "")
+                user_obj = item.get("user")
+                service_obj = item.get("service")
+                team_obj = item.get("team")
+
+                if priv_key == "users" or (isinstance(user_obj, dict) and user_obj):
+                    if isinstance(user_obj, dict):
+                        item_slug = user_obj.get("slug", user_obj.get("slug_perm", ""))
+                    else:
+                        item_slug = item.get("slug", item.get("user", ""))
+                    item_id = f"user:{item_slug}"
+                elif priv_key == "services" or (isinstance(service_obj, dict) and service_obj):
+                    if isinstance(service_obj, dict):
+                        item_slug = service_obj.get("slug", service_obj.get("slug_perm", ""))
+                        item_name = service_obj.get("name", item_slug)
+                    else:
+                        item_slug = item.get("slug", item.get("name", ""))
+                        item_name = item.get("name", item_slug)
+                    item_id = f"service:{item_slug}"
+                elif priv_key == "teams" or (isinstance(team_obj, dict) and team_obj):
+                    if isinstance(team_obj, dict):
+                        item_slug = team_obj.get("slug", team_obj.get("slug_perm", ""))
+                        item_name = team_obj.get("name", item_slug)
+                    else:
+                        item_slug = item.get("slug", item.get("name", ""))
+                        item_name = item.get("name", item_slug)
+                    item_id = f"team:{item_slug}"
+                    if item_id not in seen:
+                        seen.add(item_id)
+                        nodes.append({
+                            "id": item_id,
+                            "label": item_name,
+                            "type": "team",
+                            "data": {"slug": item_slug},
+                        })
+                else:
+                    continue
+
+                if item_id in seen:
+                    edges.append({
+                        "source": item_id,
+                        "target": rid,
+                        "type": "access",
+                        "label": permission,
+                    })
+
+            # Entitlement tokens
+            for ent in ents:
+                ent_name = ent.get("name", "token")
+                ent_slug = ent.get("slug_perm", ent.get("slug", ""))
+                eid = f"entitlement:{repo_slug}:{ent_slug}"
+                if eid not in seen:
+                    seen.add(eid)
+                    nodes.append({
+                        "id": eid,
+                        "label": ent_name,
+                        "type": "entitlement",
+                        "data": {
+                            "is_active": ent.get("is_active", True),
+                            "limit_num_downloads": ent.get("limit_num_downloads"),
+                            "limit_package_query": ent.get("limit_package_query", ""),
+                            "created_at": ent.get("created_at", ""),
+                            "slug": ent_slug,
+                        },
+                    })
+                edges.append({"source": eid, "target": rid, "type": "entitlement_repo", "label": ""})
+
+            # Upstream proxy/cache sources
+            for up in ups:
+                up_url = up.get("upstream_url", "")
+                up_name = up.get("name", up_url)
+                up_fmt = up.get("_format", "")
+                up_mode = up.get("mode", "")
+                up_active = up.get("is_active", True)
+                # Use the URL as the canonical node ID so shared upstreams merge
+                uid = f"upstream:{up_url}"
+                if uid not in seen:
+                    seen.add(uid)
+                    nodes.append({
+                        "id": uid,
+                        "label": up_name or up_url,
+                        "type": "upstream",
+                        "data": {
+                            "upstream_url": up_url,
+                            "format": up_fmt,
+                            "mode": up_mode,
+                            "is_active": up_active,
+                            "verify_ssl": up.get("verify_ssl", True),
+                            "priority": up.get("priority", 0),
+                            "created_at": up.get("created_at", ""),
+                        },
+                    })
+                edges.append({
+                    "source": rid,
+                    "target": uid,
+                    "type": "repo_upstream",
+                    "label": f"{up_fmt} ({up_mode})" if up_mode else up_fmt,
+                })
+                # Track for shared-upstream detection
+                upstream_url_repos.setdefault(up_url, []).append(repo_slug)
+
+    # Add shared-upstream edges between repos that share the same upstream URL
+    for up_url, repo_list in upstream_url_repos.items():
+        if len(repo_list) < 2:
+            continue
+        uid = f"upstream:{up_url}"
+        # Create edges between each pair of repos sharing this upstream
+        for i in range(len(repo_list)):
+            for j in range(i + 1, len(repo_list)):
+                edges.append({
+                    "source": f"repo:{repo_list[i]}",
+                    "target": f"repo:{repo_list[j]}",
+                    "type": "shared_upstream",
+                    "label": up_url,
+                })
+
+    total_upstreams = sum(1 for n in nodes if n["type"] == "upstream")
+    shared_upstream_count = sum(1 for url, repos in upstream_url_repos.items() if len(repos) > 1)
+
+    stats = {
+        "total_repos": len(repo_slugs),
+        "total_members": len(members),
+        "total_services": len(services),
+        "total_teams": len(teams),
+        "total_upstreams": total_upstreams,
+        "shared_upstreams": shared_upstream_count,
+        "total_nodes": len(nodes),
+        "total_edges": len(edges),
+    }
+
+    return {"owner": owner, "nodes": nodes, "edges": edges, "stats": stats}
+
+
+@app.get("/api/org-graph")
+def get_org_graph(owner: str, request: Request):
+    api_key = _get_api_key(request)
+    if not owner:
+        raise HTTPException(status_code=400, detail="owner is required")
+
+    cache_key = f"org:{owner}"
+    if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+        return _cache[cache_key]["data"]
+
+    result = _build_org_graph(api_key, owner)
+    _cache[cache_key] = {"data": result, "ts": time.time()}
+    return result
