@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
 
-const STAGES = [
+const PACKAGE_STAGES = [
   { label: "Fetching packages", icon: "📦" },
   { label: "Scanning vulnerabilities", icon: "🛡" },
   { label: "Resolving dependencies", icon: "🔀" },
   { label: "Building graph", icon: "📊" },
 ];
 
-export default function LoadingIndicator() {
+const WORKSPACE_STAGES = [
+  { label: "Fetching repositories", icon: "📂" },
+  { label: "Loading members & services", icon: "👥" },
+  { label: "Resolving privileges & entitlements", icon: "🔐" },
+  { label: "Discovering upstreams", icon: "🔗" },
+  { label: "Building workspace graph", icon: "📊" },
+];
+
+interface Props {
+  variant?: "packages" | "workspace";
+}
+
+export default function LoadingIndicator({ variant = "packages" }: Props) {
+  const STAGES = variant === "workspace" ? WORKSPACE_STAGES : PACKAGE_STAGES;
   const [stage, setStage] = useState(0);
   const [elapsed, setElapsed] = useState(0);
 

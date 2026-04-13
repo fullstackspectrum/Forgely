@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useGraphData } from "./hooks/useGraphData";
 import GraphCanvas from "./components/GraphCanvas";
+import OrgGraphCanvas from "./components/OrgGraphCanvas";
+import OrgLeftPanel from "./components/OrgLeftPanel";
+import OrgSidePanel from "./components/OrgSidePanel";
+import OrgLegend from "./components/OrgLegend";
 import SidePanel from "./components/SidePanel";
 import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
+import WorkspaceSelector from "./components/WorkspaceSelector";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
-import type { FilterType, LayoutType, EdgeStyle } from "./types";
+import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter } from "./types";
+
+type TabType = "packages" | "organisation";
 
 export default function App() {
   const { data, loading, error, fetchGraph } = useGraphData();
 
+  const [tab, setTab] = useState<TabType>("packages");
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -28,6 +36,15 @@ export default function App() {
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
 
+  /* Org graph state */
+  const [orgData, setOrgData] = useState<OrgGraphResponse | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [orgError, setOrgError] = useState<string | null>(null);
+  const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
+  const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
+  const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
+  const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
+
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
     setLayout(l);
@@ -35,6 +52,15 @@ export default function App() {
       setEdgeStyle("straight");
     } else {
       setEdgeStyle("curved");
+    }
+  }, []);
+
+  const handleOrgLayoutChange = useCallback((l: LayoutType) => {
+    setOrgLayout(l);
+    if (l === "tree" || l === "horizontal") {
+      setOrgEdgeStyle("straight");
+    } else {
+      setOrgEdgeStyle("curved");
     }
   }, []);
 
@@ -70,6 +96,48 @@ export default function App() {
     }
   }, [owner, repo, fetchGraph]);
 
+  /* Fetch org graph when switching to org tab */
+  const fetchOrgGraph = useCallback(async (orgOwner: string) => {
+    if (!orgOwner) return;
+    setOrgLoading(true);
+    setOrgError(null);
+    try {
+      const resp = await apiFetch(`/api/org-graph?owner=${encodeURIComponent(orgOwner)}`);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${resp.status}`);
+      }
+      const json: OrgGraphResponse = await resp.json();
+      setOrgData(json);
+    } catch (err) {
+      setOrgError(err instanceof Error ? err.message : "Failed to fetch org graph");
+    } finally {
+      setOrgLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "organisation" && owner && !orgData) {
+      fetchOrgGraph(owner);
+    }
+  }, [tab, owner, orgData, fetchOrgGraph]);
+
+  /* Handle org workspace change */
+  const handleOrgOwnerChange = useCallback((newOwner: string) => {
+    setOwner(newOwner);
+    setOrgData(null);
+    setOrgSelectedNode(null);
+    fetchOrgGraph(newOwner);
+  }, [fetchOrgGraph]);
+
+  const handleOrgRefresh = useCallback(() => {
+    if (owner) {
+      setOrgData(null);
+      setOrgSelectedNode(null);
+      fetchOrgGraph(owner);
+    }
+  }, [owner, fetchOrgGraph]);
+
   /* Build CVE → package ID reverse index for search */
   const cveIndex = useMemo(() => {
     if (!data) return {};
@@ -94,38 +162,66 @@ export default function App() {
   return (
     <div className="app">
       {/* Left control panel */}
-      <FilterBar
-        filter={filter}
-        stats={data?.stats ?? null}
-        hideSharedCveEdges={hideSharedCveEdges}
-        hideDependencies={hideDependencies}
-        hasKey={hasKey}
-        onFilterChange={setFilter}
-        onHideSharedCveEdgesChange={setHideSharedCveEdges}
-        onHideDependenciesChange={setHideDependencies}
-        onConnectClick={() => setConnectOpen(true)}
-        onDisconnect={() => { clearApiKey(); setHasKey(false); }}
-      />
-
-      {/* Top bar: repo selector + search */}
-      <div className="top-bar">
-        <RepoSelector
-          currentOwner={owner}
-          currentRepo={repo}
-          refreshKey={repoRefreshKey}
-          onSelect={handleRepoSelect}
+      {tab === "packages" && (
+        <FilterBar
+          filter={filter}
+          stats={data?.stats ?? null}
+          hideSharedCveEdges={hideSharedCveEdges}
+          hideDependencies={hideDependencies}
+          hasKey={hasKey}
+          tab={tab}
+          onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
+          onFilterChange={setFilter}
+          onHideSharedCveEdgesChange={setHideSharedCveEdges}
+          onHideDependenciesChange={setHideDependencies}
+          onConnectClick={() => setConnectOpen(true)}
+          onDisconnect={() => { clearApiKey(); setHasKey(false); }}
         />
-        {owner && repo && (
-          <SearchBar
-            owner={owner}
-            repo={repo}
-            graphNodeIds={graphNodeIds}
-            onHighlight={setSearchResults}
-            onNodeSelect={setSelectedNode}
-            cveIndex={cveIndex}
+      )}
+      {tab === "organisation" && (
+        <OrgLeftPanel
+          orgData={orgData}
+          hasKey={hasKey}
+          filter={orgFilter}
+          onFilterChange={setOrgFilter}
+          onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
+          onConnectClick={() => setConnectOpen(true)}
+          onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+        />
+      )}
+
+      {/* Top bar: repo selector + search (packages tab only) */}
+      {tab === "packages" && (
+        <div className="top-bar">
+          <RepoSelector
+            currentOwner={owner}
+            currentRepo={repo}
+            refreshKey={repoRefreshKey}
+            onSelect={handleRepoSelect}
           />
-        )}
-      </div>
+          {owner && repo && (
+            <SearchBar
+              owner={owner}
+              repo={repo}
+              graphNodeIds={graphNodeIds}
+              onHighlight={setSearchResults}
+              onNodeSelect={setSelectedNode}
+              cveIndex={cveIndex}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Top bar: workspace selector (workspace tab) */}
+      {tab === "organisation" && (
+        <div className="top-bar">
+          <WorkspaceSelector
+            currentOwner={owner}
+            refreshKey={repoRefreshKey}
+            onSelect={handleOrgOwnerChange}
+          />
+        </div>
+      )}
 
       <ConnectModal
         open={connectOpen}
@@ -133,61 +229,101 @@ export default function App() {
         onConnected={() => { setHasKey(!!getApiKey()); setRepoRefreshKey((k) => k + 1); setConnectOpen(false); }}
       />
 
-      {/* Graph */}
-      {loading ? (
-        <LoadingIndicator />
-      ) : error && !data ? (
-        <div className="graph-loading">
-          <h2>Connection Error</h2>
-          <p>{error}</p>
-          <button className="btn btn-accent" onClick={handleRefresh}>
-            Retry
-          </button>
-        </div>
-      ) : data ? (
-        <GraphCanvas
-          data={data}
-          selectedNode={selectedNode}
-          hoveredNode={hoveredNode}
-          filter={filter}
-          layout={layout}
-          edgeStyle={edgeStyle}
-          searchResults={searchResults}
-          hideSharedCveEdges={hideSharedCveEdges}
-          hideDependencies={hideDependencies}
-          onNodeSelect={setSelectedNode}
-          onNodeHover={setHoveredNode}
-          onRefresh={handleRefresh}
-          onLayoutChange={handleLayoutChange}
-          onEdgeStyleChange={setEdgeStyle}
-        />
-      ) : (
-        <div className="empty-state">
-          <p>Select a workspace and repository to visualize</p>
-        </div>
+      {/* Packages tab content */}
+      {tab === "packages" && (
+        <>
+          {loading ? (
+            <LoadingIndicator />
+          ) : error && !data ? (
+            <div className="graph-loading">
+              <h2>Connection Error</h2>
+              <p>{error}</p>
+              <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
+            </div>
+          ) : data ? (
+            <GraphCanvas
+              data={data}
+              selectedNode={selectedNode}
+              hoveredNode={hoveredNode}
+              filter={filter}
+              layout={layout}
+              edgeStyle={edgeStyle}
+              searchResults={searchResults}
+              hideSharedCveEdges={hideSharedCveEdges}
+              hideDependencies={hideDependencies}
+              onNodeSelect={setSelectedNode}
+              onNodeHover={setHoveredNode}
+              onRefresh={handleRefresh}
+              onLayoutChange={handleLayoutChange}
+              onEdgeStyleChange={setEdgeStyle}
+            />
+          ) : (
+            <div className="empty-state">
+              <p>Select a workspace and repository to visualize</p>
+            </div>
+          )}
+
+          {selectedNode && data && (
+            <div className="panel-overlay">
+              <button className="panel-close" onClick={() => setSelectedNode(null)}>×</button>
+              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
+            </div>
+          )}
+
+          <Legend />
+
+          {data && (
+            <div className="repo-badge">
+              {data.owner}/{data.repo}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Side panel */}
-      {selectedNode && data && (
-        <div className="panel-overlay">
-          <button
-            className="panel-close"
-            onClick={() => setSelectedNode(null)}
-          >
-            ×
-          </button>
-          <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
-        </div>
-      )}
+      {/* Organisation tab content */}
+      {tab === "organisation" && (
+        <>
+          {orgLoading ? (
+            <LoadingIndicator variant="workspace" />
+          ) : orgError && !orgData ? (
+            <div className="graph-loading">
+              <h2>Connection Error</h2>
+              <p>{orgError}</p>
+              <button className="btn btn-accent" onClick={() => owner && fetchOrgGraph(owner)}>Retry</button>
+            </div>
+          ) : orgData ? (
+            <OrgGraphCanvas
+              data={orgData}
+              selectedNode={orgSelectedNode}
+              layout={orgLayout}
+              edgeStyle={orgEdgeStyle}
+              filter={orgFilter}
+              onNodeSelect={setOrgSelectedNode}
+              onLayoutChange={handleOrgLayoutChange}
+              onEdgeStyleChange={setOrgEdgeStyle}
+              onRefresh={handleOrgRefresh}
+            />
+          ) : (
+            <div className="empty-state">
+              <p>Select a workspace to view workspace graph</p>
+            </div>
+          )}
 
-      {/* Legend */}
-      <Legend />
+          {orgSelectedNode && orgData && (
+            <div className="panel-overlay">
+              <button className="panel-close" onClick={() => setOrgSelectedNode(null)}>×</button>
+              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} />
+            </div>
+          )}
 
-      {/* Repo info badge */}
-      {data && (
-        <div className="repo-badge">
-          {data.owner}/{data.repo}
-        </div>
+          <OrgLegend />
+
+          {orgData && (
+            <div className="repo-badge">
+              🏢 {orgData.owner}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
