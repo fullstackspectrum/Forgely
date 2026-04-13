@@ -84,6 +84,22 @@ def fetch_org_services(session: requests.Session, owner: str) -> list[dict]:
     return services
 
 
+def fetch_org_teams(session: requests.Session, owner: str) -> list[dict]:
+    """Fetch all teams within an organization."""
+    url = f"{BASE_URL}/orgs/{owner}/teams/"
+    page = 1
+    teams: list[dict] = []
+    while True:
+        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        if not data:
+            break
+        teams.extend(data if isinstance(data, list) else [])
+        if not isinstance(data, list) or len(data) < 100:
+            break
+        page += 1
+    return teams
+
+
 def fetch_repo_entitlements(session: requests.Session, owner: str, repo: str) -> list[dict]:
     """Fetch all entitlement tokens for a repository."""
     url = f"{BASE_URL}/entitlements/{owner}/{repo}/"
@@ -100,10 +116,7 @@ def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> l
     """Fetch privileges (user/team/service access) for a repository."""
     url = f"{BASE_URL}/repos/{owner}/{repo}/privileges"
     try:
-        resp = session.get(url, params={"page_size": 500}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        log.warning("RAW_PRIVS[%s/%s] status=%d type=%s len=%s sample=%s", owner, repo, resp.status_code, type(data).__name__, len(data) if isinstance(data, (list, dict)) else "?", str(data)[:600])
+        data = _api_get(session, url, params={"page_size": 500})
         return data if isinstance(data, (dict, list)) else []
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code in (404, 403):

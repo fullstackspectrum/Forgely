@@ -24,6 +24,7 @@ const EDGE_COLORS: Record<string, string> = {
   org_repo: "rgba(40,167,69,0.5)",
   member_org: "rgba(255,140,26,0.5)",
   service_org: "rgba(167,109,255,0.5)",
+  team_org: "rgba(255,77,135,0.5)",
   access: "rgba(74,144,217,0.6)",
   entitlement_repo: "rgba(255,209,26,0.4)",
   repo_upstream: "rgba(0,188,212,0.5)",
