@@ -1,52 +1,27 @@
-import { useEffect, useState } from "react";
-import { apiFetch } from "../lib/auth";
 import type { OrgGraphResponse, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 
 type TabType = "packages" | "organisation";
 
-interface Namespace {
-  slug: string;
-  name: string;
-  type: string;
-}
-
 interface Props {
-  owner: string;
   orgData: OrgGraphResponse | null;
   hasKey: boolean;
-  refreshKey: number;
   filter: OrgNodeFilter;
   onFilterChange: (f: OrgNodeFilter) => void;
   onTabChange: (t: TabType) => void;
-  onOwnerChange: (owner: string) => void;
   onConnectClick: () => void;
   onDisconnect: () => void;
 }
 
 export default function OrgLeftPanel({
-  owner,
   orgData,
   hasKey,
-  refreshKey,
   filter,
   onFilterChange,
   onTabChange,
-  onOwnerChange,
   onConnectClick,
   onDisconnect,
 }: Props) {
-  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [loadingNs, setLoadingNs] = useState(false);
-
-  useEffect(() => {
-    setLoadingNs(true);
-    apiFetch("/api/namespaces")
-      .then((r) => r.json())
-      .then((data) => setNamespaces(Array.isArray(data) ? data : []))
-      .catch(() => setNamespaces([]))
-      .finally(() => setLoadingNs(false));
-  }, [refreshKey]);
 
   return (
     <div className="left-panel org-left-panel">
@@ -60,28 +35,8 @@ export default function OrgLeftPanel({
           📦 Packages
         </button>
         <button className="left-panel-tab active">
-          🏢 Organisation
+          🏢 Workspace
         </button>
-      </div>
-
-      <div className="left-panel-section">
-        <span className="left-panel-section-title">Workspace</span>
-        <select
-          className="selector-select org-selector"
-          value={owner}
-          onChange={(e) => onOwnerChange(e.target.value)}
-          disabled={loadingNs}
-        >
-          <option value="">
-            {loadingNs ? "Loading…" : "Select workspace"}
-          </option>
-          {[...namespaces].sort((a, b) => a.name.localeCompare(b.name)).map((ns) => (
-            <option key={ns.slug} value={ns.slug}>
-              {ns.name}
-              {ns.type ? ` (${ns.type})` : ""}
-            </option>
-          ))}
-        </select>
       </div>
 
       {orgData?.stats && (
@@ -98,6 +53,16 @@ export default function OrgLeftPanel({
             <span className="stat-label">Services</span>
             <span className="stat-value">{orgData.stats.total_services}</span>
           </div>
+          <div className="stat-row">
+            <span className="stat-label">Upstreams</span>
+            <span className="stat-value">{orgData.stats.total_upstreams}</span>
+          </div>
+          {orgData.stats.shared_upstreams > 0 && (
+            <div className="stat-row">
+              <span className="stat-label">Shared Upstreams</span>
+              <span className="stat-value" style={{ color: "#ff5722" }}>{orgData.stats.shared_upstreams}</span>
+            </div>
+          )}
           <div className="stat-row">
             <span className="stat-label">Nodes</span>
             <span className="stat-value">{orgData.stats.total_nodes}</span>

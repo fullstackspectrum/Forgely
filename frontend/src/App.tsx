@@ -8,6 +8,7 @@ import SidePanel from "./components/SidePanel";
 import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
+import WorkspaceSelector from "./components/WorkspaceSelector";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
@@ -170,14 +171,11 @@ export default function App() {
       )}
       {tab === "organisation" && (
         <OrgLeftPanel
-          owner={owner}
           orgData={orgData}
           hasKey={hasKey}
-          refreshKey={repoRefreshKey}
           filter={orgFilter}
           onFilterChange={setOrgFilter}
           onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
-          onOwnerChange={handleOrgOwnerChange}
           onConnectClick={() => setConnectOpen(true)}
           onDisconnect={() => { clearApiKey(); setHasKey(false); }}
         />
@@ -202,6 +200,17 @@ export default function App() {
               cveIndex={cveIndex}
             />
           )}
+        </div>
+      )}
+
+      {/* Top bar: workspace selector (workspace tab) */}
+      {tab === "organisation" && (
+        <div className="top-bar">
+          <WorkspaceSelector
+            currentOwner={owner}
+            refreshKey={repoRefreshKey}
+            onSelect={handleOrgOwnerChange}
+          />
         </div>
       )}
 
@@ -286,7 +295,7 @@ export default function App() {
             />
           ) : (
             <div className="empty-state">
-              <p>Select a workspace to view organisation graph</p>
+              <p>Select a workspace to view workspace graph</p>
             </div>
           )}
 

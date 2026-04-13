@@ -91,19 +91,19 @@ export const SEVERITY_RANK: Record<string, number> = {
 
 /* ===== Org-level graph types ===== */
 
-export type OrgNodeFilter = "all" | "repo" | "user" | "service" | "team" | "entitlement";
+export type OrgNodeFilter = "all" | "repo" | "user" | "service" | "team" | "entitlement" | "upstream";
 
 export interface OrgGraphNode {
   id: string;
   label: string;
-  type: "org" | "repo" | "user" | "service" | "team" | "entitlement";
+  type: "org" | "repo" | "user" | "service" | "team" | "entitlement" | "upstream";
   data: Record<string, unknown>;
 }
 
 export interface OrgGraphEdge {
   source: string;
   target: string;
-  type: "org_repo" | "member_org" | "service_org" | "access" | "entitlement_repo";
+  type: "org_repo" | "member_org" | "service_org" | "access" | "entitlement_repo" | "repo_upstream" | "shared_upstream";
   label: string;
 }
 
@@ -111,6 +111,8 @@ export interface OrgGraphStats {
   total_repos: number;
   total_members: number;
   total_services: number;
+  total_upstreams: number;
+  shared_upstreams: number;
   total_nodes: number;
   total_edges: number;
 }
@@ -129,4 +131,5 @@ export const ORG_NODE_COLORS: Record<string, string> = {
   service: "#a76dff",
   team: "#ff4d87",
   entitlement: "#ffd11a",
+  upstream: "#00bcd4",
 };

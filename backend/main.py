@@ -21,6 +21,7 @@ from cloudsmith import (
     fetch_org_services,
     fetch_repo_entitlements,
     fetch_repo_privileges,
+    fetch_repo_upstreams,
     fetch_repos,
     get_package_vulnerabilities,
 )
@@ -482,51 +483,91 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         })
         edges.append({"source": sid, "target": org_id, "type": "service_org", "label": role})
 
-    # Fetch privileges for each repo (parallel)
+    # Fetch privileges, entitlements, and upstreams for each repo (parallel)
     MAX_WORKERS = 20
 
-    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict]]:
+    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict]]:
         privs = fetch_repo_privileges(session, owner, repo_slug)
         ents = fetch_repo_entitlements(session, owner, repo_slug)
-        return (repo_slug, privs, ents)
+        ups = fetch_repo_upstreams(session, owner, repo_slug)
+        return (repo_slug, privs, ents, ups)
+
+    # Track upstream URLs → which repos use them (for shared-upstream edges)
+    upstream_url_repos: dict[str, list[str]] = {}
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = [pool.submit(_fetch_priv, rs) for rs in repo_slugs]
         for fut in as_completed(futures):
-            repo_slug, privs, ents = fut.result()
+            repo_slug, privs, ents, ups = fut.result()
             rid = f"repo:{repo_slug}"
 
-            # Privileges contain users, teams, services with permission levels
-            for priv_key in ("users", "teams", "services"):
-                priv_list = privs.get(priv_key) or privs.get("permissions", {}).get(priv_key, [])
-                if not isinstance(priv_list, list):
-                    continue
-                for item in priv_list:
-                    permission = item.get("privilege", item.get("role", item.get("permission", "Read")))
-                    if priv_key == "users":
+            log.warning("PRIVS[%s] type=%s len=%s sample=%s", repo_slug, type(privs).__name__, len(privs) if isinstance(privs, (list, dict)) else "?", str(privs)[:800])
+            log.warning("UPS[%s] count=%d sample=%s", repo_slug, len(ups), str(ups[:1])[:500] if ups else "[]")
+
+            # Normalise privileges into a flat list of entries.
+            # The API may return either:
+            #   - a list of {privilege, user?, service?, team?} objects
+            #   - a dict with keys "users", "teams", "services" (or nested under "permissions")
+            priv_entries: list[dict] = []
+            if isinstance(privs, list):
+                priv_entries = privs
+            elif isinstance(privs, dict):
+                for priv_key in ("users", "teams", "services"):
+                    items = privs.get(priv_key) or privs.get("permissions", {}).get(priv_key, [])
+                    if isinstance(items, list):
+                        for item in items:
+                            item["_priv_key"] = priv_key
+                        priv_entries.extend(items)
+
+            for item in priv_entries:
+                permission = item.get("privilege", item.get("role", item.get("permission", "Read")))
+
+                # Determine the entity type and slug from the entry
+                priv_key = item.get("_priv_key", "")
+                user_obj = item.get("user")
+                service_obj = item.get("service")
+                team_obj = item.get("team")
+
+                if priv_key == "users" or (isinstance(user_obj, dict) and user_obj):
+                    if isinstance(user_obj, dict):
+                        item_slug = user_obj.get("slug", user_obj.get("slug_perm", ""))
+                    else:
                         item_slug = item.get("slug", item.get("user", ""))
-                        item_id = f"user:{item_slug}"
-                    elif priv_key == "services":
-                        item_slug = item.get("slug", item.get("name", ""))
-                        item_id = f"service:{item_slug}"
+                    item_id = f"user:{item_slug}"
+                elif priv_key == "services" or (isinstance(service_obj, dict) and service_obj):
+                    if isinstance(service_obj, dict):
+                        item_slug = service_obj.get("slug", service_obj.get("slug_perm", ""))
+                        item_name = service_obj.get("name", item_slug)
                     else:
                         item_slug = item.get("slug", item.get("name", ""))
-                        item_id = f"team:{item_slug}"
-                        if item_id not in seen:
-                            seen.add(item_id)
-                            nodes.append({
-                                "id": item_id,
-                                "label": item.get("name", item_slug),
-                                "type": "team",
-                                "data": {"slug": item_slug},
-                            })
-                    if item_id in seen:
-                        edges.append({
-                            "source": item_id,
-                            "target": rid,
-                            "type": "access",
-                            "label": permission,
+                        item_name = item.get("name", item_slug)
+                    item_id = f"service:{item_slug}"
+                elif priv_key == "teams" or (isinstance(team_obj, dict) and team_obj):
+                    if isinstance(team_obj, dict):
+                        item_slug = team_obj.get("slug", team_obj.get("slug_perm", ""))
+                        item_name = team_obj.get("name", item_slug)
+                    else:
+                        item_slug = item.get("slug", item.get("name", ""))
+                        item_name = item.get("name", item_slug)
+                    item_id = f"team:{item_slug}"
+                    if item_id not in seen:
+                        seen.add(item_id)
+                        nodes.append({
+                            "id": item_id,
+                            "label": item_name,
+                            "type": "team",
+                            "data": {"slug": item_slug},
                         })
+                else:
+                    continue
+
+                if item_id in seen:
+                    edges.append({
+                        "source": item_id,
+                        "target": rid,
+                        "type": "access",
+                        "label": permission,
+                    })
 
             # Entitlement tokens
             for ent in ents:
@@ -549,10 +590,64 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                     })
                 edges.append({"source": eid, "target": rid, "type": "entitlement_repo", "label": ""})
 
+            # Upstream proxy/cache sources
+            for up in ups:
+                up_url = up.get("upstream_url", "")
+                up_name = up.get("name", up_url)
+                up_fmt = up.get("_format", "")
+                up_mode = up.get("mode", "")
+                up_active = up.get("is_active", True)
+                # Use the URL as the canonical node ID so shared upstreams merge
+                uid = f"upstream:{up_url}"
+                if uid not in seen:
+                    seen.add(uid)
+                    nodes.append({
+                        "id": uid,
+                        "label": up_name or up_url,
+                        "type": "upstream",
+                        "data": {
+                            "upstream_url": up_url,
+                            "format": up_fmt,
+                            "mode": up_mode,
+                            "is_active": up_active,
+                            "verify_ssl": up.get("verify_ssl", True),
+                            "priority": up.get("priority", 0),
+                            "created_at": up.get("created_at", ""),
+                        },
+                    })
+                edges.append({
+                    "source": rid,
+                    "target": uid,
+                    "type": "repo_upstream",
+                    "label": f"{up_fmt} ({up_mode})" if up_mode else up_fmt,
+                })
+                # Track for shared-upstream detection
+                upstream_url_repos.setdefault(up_url, []).append(repo_slug)
+
+    # Add shared-upstream edges between repos that share the same upstream URL
+    for up_url, repo_list in upstream_url_repos.items():
+        if len(repo_list) < 2:
+            continue
+        uid = f"upstream:{up_url}"
+        # Create edges between each pair of repos sharing this upstream
+        for i in range(len(repo_list)):
+            for j in range(i + 1, len(repo_list)):
+                edges.append({
+                    "source": f"repo:{repo_list[i]}",
+                    "target": f"repo:{repo_list[j]}",
+                    "type": "shared_upstream",
+                    "label": up_url,
+                })
+
+    total_upstreams = sum(1 for n in nodes if n["type"] == "upstream")
+    shared_upstream_count = sum(1 for url, repos in upstream_url_repos.items() if len(repos) > 1)
+
     stats = {
         "total_repos": len(repo_slugs),
         "total_members": len(members),
         "total_services": len(services),
+        "total_upstreams": total_upstreams,
+        "shared_upstreams": shared_upstream_count,
         "total_nodes": len(nodes),
         "total_edges": len(edges),
     }
