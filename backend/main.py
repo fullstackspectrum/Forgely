@@ -24,6 +24,7 @@ from cloudsmith import (
     fetch_repo_privileges,
     fetch_repo_upstreams,
     fetch_repos,
+    fetch_team_members,
     get_package_vulnerabilities,
 )
 from models import (
@@ -486,9 +487,11 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         edges.append({"source": sid, "target": org_id, "type": "service_org", "label": role})
 
     # Team nodes
+    team_slugs: list[str] = []
     for t in teams:
         name = t.get("name", "")
         slug = t.get("slug", name)
+        team_slugs.append(slug)
         tid = f"team:{slug}"
         if tid in seen:
             continue
@@ -504,6 +507,38 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
             },
         })
         edges.append({"source": tid, "target": org_id, "type": "team_org", "label": ""})
+
+    # Link services → teams (from service's "teams" field)
+    for s in services:
+        s_slug = s.get("slug", s.get("name", ""))
+        sid = f"service:{s_slug}"
+        for st in s.get("teams", []):
+            t_slug = st.get("slug", st.get("name", ""))
+            tid = f"team:{t_slug}"
+            if tid in seen:
+                edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
+
+    # Fetch team members in parallel and create membership edges
+    MAX_WORKERS = 20
+
+    def _fetch_team_members(team_slug: str) -> tuple[str, list[dict]]:
+        members_list = fetch_team_members(session, owner, team_slug)
+        return (team_slug, members_list)
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        team_futures = [pool.submit(_fetch_team_members, ts) for ts in team_slugs]
+        for fut in as_completed(team_futures):
+            t_slug, t_members = fut.result()
+            tid = f"team:{t_slug}"
+            for tm in t_members:
+                # Team members can be users or services
+                user_slug = tm.get("slug", tm.get("user", ""))
+                if not user_slug:
+                    continue
+                uid = f"user:{user_slug}"
+                if uid in seen:
+                    role = tm.get("role", "")
+                    edges.append({"source": uid, "target": tid, "type": "team_member", "label": role})
 
     # Fetch privileges, entitlements, and upstreams for each repo (parallel)
     MAX_WORKERS = 20

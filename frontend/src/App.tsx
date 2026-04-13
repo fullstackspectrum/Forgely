@@ -41,7 +41,7 @@ export default function App() {
   const [orgLoading, setOrgLoading] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
-  const [orgLayout, setOrgLayout] = useState<LayoutType>("force");
+  const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
 

@@ -25,6 +25,7 @@ const EDGE_COLORS: Record<string, string> = {
   member_org: "rgba(255,140,26,0.5)",
   service_org: "rgba(167,109,255,0.5)",
   team_org: "rgba(255,77,135,0.5)",
+  team_member: "rgba(255,77,135,0.6)",
   access: "rgba(74,144,217,0.6)",
   entitlement_repo: "rgba(255,209,26,0.4)",
   repo_upstream: "rgba(0,188,212,0.5)",
@@ -256,9 +257,12 @@ export default function OrgGraphCanvas({
           });
         }
 
-        forceAtlas2.assign(graph, {
-          iterations: 300,
-          settings: { gravity: 2, scalingRatio: 15, barnesHutOptimize: true, strongGravityMode: true },
+        circular.assign(graph);
+        graph.forEachNode((node, attrs) => {
+          if (attrs.nodeType === "org") {
+            graph.setNodeAttribute(node, "x", 0);
+            graph.setNodeAttribute(node, "y", 0);
+          }
         });
 
         const sigma = new Sigma(graph, container, {
