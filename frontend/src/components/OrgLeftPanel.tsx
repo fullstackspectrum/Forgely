@@ -54,6 +54,10 @@ export default function OrgLeftPanel({
             <span className="stat-value">{orgData.stats.total_services}</span>
           </div>
           <div className="stat-row">
+            <span className="stat-label">Teams</span>
+            <span className="stat-value">{orgData.stats.total_teams}</span>
+          </div>
+          <div className="stat-row">
             <span className="stat-label">Upstreams</span>
             <span className="stat-value">{orgData.stats.total_upstreams}</span>
           </div>

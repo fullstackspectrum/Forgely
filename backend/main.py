@@ -19,6 +19,7 @@ from cloudsmith import (
     fetch_namespaces,
     fetch_org_members,
     fetch_org_services,
+    fetch_org_teams,
     fetch_repo_entitlements,
     fetch_repo_privileges,
     fetch_repo_upstreams,
@@ -402,6 +403,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
     repos = fetch_repos(session, owner)
     members = fetch_org_members(session, owner)
     services = fetch_org_services(session, owner)
+    teams = fetch_org_teams(session, owner)
 
     nodes: list[dict] = []
     edges: list[dict] = []
@@ -483,6 +485,26 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         })
         edges.append({"source": sid, "target": org_id, "type": "service_org", "label": role})
 
+    # Team nodes
+    for t in teams:
+        name = t.get("name", "")
+        slug = t.get("slug", name)
+        tid = f"team:{slug}"
+        if tid in seen:
+            continue
+        seen.add(tid)
+        nodes.append({
+            "id": tid,
+            "label": name or slug,
+            "type": "team",
+            "data": {
+                "slug": slug,
+                "description": t.get("description", ""),
+                "created_at": t.get("created_at", ""),
+            },
+        })
+        edges.append({"source": tid, "target": org_id, "type": "team_org", "label": ""})
+
     # Fetch privileges, entitlements, and upstreams for each repo (parallel)
     MAX_WORKERS = 20
 
@@ -500,9 +522,6 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         for fut in as_completed(futures):
             repo_slug, privs, ents, ups = fut.result()
             rid = f"repo:{repo_slug}"
-
-            log.warning("PRIVS[%s] type=%s len=%s sample=%s", repo_slug, type(privs).__name__, len(privs) if isinstance(privs, (list, dict)) else "?", str(privs)[:800])
-            log.warning("UPS[%s] count=%d sample=%s", repo_slug, len(ups), str(ups[:1])[:500] if ups else "[]")
 
             # Normalise privileges into a flat list of entries.
             # The API may return either:
@@ -646,6 +665,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         "total_repos": len(repo_slugs),
         "total_members": len(members),
         "total_services": len(services),
+        "total_teams": len(teams),
         "total_upstreams": total_upstreams,
         "shared_upstreams": shared_upstream_count,
         "total_nodes": len(nodes),
