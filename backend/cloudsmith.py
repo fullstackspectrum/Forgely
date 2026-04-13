@@ -96,16 +96,44 @@ def fetch_repo_entitlements(session: requests.Session, owner: str, repo: str) ->
         raise
 
 
-def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> dict:
+def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> list | dict:
     """Fetch privileges (user/team/service access) for a repository."""
     url = f"{BASE_URL}/repos/{owner}/{repo}/privileges"
     try:
-        data = _api_get(session, url)
-        return data if isinstance(data, dict) else {}
+        resp = session.get(url, params={"page_size": 500}, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        log.warning("RAW_PRIVS[%s/%s] status=%d type=%s len=%s sample=%s", owner, repo, resp.status_code, type(data).__name__, len(data) if isinstance(data, (list, dict)) else "?", str(data)[:600])
+        return data if isinstance(data, (dict, list)) else []
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code in (404, 403):
-            return {}
+            return []
         raise
+
+
+UPSTREAM_FORMATS = [
+    "alpine", "cargo", "composer", "conda", "cran", "dart", "deb",
+    "docker", "go", "helm", "hex", "maven", "npm", "nuget",
+    "python", "rpm", "ruby", "swift",
+]
+
+
+def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str) -> list[dict]:
+    """Fetch all upstream proxy/cache configs across all format types for a repo."""
+    upstreams: list[dict] = []
+    for fmt in UPSTREAM_FORMATS:
+        url = f"{BASE_URL}/repos/{owner}/{repo}/upstream/{fmt}/"
+        try:
+            data = _api_get(session, url)
+            if isinstance(data, list):
+                for item in data:
+                    item["_format"] = fmt
+                upstreams.extend(data)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in (400, 403, 404, 405, 501):
+                continue
+            raise
+    return upstreams
 
 
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:

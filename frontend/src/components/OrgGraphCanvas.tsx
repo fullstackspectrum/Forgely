@@ -14,6 +14,7 @@ const NODE_SIZE: Record<string, number> = {
   service: 12,
   team: 10,
   entitlement: 8,
+  upstream: 10,
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -22,6 +23,8 @@ const EDGE_COLORS: Record<string, string> = {
   service_org: "rgba(167,109,255,0.5)",
   access: "rgba(74,144,217,0.6)",
   entitlement_repo: "rgba(255,209,26,0.4)",
+  repo_upstream: "rgba(0,188,212,0.5)",
+  shared_upstream: "rgba(255,87,34,0.7)",
 };
 
 function assignOrgTreeLayout(graph: Graph, horizontal: boolean) {
@@ -216,11 +219,12 @@ export default function OrgGraphCanvas({
         let idx = 0;
         for (const edge of data.edges) {
           if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
+          const isShared = edge.type === "shared_upstream";
           graph.addEdgeWithKey(`e-${idx++}`, edge.source, edge.target, {
-            size: edge.type === "access" ? 2 : 1.5,
+            size: isShared ? 3 : edge.type === "access" ? 2 : 1.5,
             color: EDGE_COLORS[edge.type] ?? "rgba(100,100,100,0.4)",
             type: "curvedArrow",
-            curvature: 0.15,
+            curvature: isShared ? 0.3 : 0.15,
             edgeKind: edge.type,
             label: edge.label,
           });

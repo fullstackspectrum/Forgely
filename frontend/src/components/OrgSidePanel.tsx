@@ -13,6 +13,7 @@ const TYPE_LABELS: Record<string, string> = {
   service: "Service Account",
   team: "Team",
   entitlement: "Entitlement Token",
+  upstream: "Upstream Source",
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -22,6 +23,7 @@ const TYPE_ICONS: Record<string, string> = {
   service: "🤖",
   team: "👥",
   entitlement: "🔑",
+  upstream: "🔗",
 };
 
 export default function OrgSidePanel({ data, nodeId }: Props) {
@@ -78,6 +80,17 @@ export default function OrgSidePanel({ data, nodeId }: Props) {
             <>
               <DetailRow label="Active" value={d.is_active ? "Yes" : "No"} />
               {d.limit_package_query && <DetailRow label="Package Query" value={String(d.limit_package_query)} />}
+              {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
+            </>
+          )}
+          {node.type === "upstream" && (
+            <>
+              {d.upstream_url && <DetailRow label="URL" value={String(d.upstream_url)} />}
+              {d.format && <DetailRow label="Format" value={String(d.format)} />}
+              {d.mode && <DetailRow label="Mode" value={String(d.mode)} />}
+              <DetailRow label="Active" value={d.is_active ? "Yes" : "No"} />
+              <DetailRow label="SSL Verify" value={d.verify_ssl ? "Yes" : "No"} />
+              {d.priority != null && <DetailRow label="Priority" value={String(d.priority)} />}
               {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
             </>
           )}
