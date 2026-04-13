@@ -120,6 +120,7 @@ interface Props {
   onNodeSelect: (id: string | null) => void;
   onLayoutChange: (l: LayoutType) => void;
   onEdgeStyleChange: (e: EdgeStyle) => void;
+  onRefresh?: () => void;
 }
 
 export default function OrgGraphCanvas({
@@ -131,6 +132,7 @@ export default function OrgGraphCanvas({
   onNodeSelect,
   onLayoutChange,
   onEdgeStyleChange,
+  onRefresh,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -376,6 +378,11 @@ export default function OrgGraphCanvas({
         >
           ⊙
         </button>
+        {onRefresh && (
+          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">
+            ↻
+          </button>
+        )}
       </div>
     </div>
   );
