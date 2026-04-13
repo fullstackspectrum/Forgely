@@ -130,6 +130,14 @@ export default function App() {
     fetchOrgGraph(newOwner);
   }, [fetchOrgGraph]);
 
+  const handleOrgRefresh = useCallback(() => {
+    if (owner) {
+      setOrgData(null);
+      setOrgSelectedNode(null);
+      fetchOrgGraph(owner);
+    }
+  }, [owner, fetchOrgGraph]);
+
   /* Build CVE → package ID reverse index for search */
   const cveIndex = useMemo(() => {
     if (!data) return {};
@@ -276,7 +284,7 @@ export default function App() {
       {tab === "organisation" && (
         <>
           {orgLoading ? (
-            <LoadingIndicator />
+            <LoadingIndicator variant="workspace" />
           ) : orgError && !orgData ? (
             <div className="graph-loading">
               <h2>Connection Error</h2>
@@ -293,6 +301,7 @@ export default function App() {
               onNodeSelect={setOrgSelectedNode}
               onLayoutChange={handleOrgLayoutChange}
               onEdgeStyleChange={setOrgEdgeStyle}
+              onRefresh={handleOrgRefresh}
             />
           ) : (
             <div className="empty-state">
