@@ -4,6 +4,7 @@ import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
+import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
@@ -134,14 +135,24 @@ export default function OrgGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
-  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter });
+  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>() });
 
   useEffect(() => {
+    const graph = graphRef.current;
     const neighbors = new Set<string>();
-    if (selectedNode && graphRef.current) {
-      graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
+    if (selectedNode && graph) {
+      graph.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
-    stateRef.current = { selectedNode, neighbors, filter };
+    /* Build set of nodes connected to any node matching the current filter */
+    const filterConnected = new Set<string>();
+    if (filter !== "all" && graph) {
+      graph.forEachNode((node, attrs) => {
+        if (attrs.nodeType === filter) {
+          graph.forEachNeighbor(node, (n) => filterConnected.add(n));
+        }
+      });
+    }
+    stateRef.current = { selectedNode, neighbors, filter, filterConnected };
     sigmaRef.current?.refresh();
   }, [selectedNode, filter]);
 
@@ -207,20 +218,25 @@ export default function OrgGraphCanvas({
 
         for (const node of data.nodes) {
           if (graph.hasNode(node.id)) continue;
-          const nodeShape =
-            node.type === "repo" ? "square" :
-            node.type === "upstream" ? "triangle" :
-            undefined;
-          graph.addNode(node.id, {
-            label: node.label,
+          const isOrg = node.type === "org";
+          const nodeAttrs: Record<string, unknown> = {
+            label: isOrg ? "" : node.label,
             size: NODE_SIZE[node.type] ?? 10,
-            color: ORG_NODE_COLORS[node.type] ?? "#666",
+            color: isOrg ? "#000000" : (ORG_NODE_COLORS[node.type] ?? "#666"),
             x: Math.random() * 100,
             y: Math.random() * 100,
             nodeType: node.type,
-            type: nodeShape,
-            zIndex: node.type === "org" ? 10 : node.type === "repo" ? 5 : 1,
-          });
+            zIndex: isOrg ? 10 : node.type === "repo" ? 5 : 1,
+          };
+          if (isOrg) {
+            nodeAttrs.type = "image";
+            nodeAttrs.image = "/cloudsmith.png";
+          } else if (node.type === "repo") {
+            nodeAttrs.type = "square";
+          } else if (node.type === "upstream") {
+            nodeAttrs.type = "triangle";
+          }
+          graph.addNode(node.id, nodeAttrs);
         }
 
         let idx = 0;
@@ -248,7 +264,7 @@ export default function OrgGraphCanvas({
           enableEdgeEvents: true,
           defaultEdgeType: "curvedArrow",
           edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
-          nodeProgramClasses: { square: NodeSquareProgram, triangle: NodeTriangleProgram },
+          nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, triangle: NodeTriangleProgram },
           labelDensity: 0.15,
           labelGridCellSize: 80,
           labelRenderedSizeThreshold: 5,
@@ -263,10 +279,16 @@ export default function OrgGraphCanvas({
             const res = { ...attrs };
             const nType = attrs.nodeType as string;
 
-            /* Type filter: hide nodes that don't match, but always show org */
+            /* Type filter: show org, matching type, and connected neighbors */
             if (st.filter !== "all" && nType !== "org" && nType !== st.filter) {
-              res.hidden = true;
-              return res;
+              if (st.filterConnected.has(node)) {
+                /* Connected to a filtered node — show but dimmed */
+                res.color = res.color ?? "#666";
+                res.zIndex = 0;
+              } else {
+                res.hidden = true;
+                return res;
+              }
             }
 
             if (st.selectedNode) {
@@ -289,12 +311,13 @@ export default function OrgGraphCanvas({
             const src = graph.source(edge);
             const tgt = graph.target(edge);
 
-            /* Hide edges connected to filtered-out nodes */
+            /* Show edges where at least one endpoint matches the filter */
             if (st.filter !== "all") {
               const srcType = graph.getNodeAttribute(src, "nodeType") as string;
               const tgtType = graph.getNodeAttribute(tgt, "nodeType") as string;
-              if ((srcType !== "org" && srcType !== st.filter) ||
-                  (tgtType !== "org" && tgtType !== st.filter)) {
+              const srcMatch = srcType === "org" || srcType === st.filter;
+              const tgtMatch = tgtType === "org" || tgtType === st.filter;
+              if (!srcMatch && !tgtMatch) {
                 res.hidden = true;
                 return res;
               }
