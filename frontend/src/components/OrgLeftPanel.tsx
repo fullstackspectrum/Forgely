@@ -101,18 +101,6 @@ export default function OrgLeftPanel({
         </div>
       </div>
 
-      <div className="left-panel-section">
-        <span className="left-panel-section-title">Legend</span>
-        <div className="org-legend">
-          {Object.entries(ORG_NODE_COLORS).map(([type, color]) => (
-            <div key={type} className="org-legend-item">
-              <span className="org-legend-dot" style={{ background: color }} />
-              <span className="org-legend-label">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="left-panel-footer">
         {hasKey ? (
           <button className="btn btn-sm btn-muted" onClick={onDisconnect}>Disconnect</button>

@@ -4,6 +4,7 @@ import GraphCanvas from "./components/GraphCanvas";
 import OrgGraphCanvas from "./components/OrgGraphCanvas";
 import OrgLeftPanel from "./components/OrgLeftPanel";
 import OrgSidePanel from "./components/OrgSidePanel";
+import OrgLegend from "./components/OrgLegend";
 import SidePanel from "./components/SidePanel";
 import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
@@ -305,6 +306,8 @@ export default function App() {
               <OrgSidePanel data={orgData} nodeId={orgSelectedNode} />
             </div>
           )}
+
+          <OrgLegend />
 
           {orgData && (
             <div className="repo-badge">
