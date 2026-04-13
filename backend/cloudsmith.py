@@ -100,6 +100,18 @@ def fetch_org_teams(session: requests.Session, owner: str) -> list[dict]:
     return teams
 
 
+def fetch_team_members(session: requests.Session, owner: str, team_slug: str) -> list[dict]:
+    """Fetch all members of a specific team."""
+    url = f"{BASE_URL}/orgs/{owner}/teams/{team_slug}/members/"
+    try:
+        data = _api_get(session, url, params={"page_size": 100})
+        return data if isinstance(data, list) else []
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in (400, 403, 404):
+            return []
+        raise
+
+
 def fetch_repo_entitlements(session: requests.Session, owner: str, repo: str) -> list[dict]:
     """Fetch all entitlement tokens for a repository."""
     url = f"{BASE_URL}/entitlements/{owner}/{repo}/"

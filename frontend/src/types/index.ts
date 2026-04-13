@@ -103,7 +103,7 @@ export interface OrgGraphNode {
 export interface OrgGraphEdge {
   source: string;
   target: string;
-  type: "org_repo" | "member_org" | "service_org" | "team_org" | "access" | "entitlement_repo" | "repo_upstream" | "shared_upstream";
+  type: "org_repo" | "member_org" | "service_org" | "team_org" | "team_member" | "access" | "entitlement_repo" | "repo_upstream" | "shared_upstream";
   label: string;
 }
 
