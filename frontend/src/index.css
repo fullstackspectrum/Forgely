@@ -1155,6 +1155,24 @@ body {
   border-radius: 50%;
 }
 
+.dot-square {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+
+.dot-triangle {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid;
+  border-bottom-color: inherit;
+  background: transparent !important;
+}
+
 .edge-line {
   display: inline-block;
   width: 20px;

@@ -4,6 +4,8 @@ import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
+import { NodeSquareProgram } from "@sigma/node-square";
+import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 
@@ -205,6 +207,10 @@ export default function OrgGraphCanvas({
 
         for (const node of data.nodes) {
           if (graph.hasNode(node.id)) continue;
+          const nodeShape =
+            node.type === "repo" ? "square" :
+            node.type === "upstream" ? "triangle" :
+            undefined;
           graph.addNode(node.id, {
             label: node.label,
             size: NODE_SIZE[node.type] ?? 10,
@@ -212,6 +218,7 @@ export default function OrgGraphCanvas({
             x: Math.random() * 100,
             y: Math.random() * 100,
             nodeType: node.type,
+            type: nodeShape,
             zIndex: node.type === "org" ? 10 : node.type === "repo" ? 5 : 1,
           });
         }
@@ -241,6 +248,7 @@ export default function OrgGraphCanvas({
           enableEdgeEvents: true,
           defaultEdgeType: "curvedArrow",
           edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
+          nodeProgramClasses: { square: NodeSquareProgram, triangle: NodeTriangleProgram },
           labelDensity: 0.15,
           labelGridCellSize: 80,
           labelRenderedSizeThreshold: 5,
