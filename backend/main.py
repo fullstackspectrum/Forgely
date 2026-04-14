@@ -187,6 +187,11 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
         max_sev, vuln_count, vulns = vuln_results[node_id]
 
+        # Normalise: the Cloudsmith API may return "Unknown" as max_severity
+        # even when the scan completed cleanly with 0 vulnerabilities.
+        if max_sev == "Unknown" and vuln_count == 0:
+            max_sev = "None"
+
         # Override scan_status based on actual scan results – the package list
         # API may report "Awaiting Security Scan" even when scans have completed.
         # max_sev is Python None only when no scan data exists at all;
