@@ -318,7 +318,9 @@ def get_package_vulnerabilities(
     # If scans existed but no severity was determined, the scan completed
     # cleanly.  Return "None" (string) so callers can distinguish from
     # "no scans at all" (Python None).
-    if not max_sev:
+    # The Cloudsmith API may also return "Unknown" as max_severity for scans
+    # that completed with 0 vulnerabilities – normalise that to "None" too.
+    if not max_sev or (max_sev == "Unknown" and int(api_count) == 0 and not vulns):
         max_sev = "None"
 
     return max_sev, int(api_count), vulns

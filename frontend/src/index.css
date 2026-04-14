@@ -1173,6 +1173,13 @@ body {
   background: transparent !important;
 }
 
+.dot-hexagon {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+}
+
 .edge-line {
   display: inline-block;
   width: 20px;
@@ -1184,7 +1191,7 @@ body {
   border-color: var(--critical);
 }
 .edge-line.dep {
-  border-color: #555;
+  border-color: rgba(120,70,160,0.6);
 }
 
 /* ===== Repo badge ===== */
