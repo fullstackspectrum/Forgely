@@ -6,6 +6,7 @@ import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
+import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
@@ -380,7 +381,7 @@ export default function GraphCanvas({
           node.type === "repo"
             ? "#000000"
             : node.type === "dependency"
-              ? "#555"
+              ? "#9b59b6"
               : sevColor,
         x: Math.random() * 100,
         y: Math.random() * 100,
@@ -388,7 +389,7 @@ export default function GraphCanvas({
         severity: sev,
         vulnCount: node.data.vuln_count,
         ...(node.type === "dependency"
-          ? { type: "square" }
+          ? { type: "hexagon" }
           : nodeImage
             ? { type: "image", image: nodeImage }
             : {}),
@@ -405,7 +406,7 @@ export default function GraphCanvas({
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
+        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
         type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -433,7 +434,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
