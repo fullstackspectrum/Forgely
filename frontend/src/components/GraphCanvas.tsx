@@ -169,6 +169,7 @@ interface Props {
   searchResults: string[];
   hideSharedCveEdges?: boolean;
   hideDependencies?: boolean;
+  hideUnsupported?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -186,6 +187,7 @@ export default function GraphCanvas({
   searchResults,
   hideSharedCveEdges = false,
   hideDependencies = false,
+  hideUnsupported = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -203,6 +205,7 @@ export default function GraphCanvas({
     filter,
     searchResults,
     hideSharedCveEdges,
+    hideUnsupported,
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
@@ -259,13 +262,14 @@ export default function GraphCanvas({
       searchResults,
       hideSharedCveEdges,
       hideDependencies,
+      hideUnsupported,
       neighbors,
       searchConnected,
       sharedCveNodes,
       hasDepNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -449,6 +453,12 @@ export default function GraphCanvas({
           return res;
         }
 
+        /* --- Hide packages with unsupported scans --- */
+        if (st.hideUnsupported && attrs.nodeType === "package" && (attrs as any).severity === "Unknown") {
+          res.hidden = true;
+          return res;
+        }
+
         /* --- Filtering --- */
         if (st.filter !== "all" && attrs.nodeType !== "repo") {
           const vc = (attrs as any).vulnCount ?? 0;
@@ -509,6 +519,18 @@ export default function GraphCanvas({
         if (st.hideDependencies && graph.getEdgeAttribute(edge, "edgeKind") === "dependency") {
           res.hidden = true;
           return res;
+        }
+
+        /* Hide edges connected to unsupported-scan nodes if toggled */
+        if (st.hideUnsupported) {
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          const srcUnsupported = graph.getNodeAttribute(src, "nodeType") === "package" && graph.getNodeAttribute(src, "severity") === "Unknown";
+          const tgtUnsupported = graph.getNodeAttribute(tgt, "nodeType") === "package" && graph.getNodeAttribute(tgt, "severity") === "Unknown";
+          if (srcUnsupported || tgtUnsupported) {
+            res.hidden = true;
+            return res;
+          }
         }
 
         /* Hide edges not connected to search-visible nodes */
