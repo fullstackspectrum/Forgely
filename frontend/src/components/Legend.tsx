@@ -4,25 +4,16 @@ export default function Legend() {
       <div className="legend-title">Artigraphly</div>
       <div className="legend-items">
         <span>
-          <i className="dot" style={{ background: "#4a90d9" }} /> Repository
+          <i className="dot" style={{ background: "#000000" }} /> Repository
         </span>
         <span>
-          <i className="dot" style={{ background: "#ff4d4d" }} /> Critical
+          <i className="dot" style={{ background: "#28a745" }} /> Package (Safe)
         </span>
         <span>
-          <i className="dot" style={{ background: "#ff8c1a" }} /> High
+          <i className="dot" style={{ background: "#ffffff", border: "1px solid #888" }} /> Package (Not Scanned)
         </span>
         <span>
-          <i className="dot" style={{ background: "#ffd11a" }} /> Medium
-        </span>
-        <span>
-          <i className="dot" style={{ background: "#79b8ff" }} /> Low
-        </span>
-        <span>
-          <i className="dot" style={{ background: "#28a745" }} /> Safe
-        </span>
-        <span>
-          <i className="dot" style={{ background: "#555" }} /> Dependency
+          <i className="dot-hexagon" style={{ background: "#9b59b6" }} /> Dependency
         </span>
       </div>
       <div className="legend-edges">

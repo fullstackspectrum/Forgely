@@ -6,6 +6,7 @@ import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
+import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
@@ -169,6 +170,7 @@ interface Props {
   searchResults: string[];
   hideSharedCveEdges?: boolean;
   hideDependencies?: boolean;
+  hideUnsupported?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -186,6 +188,7 @@ export default function GraphCanvas({
   searchResults,
   hideSharedCveEdges = false,
   hideDependencies = false,
+  hideUnsupported = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -203,6 +206,7 @@ export default function GraphCanvas({
     filter,
     searchResults,
     hideSharedCveEdges,
+    hideUnsupported,
     neighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
@@ -259,13 +263,14 @@ export default function GraphCanvas({
       searchResults,
       hideSharedCveEdges,
       hideDependencies,
+      hideUnsupported,
       neighbors,
       searchConnected,
       sharedCveNodes,
       hasDepNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies]);
+  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -352,14 +357,14 @@ export default function GraphCanvas({
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
       const sevColor =
-        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#666666");
+        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#ffffff");
 
       const size =
         node.type === "repo"
-          ? 24
+          ? 48
           : node.type === "dependency"
             ? 6
-            : Math.max(10, Math.min(30, 10 + (node.data.downloads || 0) / 200));
+            : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
       let nodeImage: string | null = null;
@@ -376,7 +381,7 @@ export default function GraphCanvas({
           node.type === "repo"
             ? "#000000"
             : node.type === "dependency"
-              ? "#555"
+              ? "#9b59b6"
               : sevColor,
         x: Math.random() * 100,
         y: Math.random() * 100,
@@ -384,7 +389,7 @@ export default function GraphCanvas({
         severity: sev,
         vulnCount: node.data.vuln_count,
         ...(node.type === "dependency"
-          ? { type: "square" }
+          ? { type: "hexagon" }
           : nodeImage
             ? { type: "image", image: nodeImage }
             : {}),
@@ -401,7 +406,7 @@ export default function GraphCanvas({
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(150,150,150,0.5)" : "rgba(70,130,210,0.6)",
+        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
         type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -429,7 +434,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -445,6 +450,12 @@ export default function GraphCanvas({
 
         /* --- Hide dependency nodes --- */
         if (st.hideDependencies && attrs.nodeType === "dependency") {
+          res.hidden = true;
+          return res;
+        }
+
+        /* --- Hide packages with unsupported scans --- */
+        if (st.hideUnsupported && attrs.nodeType === "package" && (attrs as any).severity === "Unknown") {
           res.hidden = true;
           return res;
         }
@@ -509,6 +520,18 @@ export default function GraphCanvas({
         if (st.hideDependencies && graph.getEdgeAttribute(edge, "edgeKind") === "dependency") {
           res.hidden = true;
           return res;
+        }
+
+        /* Hide edges connected to unsupported-scan nodes if toggled */
+        if (st.hideUnsupported) {
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          const srcUnsupported = graph.getNodeAttribute(src, "nodeType") === "package" && graph.getNodeAttribute(src, "severity") === "Unknown";
+          const tgtUnsupported = graph.getNodeAttribute(tgt, "nodeType") === "package" && graph.getNodeAttribute(tgt, "severity") === "Unknown";
+          if (srcUnsupported || tgtUnsupported) {
+            res.hidden = true;
+            return res;
+          }
         }
 
         /* Hide edges not connected to search-visible nodes */

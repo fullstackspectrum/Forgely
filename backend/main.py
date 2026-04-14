@@ -187,6 +187,11 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
         max_sev, vuln_count, vulns = vuln_results[node_id]
 
+        # Normalise: the Cloudsmith API may return "Unknown" as max_severity
+        # even when the scan completed cleanly with 0 vulnerabilities.
+        if max_sev == "Unknown" and vuln_count == 0:
+            max_sev = "None"
+
         # Override scan_status based on actual scan results – the package list
         # API may report "Awaiting Security Scan" even when scans have completed.
         # max_sev is Python None only when no scan data exists at all;
@@ -195,6 +200,16 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             scan_status = "Scanned (Vulnerable)"
         elif max_sev is not None:
             scan_status = "Scanned (Clean)"
+        elif "not supported" in scan_status.lower():
+            # Scanning is genuinely unavailable for this package format.
+            # Keep max_sev as None → grey on the frontend.
+            pass
+        else:
+            # No vulnerability data returned but scanning is not explicitly
+            # unsupported – the API may lag or return empty for clean packages.
+            # Treat as clean (green).
+            scan_status = "Scanned (Clean)"
+            max_sev = "None"
 
         cve_records: list[CVERecord] = []
         for v in vulns:
