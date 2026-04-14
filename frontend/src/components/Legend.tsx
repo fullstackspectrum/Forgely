@@ -22,6 +22,9 @@ export default function Legend() {
           <i className="dot" style={{ background: "#28a745" }} /> Safe
         </span>
         <span>
+          <i className="dot" style={{ background: "#666666" }} /> Not Scanned
+        </span>
+        <span>
           <i className="dot" style={{ background: "#555" }} /> Dependency
         </span>
       </div>
