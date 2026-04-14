@@ -195,6 +195,16 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             scan_status = "Scanned (Vulnerable)"
         elif max_sev is not None:
             scan_status = "Scanned (Clean)"
+        elif "not supported" in scan_status.lower():
+            # Scanning is genuinely unavailable for this package format.
+            # Keep max_sev as None → grey on the frontend.
+            pass
+        else:
+            # No vulnerability data returned but scanning is not explicitly
+            # unsupported – the API may lag or return empty for clean packages.
+            # Treat as clean (green).
+            scan_status = "Scanned (Clean)"
+            max_sev = "None"
 
         cve_records: list[CVERecord] = []
         for v in vulns:
