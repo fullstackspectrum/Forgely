@@ -357,11 +357,11 @@ export default function GraphCanvas({
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
       const sevColor =
-        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#666666");
+        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#ffffff");
 
       const size =
         node.type === "repo"
-          ? 24
+          ? 48
           : node.type === "dependency"
             ? 6
             : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));

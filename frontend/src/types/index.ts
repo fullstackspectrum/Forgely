@@ -79,7 +79,7 @@ export const SEVERITY_COLORS: Record<string, string> = {
   Medium: "#ffd11a",
   Low: "#79b8ff",
   None: "#28a745",
-  Unknown: "#666666",
+  Unknown: "#ffffff",
 };
 
 export const SEVERITY_RANK: Record<string, number> = {
