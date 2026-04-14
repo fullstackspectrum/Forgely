@@ -32,6 +32,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
   const [hideDependencies, setHideDependencies] = useState(false);
+  const [hideUnsupported, setHideUnsupported] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
@@ -168,12 +169,14 @@ export default function App() {
           stats={data?.stats ?? null}
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
+          hideUnsupported={hideUnsupported}
           hasKey={hasKey}
           tab={tab}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
           onHideSharedCveEdgesChange={setHideSharedCveEdges}
           onHideDependenciesChange={setHideDependencies}
+          onHideUnsupportedChange={setHideUnsupported}
           onConnectClick={() => setConnectOpen(true)}
           onDisconnect={() => { clearApiKey(); setHasKey(false); }}
         />
@@ -251,6 +254,7 @@ export default function App() {
               searchResults={searchResults}
               hideSharedCveEdges={hideSharedCveEdges}
               hideDependencies={hideDependencies}
+              hideUnsupported={hideUnsupported}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
               onRefresh={handleRefresh}

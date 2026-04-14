@@ -7,12 +7,14 @@ interface Props {
   stats: GraphStats | null;
   hideSharedCveEdges: boolean;
   hideDependencies: boolean;
+  hideUnsupported: boolean;
   hasKey: boolean;
   tab: TabType;
   onTabChange: (t: TabType) => void;
   onFilterChange: (f: FilterType) => void;
   onHideSharedCveEdgesChange: (v: boolean) => void;
   onHideDependenciesChange: (v: boolean) => void;
+  onHideUnsupportedChange: (v: boolean) => void;
   onConnectClick: () => void;
   onDisconnect: () => void;
 }
@@ -34,12 +36,14 @@ export default function FilterBar({
   stats,
   hideSharedCveEdges,
   hideDependencies,
+  hideUnsupported,
   hasKey,
   tab,
   onTabChange,
   onFilterChange,
   onHideSharedCveEdgesChange,
   onHideDependenciesChange,
+  onHideUnsupportedChange,
   onConnectClick,
   onDisconnect,
 }: Props) {
@@ -133,6 +137,14 @@ export default function FilterBar({
             onChange={(e) => onHideDependenciesChange(e.target.checked)}
           />
           <span>Hide dependencies</span>
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={hideUnsupported}
+            onChange={(e) => onHideUnsupportedChange(e.target.checked)}
+          />
+          <span>Hide unsupported scans</span>
         </label>
       </div>
 
