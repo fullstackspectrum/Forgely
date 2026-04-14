@@ -364,7 +364,7 @@ export default function GraphCanvas({
           ? 24
           : node.type === "dependency"
             ? 6
-            : Math.max(10, Math.min(30, 10 + (node.data.downloads || 0) / 200));
+            : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
       let nodeImage: string | null = null;

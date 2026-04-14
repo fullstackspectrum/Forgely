@@ -1184,7 +1184,7 @@ body {
   border-color: var(--critical);
 }
 .edge-line.dep {
-  border-color: #555;
+  border-color: rgba(120,70,160,0.6);
 }
 
 /* ===== Repo badge ===== */

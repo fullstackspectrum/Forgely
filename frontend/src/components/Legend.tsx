@@ -4,7 +4,7 @@ export default function Legend() {
       <div className="legend-title">Artigraphly</div>
       <div className="legend-items">
         <span>
-          <i className="dot" style={{ background: "#4a90d9" }} /> Repository
+                    <i className="dot" style={{ background: "#000000" }} /> Repository
         </span>
         <span>
           <i className="dot" style={{ background: "#ff4d4d" }} /> Critical
