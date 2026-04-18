@@ -750,6 +750,10 @@ body {
   box-shadow: -8px 0 40px rgba(0, 0, 0, 0.5);
   overflow-y: auto;
   animation: slideIn 0.25s ease-out;
+  transition: width 0.3s ease;
+}
+.panel-overlay-expanded {
+  width: 75%;
 }
 
 @keyframes slideIn {
@@ -763,17 +767,41 @@ body {
   }
 }
 
+.panel-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px 0;
+}
+.panel-expand-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.panel-expand-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
 .panel-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 26px;
   cursor: pointer;
   line-height: 1;
-  z-index: 1;
   transition: color 0.15s;
 }
 .panel-close:hover {
