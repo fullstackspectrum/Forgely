@@ -13,6 +13,7 @@ import WorkspaceSelector from "./components/WorkspaceSelector";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
+import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter } from "./types";
 
@@ -45,6 +46,7 @@ export default function App() {
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
+  const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -223,6 +225,13 @@ export default function App() {
             refreshKey={repoRefreshKey}
             onSelect={handleOrgOwnerChange}
           />
+          {orgData && (
+            <OrgSearchBar
+              orgData={orgData}
+              onHighlight={setOrgSearchResults}
+              onNodeSelect={setOrgSelectedNode}
+            />
+          )}
         </div>
       )}
 
@@ -302,6 +311,7 @@ export default function App() {
               layout={orgLayout}
               edgeStyle={orgEdgeStyle}
               filter={orgFilter}
+              searchResults={orgSearchResults}
               onNodeSelect={setOrgSelectedNode}
               onLayoutChange={handleOrgLayoutChange}
               onEdgeStyleChange={setOrgEdgeStyle}

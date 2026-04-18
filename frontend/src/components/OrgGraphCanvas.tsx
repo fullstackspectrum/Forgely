@@ -119,6 +119,7 @@ interface Props {
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   filter: OrgNodeFilter;
+  searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onLayoutChange: (l: LayoutType) => void;
   onEdgeStyleChange: (e: EdgeStyle) => void;
@@ -131,6 +132,7 @@ export default function OrgGraphCanvas({
   layout,
   edgeStyle,
   filter,
+  searchResults,
   onNodeSelect,
   onLayoutChange,
   onEdgeStyleChange,
@@ -139,7 +141,7 @@ export default function OrgGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
-  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>() });
+  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>(), searchResults: new Set<string>() });
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -156,9 +158,9 @@ export default function OrgGraphCanvas({
         }
       });
     }
-    stateRef.current = { selectedNode, neighbors, filter, filterConnected };
+    stateRef.current = { selectedNode, neighbors, filter, filterConnected, searchResults: new Set(searchResults) };
     sigmaRef.current?.refresh();
-  }, [selectedNode, filter]);
+  }, [selectedNode, filter, searchResults]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -298,6 +300,20 @@ export default function OrgGraphCanvas({
               }
             }
 
+            /* Search highlight */
+            if (st.searchResults.size > 0) {
+              if (st.searchResults.has(node)) {
+                res.highlighted = true;
+                res.zIndex = 10;
+              } else if (nType === "org") {
+                /* keep org visible */
+              } else {
+                res.color = "#1a1a2e";
+                res.label = "";
+              }
+              return res;
+            }
+
             if (st.selectedNode) {
               if (node === st.selectedNode) {
                 res.highlighted = true;
@@ -328,6 +344,14 @@ export default function OrgGraphCanvas({
                 res.hidden = true;
                 return res;
               }
+            }
+
+            /* Search — hide edges not touching a match */
+            if (st.searchResults.size > 0) {
+              if (!st.searchResults.has(src) && !st.searchResults.has(tgt)) {
+                res.hidden = true;
+              }
+              return res;
             }
 
             if (st.selectedNode) {
