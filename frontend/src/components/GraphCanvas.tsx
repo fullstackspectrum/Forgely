@@ -212,6 +212,7 @@ export default function GraphCanvas({
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
+    pulsePhase: 0,
   });
 
   /* Keep the ref in sync and tell sigma to re-render */
@@ -425,6 +426,31 @@ export default function GraphCanvas({
       },
     });
 
+    /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
+    const criticalNodes: Array<{ id: string; size: number }> = [];
+    graph.forEachNode((nid, attrs) => {
+      if (attrs.nodeType === "package" && attrs.severity === "Critical") {
+        criticalNodes.push({ id: nid, size: attrs.size });
+      }
+    });
+    for (const cn of criticalNodes) {
+      const x = graph.getNodeAttribute(cn.id, "x");
+      const y = graph.getNodeAttribute(cn.id, "y");
+      for (let i = 0; i < 2; i++) {
+        graph.addNode(`echo:${cn.id}:${i}`, {
+          x, y,
+          size: cn.size,
+          baseSize: cn.size,
+          phaseOffset: i * 0.5,
+          color: "rgba(255,77,77,0)",
+          nodeType: "echo",
+          parentId: cn.id,
+          label: "",
+          zIndex: -1,
+        });
+      }
+    }
+
     stateRef.current.nodeData = nodeData;
 
     /* --- Sigma --- */
@@ -447,6 +473,46 @@ export default function GraphCanvas({
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* --- Echo ring around Critical nodes --- */
+        if (attrs.nodeType === "echo") {
+          const parentId = (attrs as any).parentId as string;
+          if (!graph.hasNode(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          // Hide ring when filtering excludes Critical nodes
+          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps") {
+            res.hidden = true;
+            return res;
+          }
+          if (st.filter === "shared_cve" && !st.sharedCveNodes.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          if (st.filter === "has_deps" && !st.hasDepNodes.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          // Hide ring during search if parent isn't visible
+          if (st.searchResults.length > 0 && !st.searchResults.includes(parentId) && !st.searchConnected.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          const phase = (st.pulsePhase / (2 * Math.PI) + (attrs as any).phaseOffset) % 1;
+          const baseSize = (attrs as any).baseSize as number;
+          res.size = baseSize * (1 + phase * 2.2);
+          const alpha = Math.max(0, 0.5 * (1 - phase));
+          res.color = `rgba(255,77,77,${alpha.toFixed(3)})`;
+          res.label = "";
+          return res;
+        }
+
+        /* --- Pulse Critical-severity package nodes --- */
+        if (attrs.nodeType === "package" && (attrs as any).severity === "Critical") {
+          const pulse = 1 + 0.18 * Math.sin(st.pulsePhase);
+          res.size = (attrs.size ?? 1) * pulse;
+        }
 
         /* --- Hide dependency nodes --- */
         if (st.hideDependencies && attrs.nodeType === "dependency") {
@@ -571,8 +637,12 @@ export default function GraphCanvas({
     });
 
     /* Events */
-    sigma.on("clickNode", ({ node }) => onNodeSelect(node));
+    sigma.on("clickNode", ({ node }) => {
+      if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
+      onNodeSelect(node);
+    });
     sigma.on("enterNode", ({ node }) => {
+      if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeHover(node);
       containerRef.current!.style.cursor = "pointer";
     });
@@ -584,6 +654,27 @@ export default function GraphCanvas({
 
     sigmaRef.current = sigma;
     graphRef.current = graph;
+
+    /* --- Pulse animation for Critical nodes --- */
+    let rafId = 0;
+    const startTime = performance.now();
+    const tick = () => {
+      stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.9;
+      // Sync echo node positions to their parent (in case layout moved parents)
+      graph.forEachNode((nid, attrs) => {
+        if (attrs.nodeType === "echo") {
+          const pid = (attrs as any).parentId;
+          if (graph.hasNode(pid)) {
+            graph.setNodeAttribute(nid, "x", graph.getNodeAttribute(pid, "x"));
+            graph.setNodeAttribute(nid, "y", graph.getNodeAttribute(pid, "y"));
+          }
+        }
+      });
+      sigma.refresh({ skipIndexation: true });
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    (sigma as any)._pulseRaf = rafId;
 
     } catch (err) {
       console.error("Graph build failed:", err);
@@ -602,6 +693,8 @@ export default function GraphCanvas({
     return () => {
       cancelled = true;
       if (sigmaRef.current) {
+        const raf = (sigmaRef.current as any)._pulseRaf;
+        if (raf) cancelAnimationFrame(raf);
         sigmaRef.current.kill();
         sigmaRef.current = null;
         graphRef.current = null;
