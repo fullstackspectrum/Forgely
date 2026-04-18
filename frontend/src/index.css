@@ -1886,3 +1886,16 @@ body {
   border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
+
+/* ===== Version badge ===== */
+
+.version-badge {
+  position: fixed;
+  bottom: 12px;
+  right: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  z-index: 100;
+  pointer-events: none;
+  user-select: none;
+}
