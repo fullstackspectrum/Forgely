@@ -326,7 +326,7 @@ export default function App() {
           {orgSelectedNode && orgData && (
             <div className="panel-overlay">
               <button className="panel-close" onClick={() => setOrgSelectedNode(null)}>×</button>
-              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} />
+              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} />
             </div>
           )}
 
