@@ -583,9 +583,9 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
             rid = f"repo:{repo_slug}"
 
             # Normalise privileges into a flat list of entries.
-            # The API may return either:
-            #   - a list of {privilege, user?, service?, team?} objects
-            #   - a dict with keys "users", "teams", "services" (or nested under "permissions")
+            # After unwrapping in fetch_repo_privileges, privs should be a list of
+            # {privilege, user?, service?, team?} objects, or a legacy dict with
+            # "users", "teams", "services" sub-keys.
             priv_entries: list[dict] = []
             if isinstance(privs, list):
                 priv_entries = privs
@@ -606,24 +606,33 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                 service_obj = item.get("service")
                 team_obj = item.get("team")
 
-                if priv_key == "users" or (isinstance(user_obj, dict) and user_obj):
+                item_id = ""
+                if priv_key == "users" or user_obj:
                     if isinstance(user_obj, dict):
                         item_slug = user_obj.get("slug", user_obj.get("slug_perm", ""))
+                    elif isinstance(user_obj, str):
+                        item_slug = user_obj
                     else:
                         item_slug = item.get("slug", item.get("user", ""))
                     item_id = f"user:{item_slug}"
-                elif priv_key == "services" or (isinstance(service_obj, dict) and service_obj):
+                elif priv_key == "services" or service_obj:
                     if isinstance(service_obj, dict):
                         item_slug = service_obj.get("slug", service_obj.get("slug_perm", ""))
                         item_name = service_obj.get("name", item_slug)
+                    elif isinstance(service_obj, str):
+                        item_slug = service_obj
+                        item_name = service_obj
                     else:
                         item_slug = item.get("slug", item.get("name", ""))
                         item_name = item.get("name", item_slug)
                     item_id = f"service:{item_slug}"
-                elif priv_key == "teams" or (isinstance(team_obj, dict) and team_obj):
+                elif priv_key == "teams" or team_obj:
                     if isinstance(team_obj, dict):
                         item_slug = team_obj.get("slug", team_obj.get("slug_perm", ""))
                         item_name = team_obj.get("name", item_slug)
+                    elif isinstance(team_obj, str):
+                        item_slug = team_obj
+                        item_name = team_obj
                     else:
                         item_slug = item.get("slug", item.get("name", ""))
                         item_name = item.get("name", item_slug)
@@ -639,7 +648,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                 else:
                     continue
 
-                if item_id in seen:
+                if item_id and item_id in seen:
                     edges.append({
                         "source": item_id,
                         "target": rid,

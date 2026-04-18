@@ -130,10 +130,15 @@ def fetch_repo_entitlements(session: requests.Session, owner: str, repo: str) ->
 
 def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> list | dict:
     """Fetch privileges (user/team/service access) for a repository."""
-    url = f"{BASE_URL}/repos/{owner}/{repo}/privileges"
+    url = f"{BASE_URL}/repos/{owner}/{repo}/privileges/"
     try:
         data = _api_get(session, url, params={"page_size": 500})
-        return data if isinstance(data, (dict, list)) else []
+        # API may return {"privileges": [...]} or a flat list or a dict with users/teams/services
+        if isinstance(data, dict) and isinstance(data.get("privileges"), list):
+            return data["privileges"]
+        if isinstance(data, (dict, list)):
+            return data
+        return []
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code in (404, 403):
             return []
