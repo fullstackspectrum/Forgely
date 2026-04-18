@@ -105,7 +105,11 @@ def fetch_team_members(session: requests.Session, owner: str, team_slug: str) ->
     url = f"{BASE_URL}/orgs/{owner}/teams/{team_slug}/members/"
     try:
         data = _api_get(session, url, params={"page_size": 100})
-        return data if isinstance(data, list) else []
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict) and isinstance(data.get("members"), list):
+            return data["members"]
+        return []
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code in (400, 403, 404):
             return []

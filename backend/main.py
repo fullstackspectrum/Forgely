@@ -546,14 +546,23 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
             t_slug, t_members = fut.result()
             tid = f"team:{t_slug}"
             for tm in t_members:
-                # Team members can be users or services
-                user_slug = tm.get("slug", tm.get("user", ""))
+                # Team members can be users or services.
+                # The API may return a flat slug or a nested user/service object.
+                user_obj = tm.get("user")
+                if isinstance(user_obj, dict):
+                    user_slug = user_obj.get("slug", user_obj.get("slug_perm", ""))
+                else:
+                    user_slug = tm.get("slug", tm.get("user", ""))
                 if not user_slug:
                     continue
+                # Try matching as user first, then as service
                 uid = f"user:{user_slug}"
+                sid = f"service:{user_slug}"
                 if uid in seen:
                     role = tm.get("role", "")
                     edges.append({"source": uid, "target": tid, "type": "team_member", "label": role})
+                elif sid in seen:
+                    edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
 
     # Fetch privileges, entitlements, and upstreams for each repo (parallel)
     MAX_WORKERS = 20
