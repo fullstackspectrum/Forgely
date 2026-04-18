@@ -59,7 +59,7 @@ export default function FilterBar({
           className={`left-panel-tab${tab === "packages" ? " active" : ""}`}
           onClick={() => onTabChange("packages")}
         >
-          📦 Packages
+          📦 Artifacts
         </button>
         <button
           className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}

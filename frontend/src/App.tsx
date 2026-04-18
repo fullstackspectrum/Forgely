@@ -47,6 +47,7 @@ export default function App() {
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -163,7 +164,16 @@ export default function App() {
   }, [data]);
 
   return (
-    <div className="app">
+    <div className={`app${panelCollapsed ? " panel-collapsed" : ""}`}>
+      {/* Panel collapse toggle */}
+      <button
+        className={`panel-toggle${panelCollapsed ? " collapsed" : ""}`}
+        onClick={() => setPanelCollapsed((v) => !v)}
+        title={panelCollapsed ? "Show panel" : "Hide panel"}
+      >
+        {panelCollapsed ? "›" : "‹"}
+      </button>
+
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
