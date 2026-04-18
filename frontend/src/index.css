@@ -1486,9 +1486,7 @@ body {
 /* ===== Connect button (left panel) ===== */
 
 .left-panel-connection {
-  margin-top: auto;
   padding: 14px;
-  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1804,8 +1802,6 @@ body {
 
 .org-left-panel .left-panel-footer {
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
 }
 
 .org-selector {
@@ -2235,6 +2231,33 @@ body {
 }
 
 /* ===== Version badge ===== */
+
+.left-panel-bottom {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+}
+
+.left-panel-version {
+  padding: 8px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.left-panel-bottom .left-panel-connection,
+.left-panel-bottom .left-panel-footer {
+  flex: 1;
+  padding: 8px 6px;
+  justify-content: flex-end;
+  border-top: none;
+  margin-top: 0;
+}
 
 .version-badge {
   position: fixed;

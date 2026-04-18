@@ -361,7 +361,6 @@ export default function App() {
           )}
         </>
       )}
-      <div className="version-badge">v{__APP_VERSION__}</div>
     </div>
   );
 }
