@@ -82,8 +82,8 @@ varying vec2 v_startPos;
 varying vec2 v_endPos;
 
 const vec4 transparent = vec4(0.0, 0.0, 0.0, 0.0);
-const float dashLength = 0.08;
-const float gapLength = 0.06;
+const float dashLength = 0.02;
+const float gapLength = 0.015;
 
 void main(void) {
   #ifdef PICKING_MODE
