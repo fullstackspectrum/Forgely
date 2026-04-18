@@ -28,6 +28,7 @@
 - Organisation-level graph showing repositories and their relationships
 - Workspace selector with organisation-scoped filtering
 - Dedicated left panel, side panel, and legend for organisation view
+- Card-based workspace side panel with hero header, status pills, stat cards, info cards, and grouped connections
 
 ### Side Panel
 - Package metadata, CVE cards, and advisory links
