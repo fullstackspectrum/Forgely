@@ -59,7 +59,7 @@ export default function FilterBar({
           className={`left-panel-tab${tab === "packages" ? " active" : ""}`}
           onClick={() => onTabChange("packages")}
         >
-          📦 Packages
+          📦 Artifacts
         </button>
         <button
           className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}
@@ -148,23 +148,26 @@ export default function FilterBar({
         </label>
       </div>
 
-      <div className="left-panel-connection">
-        <button
-          className={`connect-btn ${hasKey ? "connected" : ""}`}
-          onClick={onConnectClick}
-        >
-          <span className="connect-btn-dot" />
-          {hasKey ? "Connected" : "Connect"}
-        </button>
-        {hasKey && (
+      <div className="left-panel-bottom">
+        <div className="left-panel-version">v{__APP_VERSION__}</div>
+        <div className="left-panel-connection">
           <button
-            className="disconnect-btn"
-            title="Disconnect"
-            onClick={onDisconnect}
+            className={`connect-btn ${hasKey ? "connected" : ""}`}
+            onClick={onConnectClick}
           >
-            ×
+            <span className="connect-btn-dot" />
+            {hasKey ? "Connected" : "Connect"}
           </button>
-        )}
+          {hasKey && (
+            <button
+              className="disconnect-btn"
+              title="Disconnect"
+              onClick={onDisconnect}
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import WorkspaceSelector from "./components/WorkspaceSelector";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
+import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter } from "./types";
 
@@ -25,6 +26,7 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [panelExpanded, setPanelExpanded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [layout, setLayout] = useState<LayoutType>("force");
@@ -42,9 +44,12 @@ export default function App() {
   const [orgLoading, setOrgLoading] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
+  const [orgPanelExpanded, setOrgPanelExpanded] = useState(false);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
+  const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -161,7 +166,16 @@ export default function App() {
   }, [data]);
 
   return (
-    <div className="app">
+    <div className={`app${panelCollapsed ? " panel-collapsed" : ""}`}>
+      {/* Panel collapse toggle */}
+      <button
+        className={`panel-toggle${panelCollapsed ? " collapsed" : ""}`}
+        onClick={() => setPanelCollapsed((v) => !v)}
+        title={panelCollapsed ? "Show panel" : "Hide panel"}
+      >
+        {panelCollapsed ? "›" : "‹"}
+      </button>
+
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
@@ -223,6 +237,13 @@ export default function App() {
             refreshKey={repoRefreshKey}
             onSelect={handleOrgOwnerChange}
           />
+          {orgData && (
+            <OrgSearchBar
+              orgData={orgData}
+              onHighlight={setOrgSearchResults}
+              onNodeSelect={setOrgSelectedNode}
+            />
+          )}
         </div>
       )}
 
@@ -268,8 +289,13 @@ export default function App() {
           )}
 
           {selectedNode && data && (
-            <div className="panel-overlay">
-              <button className="panel-close" onClick={() => setSelectedNode(null)}>×</button>
+            <div className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}>
+              <div className="panel-toolbar">
+                <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
+                  {panelExpanded ? "⇥" : "⇤"}
+                </button>
+                <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
+              </div>
               <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
             </div>
           )}
@@ -302,6 +328,7 @@ export default function App() {
               layout={orgLayout}
               edgeStyle={orgEdgeStyle}
               filter={orgFilter}
+              searchResults={orgSearchResults}
               onNodeSelect={setOrgSelectedNode}
               onLayoutChange={handleOrgLayoutChange}
               onEdgeStyleChange={setOrgEdgeStyle}
@@ -314,9 +341,14 @@ export default function App() {
           )}
 
           {orgSelectedNode && orgData && (
-            <div className="panel-overlay">
-              <button className="panel-close" onClick={() => setOrgSelectedNode(null)}>×</button>
-              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} />
+            <div className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`}>
+              <div className="panel-toolbar">
+                <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
+                  {orgPanelExpanded ? "⇥" : "⇤"}
+                </button>
+                <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); }}>×</button>
+              </div>
+              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} />
             </div>
           )}
 

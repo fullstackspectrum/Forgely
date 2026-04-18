@@ -7,6 +7,8 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
+import EdgeDottedProgram from "../programs/EdgeDottedProgram";
+import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 
@@ -26,7 +28,7 @@ const EDGE_COLORS: Record<string, string> = {
   service_org: "rgba(167,109,255,0.5)",
   team_org: "rgba(255,77,135,0.5)",
   team_member: "rgba(255,77,135,0.6)",
-  access: "rgba(74,144,217,0.6)",
+  access: "rgba(74,144,217,0.25)",
   entitlement_repo: "rgba(255,209,26,0.4)",
   repo_upstream: "rgba(0,188,212,0.5)",
   shared_upstream: "rgba(255,87,34,0.7)",
@@ -119,6 +121,7 @@ interface Props {
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   filter: OrgNodeFilter;
+  searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onLayoutChange: (l: LayoutType) => void;
   onEdgeStyleChange: (e: EdgeStyle) => void;
@@ -131,6 +134,7 @@ export default function OrgGraphCanvas({
   layout,
   edgeStyle,
   filter,
+  searchResults,
   onNodeSelect,
   onLayoutChange,
   onEdgeStyleChange,
@@ -139,7 +143,7 @@ export default function OrgGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
-  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>() });
+  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>(), searchResults: new Set<string>() });
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -156,9 +160,9 @@ export default function OrgGraphCanvas({
         }
       });
     }
-    stateRef.current = { selectedNode, neighbors, filter, filterConnected };
+    stateRef.current = { selectedNode, neighbors, filter, filterConnected, searchResults: new Set(searchResults) };
     sigmaRef.current?.refresh();
-  }, [selectedNode, filter]);
+  }, [selectedNode, filter, searchResults]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -247,10 +251,11 @@ export default function OrgGraphCanvas({
         for (const edge of data.edges) {
           if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
           const isShared = edge.type === "shared_upstream";
+          const isAccess = edge.type === "access";
           graph.addEdgeWithKey(`e-${idx++}`, edge.source, edge.target, {
-            size: isShared ? 3 : edge.type === "access" ? 2 : 1.5,
+            size: isShared ? 3 : isAccess ? 1.5 : 1.5,
             color: EDGE_COLORS[edge.type] ?? "rgba(100,100,100,0.4)",
-            type: "curvedArrow",
+            type: isAccess ? "curvedDotted" : "curvedArrow",
             curvature: isShared ? 0.3 : 0.15,
             edgeKind: edge.type,
             label: edge.label,
@@ -270,7 +275,7 @@ export default function OrgGraphCanvas({
           renderEdgeLabels: true,
           enableEdgeEvents: true,
           defaultEdgeType: "curvedArrow",
-          edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
+          edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram, curvedDotted: EdgeCurvedDottedProgram },
           nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, triangle: NodeTriangleProgram },
           labelDensity: 0.15,
           labelGridCellSize: 80,
@@ -296,6 +301,20 @@ export default function OrgGraphCanvas({
                 res.hidden = true;
                 return res;
               }
+            }
+
+            /* Search highlight */
+            if (st.searchResults.size > 0) {
+              if (st.searchResults.has(node)) {
+                res.highlighted = true;
+                res.zIndex = 10;
+              } else if (nType === "org") {
+                /* keep org visible */
+              } else {
+                res.color = "#1a1a2e";
+                res.label = "";
+              }
+              return res;
             }
 
             if (st.selectedNode) {
@@ -328,6 +347,14 @@ export default function OrgGraphCanvas({
                 res.hidden = true;
                 return res;
               }
+            }
+
+            /* Search — hide edges not touching a match */
+            if (st.searchResults.size > 0) {
+              if (!st.searchResults.has(src) && !st.searchResults.has(tgt)) {
+                res.hidden = true;
+              }
+              return res;
             }
 
             if (st.selectedNode) {

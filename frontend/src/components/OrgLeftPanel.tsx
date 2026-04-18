@@ -32,7 +32,7 @@ export default function OrgLeftPanel({
 
       <div className="left-panel-tabs">
         <button className="left-panel-tab" onClick={() => onTabChange("packages")}>
-          📦 Packages
+          📦 Artifacts
         </button>
         <button className="left-panel-tab active">
           🏢 Workspace
@@ -105,12 +105,15 @@ export default function OrgLeftPanel({
         </div>
       </div>
 
-      <div className="left-panel-footer">
-        {hasKey ? (
-          <button className="btn btn-sm btn-muted" onClick={onDisconnect}>Disconnect</button>
-        ) : (
-          <button className="btn btn-sm btn-accent" onClick={onConnectClick}>Connect</button>
-        )}
+      <div className="left-panel-bottom">
+        <div className="left-panel-version">v{__APP_VERSION__}</div>
+        <div className="left-panel-footer">
+          {hasKey ? (
+            <button className="btn btn-sm btn-muted" onClick={onDisconnect}>Disconnect</button>
+          ) : (
+            <button className="btn btn-sm btn-accent" onClick={onConnectClick}>Connect</button>
+          )}
+        </div>
       </div>
     </div>
   );
