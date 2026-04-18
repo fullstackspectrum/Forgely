@@ -22,6 +22,7 @@
 - CVE search for `CVE-*` / `GHSA-*` patterns with node highlighting
 - Search hides unmatched nodes while keeping connected nodes and the repo node visible
 - Left control panel with severity filters, layout switcher, and stats
+- Workspace graph search with query prefix support (`repo:`, `user:`, `team:`, `service:`, `entitlement:`, `upstream:`) and plain text matching
 
 ### Organisation View
 - Organisation-level graph showing repositories and their relationships
