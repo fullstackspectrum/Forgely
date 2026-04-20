@@ -150,11 +150,43 @@ export default function SidePanel({ data, nodeId, owner, repo, expanded = false 
         </div>
       )}
 
-      {d.vuln_count === 0 && node.type === "package" && (
-        <div className="panel-section">
-          <p style={{ color: "#666" }}>No CVEs recorded for this package.</p>
-        </div>
-      )}
+      {d.vuln_count === 0 && node.type === "package" && (() => {
+        const unsupported = /not supported/i.test(d.scan_status || "");
+        if (unsupported) {
+          return (
+            <div className="panel-section">
+              <div className="no-cves-card no-cves-card-unsupported">
+                <div className="no-cves-icon" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <div className="no-cves-text">
+                  <strong>Scan not supported</strong>
+                  <span>Security scanning isn't available for this package format.</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="panel-section">
+            <div className="no-cves-card">
+              <div className="no-cves-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </div>
+              <div className="no-cves-text">
+                <strong>All clear</strong>
+                <span>No CVEs recorded for this package.</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       </div>
     </div>
   );
