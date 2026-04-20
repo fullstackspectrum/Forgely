@@ -339,9 +339,10 @@ body {
 }
 
 .left-panel-logo {
-  width: 100%;
+  width: 80%;
   height: auto;
   object-fit: contain;
+  align-self: center;
 }
 
 .left-panel-title {
