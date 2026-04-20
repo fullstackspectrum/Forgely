@@ -167,6 +167,7 @@ interface Props {
   selectedNode: string | null;
   hoveredNode: string | null;
   filter: FilterType;
+  formatFilter?: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   searchResults: string[];
@@ -185,6 +186,7 @@ export default function GraphCanvas({
   selectedNode,
   hoveredNode,
   filter,
+  formatFilter = null,
   layout,
   edgeStyle,
   searchResults,
@@ -206,6 +208,7 @@ export default function GraphCanvas({
     selectedNode,
     hoveredNode,
     filter,
+    formatFilter,
     searchResults,
     hideSharedCveEdges,
     hideUnsupported,
@@ -263,6 +266,7 @@ export default function GraphCanvas({
       selectedNode,
       hoveredNode,
       filter,
+      formatFilter,
       searchResults,
       hideSharedCveEdges,
       hideDependencies,
@@ -273,7 +277,7 @@ export default function GraphCanvas({
       hasDepNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
+  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -391,6 +395,7 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
+        format: (node.data.format || "").toLowerCase(),
         ...(node.type === "dependency"
           ? { type: "hexagon" }
           : nodeImage
@@ -499,6 +504,11 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
+          // Hide ring when format filter excludes parent
+          if (st.formatFilter && graph.getNodeAttribute(parentId, "format") !== st.formatFilter) {
+            res.hidden = true;
+            return res;
+          }
           // Hide ring during search if parent isn't visible
           if (st.searchResults.length > 0 && !st.searchResults.includes(parentId) && !st.searchConnected.has(parentId)) {
             res.hidden = true;
@@ -553,6 +563,14 @@ export default function GraphCanvas({
           else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
           else show = sev === st.filter;
           if (!show) {
+            res.hidden = true;
+            return res;
+          }
+        }
+
+        /* --- Format filter --- */
+        if (st.formatFilter && attrs.nodeType !== "repo") {
+          if ((attrs as any).format !== st.formatFilter) {
             res.hidden = true;
             return res;
           }
