@@ -1,7 +1,7 @@
 export default function Legend() {
   return (
     <div className="legend">
-      <div className="legend-title">Artigraphly</div>
+      <div className="legend-title">Forgely</div>
       <div className="legend-items">
         <span>
           <i className="dot" style={{ background: "#000000" }} /> Repository
