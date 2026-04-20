@@ -819,24 +819,25 @@ body {
   display: contents;
 }
 
-/* Expanded: switch the side panel to a 2-column grid using the wrapper divs. */
+/* Expanded: stack summary on top, details (incl. vulnerabilities) below.
+   Summary content reflows horizontally so the wide space is well-used. */
 .side-panel-expanded {
-  display: grid;
-  grid-template-columns: minmax(320px, 380px) 1fr;
-  gap: 0 32px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
   padding: 28px 32px 32px;
 }
 .side-panel-expanded .panel-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  position: sticky;
-  top: 56px; /* clear the sticky panel-toolbar */
-  align-self: start;
-  padding-right: 24px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 4px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 16px 24px;
+  align-items: start;
+}
+/* Header + status row spans the full summary width */
+.side-panel-expanded .panel-summary > .panel-header,
+.side-panel-expanded .panel-summary > .panel-status-row,
+.side-panel-expanded .panel-summary > .org-panel-hero {
+  grid-column: 1 / -1;
 }
 .side-panel-expanded .panel-details {
   display: flex;
