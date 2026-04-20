@@ -28,6 +28,7 @@ export default function SidePanel({
   onFormatFilterChange,
 }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
+  const [cveQuery, setCveQuery] = useState<string>("");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -150,7 +151,16 @@ export default function SidePanel({
         for (const c of sorted) {
           sevCounts[c.severity] = (sevCounts[c.severity] || 0) + 1;
         }
-        const filtered = sevFilter === "All" ? sorted : sorted.filter((c) => c.severity === sevFilter);
+        const q = cveQuery.trim().toLowerCase();
+        const filtered = sorted.filter((c) => {
+          if (sevFilter !== "All" && c.severity !== sevFilter) return false;
+          if (!q) return true;
+          return (
+            (c.id || "").toLowerCase().includes(q) ||
+            (c.description || "").toLowerCase().includes(q) ||
+            (c.affected || "").toLowerCase().includes(q)
+          );
+        });
         const filterOptions = ["All", "Critical", "High", "Medium", "Low"].filter(
           (s) => s === "All" || sevCounts[s]
         );
@@ -161,6 +171,26 @@ export default function SidePanel({
               CVEs ({filtered.length}{filtered.length !== d.cves.length ? ` of ${d.cves.length}` : ""}
               {d.vuln_count > d.cves.length ? ` — ${d.vuln_count} total` : ""})
             </h3>
+            <div className="cve-search-row">
+              <span className="cve-search-icon" aria-hidden="true">⌕</span>
+              <input
+                type="text"
+                className="cve-search-input"
+                placeholder="Search CVEs (e.g. CVE-2024-1234)"
+                value={cveQuery}
+                onChange={(e) => setCveQuery(e.target.value)}
+              />
+              {cveQuery && (
+                <button
+                  type="button"
+                  className="cve-search-clear"
+                  onClick={() => setCveQuery("")}
+                  title="Clear"
+                >
+                  ×
+                </button>
+              )}
+            </div>
             <div className="cve-filter-bar">
               {filterOptions.map((s) => (
                 <button
@@ -174,7 +204,9 @@ export default function SidePanel({
               ))}
             </div>
             <div className="cve-list">
-              {filtered.map((cve, i) => (
+              {filtered.length === 0 ? (
+                <div className="cve-empty">No CVEs match your search.</div>
+              ) : filtered.map((cve, i) => (
                 <CveCard
                   key={`${cve.id}-${i}`}
                   cve={cve}
