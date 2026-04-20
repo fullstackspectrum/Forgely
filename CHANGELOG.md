@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.0-beta.3 — 20 April 2026
+
+### Branding
+- Rebranded from Artigraphly to **Forgely**
+- New Forgely logo across the frontend, backend, README, and startup script
+- Updated page title, favicon, and in-app logo references
+
+## v1.0.0-beta.2 — 18 April 2026
+
+### Graph Visualisation
+- Animated pulsing effect on critical vulnerability nodes for clearer at-a-glance risk
+
+### UI
+- Repositioned version badge and adjusted the connection button placement
+- Refined `FilterBar` and `OrgLeftPanel` layouts for better spacing
+
 ## v1.0.0-beta.1 — 18 April 2026
 
 ### Core
