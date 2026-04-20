@@ -8,16 +8,17 @@ interface Props {
   nodeId: string;
   owner: string;
   repo: string;
+  expanded?: boolean;
 }
 
-export default function SidePanel({ data, nodeId, owner, repo }: Props) {
+export default function SidePanel({ data, nodeId, owner, repo, expanded = false }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
   /* Repo node gets a completely different detail view */
   if (node.type === "repo") {
-    return <RepoDetail data={data} node={node} owner={owner} repo={repo} />;
+    return <RepoDetail data={data} node={node} owner={owner} repo={repo} expanded={expanded} />;
   }
 
   const d = node.data;
@@ -52,7 +53,8 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
     : null;
 
   return (
-    <div className="side-panel">
+    <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
       <div className="panel-header">
         <h2 className="panel-title">{node.label}</h2>
         <span className="panel-version">{d.version}</span>
@@ -87,6 +89,9 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
         <MetaRow label="Scan Status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
       </div>
+      </div>
+
+      <div className="panel-details">
 
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
@@ -149,6 +154,7 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
           <p style={{ color: "#666" }}>No CVEs recorded for this package.</p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -244,11 +250,13 @@ function RepoDetail({
   node,
   owner,
   repo,
+  expanded = false,
 }: {
   data: GraphResponse;
   node: GraphNode;
   owner: string;
   repo: string;
+  expanded?: boolean;
 }) {
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
@@ -289,7 +297,8 @@ function RepoDetail({
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
 
   return (
-    <div className="side-panel">
+    <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
       <div className="panel-header">
         <div className="repo-header-row">
           <img src="/cloudsmith.png" alt="" className="repo-header-logo" />
@@ -331,6 +340,9 @@ function RepoDetail({
           <span className="repo-card-label">Total Findings</span>
         </div>
       </div>
+      </div>
+
+      <div className="panel-details">
 
       {/* Severity breakdown */}
       <div className="panel-section">
@@ -387,6 +399,7 @@ function RepoDetail({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

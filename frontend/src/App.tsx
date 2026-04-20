@@ -296,7 +296,7 @@ export default function App() {
                 </button>
                 <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
               </div>
-              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} />
+              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} />
             </div>
           )}
 
@@ -348,7 +348,7 @@ export default function App() {
                 </button>
                 <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); }}>×</button>
               </div>
-              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} />
+              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
             </div>
           )}
 

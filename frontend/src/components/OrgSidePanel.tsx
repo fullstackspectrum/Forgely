@@ -6,6 +6,7 @@ interface Props {
   data: OrgGraphResponse;
   nodeId: string;
   onNodeSelect: (id: string) => void;
+  expanded?: boolean;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -60,7 +61,7 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-export default function OrgSidePanel({ data, nodeId, onNodeSelect }: Props) {
+export default function OrgSidePanel({ data, nodeId, onNodeSelect, expanded = false }: Props) {
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -83,7 +84,8 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect }: Props) {
   }
 
   return (
-    <div className="side-panel org-side-panel">
+    <div className={`side-panel org-side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
       {/* Header with coloured accent bar */}
       <div className="org-panel-hero" style={{ borderColor: color }}>
         <div className="org-panel-hero-icon" style={{ background: color + "18", color }}>
@@ -187,11 +189,14 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect }: Props) {
           ))}
         </InfoCard>
       )}
+      </div>
 
+      <div className="panel-details">
       {/* Connections — summary cards with expand */}
       {Object.keys(connGroups).length > 0 && (
         <ConnGroups groups={connGroups} onNodeSelect={onNodeSelect} />
       )}
+      </div>
     </div>
   );
 }
