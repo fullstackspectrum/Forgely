@@ -1,12 +1,12 @@
 
 
-![Artigraphly](assets/readme/artigraphly-logo-banner.png)
+![Forgely](assets/readme/logo.png)
 
 ---
 
 
 
-**Artigraphly** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
+**Forgely** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
 ![Example – Packages Overview](assets/readme/example1.jpg)
 
@@ -44,8 +44,8 @@
 ### 2. Clone
 
 ```bash
-git clone https://github.com/your-user/Artigraphly.git
-cd Artigraphly
+git clone https://github.com/your-user/Forgely.git
+cd Forgely
 ```
 
 ### 3. Configure credentials
@@ -116,7 +116,7 @@ npm run dev
 ## 📂 Project Structure
 
 ```
-Artigraphly/
+Forgely/
 ├── backend/
 │   ├── main.py               # FastAPI application
 │   ├── cloudsmith.py          # Cloudsmith API client
