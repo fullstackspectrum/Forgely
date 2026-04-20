@@ -813,6 +813,62 @@ body {
   padding: 20px;
 }
 
+/* Wrapper columns: in normal (collapsed) mode they stack as plain blocks. */
+.panel-summary,
+.panel-details {
+  display: contents;
+}
+
+/* Expanded: switch the side panel to a 2-column grid using the wrapper divs. */
+.side-panel-expanded {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  gap: 0 32px;
+  align-items: start;
+  padding: 28px 32px 32px;
+}
+.side-panel-expanded .panel-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 56px; /* clear the sticky panel-toolbar */
+  align-self: start;
+  padding-right: 24px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 4px;
+}
+.side-panel-expanded .panel-details {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+/* Reset margins inside columns — spacing is controlled by parent gap. */
+.side-panel-expanded .panel-summary > *,
+.side-panel-expanded .panel-details > * {
+  margin: 0;
+}
+/* CVE list becomes a multi-column responsive grid in expanded mode */
+.side-panel-expanded .cve-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+}
+/* Org connection cards spread across columns when expanded */
+.side-panel-expanded .org-conn-summary-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.side-panel-expanded .org-conn-group-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+/* Repo overview cards stretch to 4 even columns when wide */
+.side-panel-expanded .repo-cards {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .panel-header {
   display: flex;
   flex-direction: column;
