@@ -7,6 +7,7 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
+import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
@@ -427,6 +428,7 @@ export default function GraphCanvas({
     });
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
+    const RING_COUNT = 2;
     const criticalNodes: Array<{ id: string; size: number }> = [];
     graph.forEachNode((nid, attrs) => {
       if (attrs.nodeType === "package" && attrs.severity === "Critical") {
@@ -436,14 +438,15 @@ export default function GraphCanvas({
     for (const cn of criticalNodes) {
       const x = graph.getNodeAttribute(cn.id, "x");
       const y = graph.getNodeAttribute(cn.id, "y");
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < RING_COUNT; i++) {
         graph.addNode(`echo:${cn.id}:${i}`, {
           x, y,
           size: cn.size,
           baseSize: cn.size,
-          phaseOffset: i * 0.5,
+          phaseOffset: i / RING_COUNT,
           color: "rgba(255,77,77,0)",
           nodeType: "echo",
+          type: "ring",
           parentId: cn.id,
           label: "",
           zIndex: -1,
@@ -460,7 +463,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -501,9 +504,20 @@ export default function GraphCanvas({
           }
           const phase = (st.pulsePhase / (2 * Math.PI) + (attrs as any).phaseOffset) % 1;
           const baseSize = (attrs as any).baseSize as number;
-          res.size = baseSize * (1 + phase * 2.2);
-          const alpha = Math.max(0, 0.5 * (1 - phase));
-          res.color = `rgba(255,77,77,${alpha.toFixed(3)})`;
+          // Each ring expands continuously from 1x → 4x its parent radius.
+          res.size = baseSize * (1 + phase * 3);
+          // Fade in quickly, then a long gentle fade out across the rest of the cycle.
+          const fadeIn = Math.min(1, phase / 0.08);
+          const fadeOut = Math.pow(1 - Math.min(1, Math.max(0, (phase - 0.08) / 0.92)), 1.6);
+          const alpha = Math.max(0, 0.85 * fadeIn * fadeOut);
+          // Shift colour from a deep red at the centre to a lighter, washed-out
+          // red as the ring expands outward.
+          const t = Math.min(1, Math.max(0, phase));
+          const r = Math.round(180 + (255 - 180) * t);   // 180 → 255
+          const g = Math.round(20 + (160 - 20) * t);     //  20 → 160
+          const b = Math.round(20 + (160 - 20) * t);     //  20 → 160
+          res.color = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+          res.type = "ring";
           res.label = "";
           return res;
         }
@@ -659,7 +673,7 @@ export default function GraphCanvas({
     let rafId = 0;
     const startTime = performance.now();
     const tick = () => {
-      stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.9;
+      stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.35;
       // Sync echo node positions to their parent (in case layout moved parents)
       graph.forEachNode((nid, attrs) => {
         if (attrs.nodeType === "echo") {
