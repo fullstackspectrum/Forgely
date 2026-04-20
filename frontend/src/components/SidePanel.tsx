@@ -494,36 +494,40 @@ function RepoDetail({
       </div>
 
       {/* Severity breakdown */}
-      <div className="panel-section">
-        <h3 className="section-title">Severity Breakdown</h3>
-        <div className="repo-sev-bars">
-          {(["Critical", "High", "Medium", "Low"] as const).map((s) => {
-            const count = stats.sevCounts[s];
-            const max = Math.max(...Object.values(stats.sevCounts), 1);
-            const active = filter === s;
-            const clickable = !!onFilterChange && count > 0;
-            return (
-              <button
-                key={s}
-                type="button"
-                className={`repo-sev-row${clickable ? " repo-sev-row-clickable" : ""}${active ? " active" : ""}`}
-                onClick={clickable ? () => toggleSeverity(s) : undefined}
-                disabled={!clickable}
-                title={active ? `Clear ${s} filter` : `Filter graph by ${s}`}
-              >
-                <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
-                <div className="repo-sev-track">
-                  <div
-                    className="repo-sev-fill"
-                    style={{ width: `${(count / max) * 100}%`, background: SEVERITY_COLORS[s] }}
-                  />
-                </div>
-                <span className="repo-sev-count">{count}</span>
-              </button>
-            );
-          })}
+      {(["Critical", "High", "Medium", "Low"] as const).some((s) => stats.sevCounts[s] > 0) && (
+        <div className="panel-section">
+          <h3 className="section-title">Severity Breakdown</h3>
+          <div className="repo-sev-bars">
+            {(["Critical", "High", "Medium", "Low"] as const)
+              .filter((s) => stats.sevCounts[s] > 0)
+              .map((s) => {
+                const count = stats.sevCounts[s];
+                const max = Math.max(...Object.values(stats.sevCounts), 1);
+                const active = filter === s;
+                const clickable = !!onFilterChange && count > 0;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`repo-sev-row${clickable ? " repo-sev-row-clickable" : ""}${active ? " active" : ""}`}
+                    onClick={clickable ? () => toggleSeverity(s) : undefined}
+                    disabled={!clickable}
+                    title={active ? `Clear ${s} filter` : `Filter graph by ${s}`}
+                  >
+                    <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
+                    <div className="repo-sev-track">
+                      <div
+                        className="repo-sev-fill"
+                        style={{ width: `${(count / max) * 100}%`, background: SEVERITY_COLORS[s] }}
+                      />
+                    </div>
+                    <span className="repo-sev-count">{count}</span>
+                  </button>
+                );
+              })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Most vulnerable packages */}
       {stats.topVuln.length > 0 && (
