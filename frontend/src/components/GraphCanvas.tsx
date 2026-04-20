@@ -7,7 +7,9 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
+import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
+import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -165,6 +167,7 @@ interface Props {
   selectedNode: string | null;
   hoveredNode: string | null;
   filter: FilterType;
+  formatFilter?: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
   searchResults: string[];
@@ -183,6 +186,7 @@ export default function GraphCanvas({
   selectedNode,
   hoveredNode,
   filter,
+  formatFilter = null,
   layout,
   edgeStyle,
   searchResults,
@@ -204,6 +208,7 @@ export default function GraphCanvas({
     selectedNode,
     hoveredNode,
     filter,
+    formatFilter,
     searchResults,
     hideSharedCveEdges,
     hideUnsupported,
@@ -261,6 +266,7 @@ export default function GraphCanvas({
       selectedNode,
       hoveredNode,
       filter,
+      formatFilter,
       searchResults,
       hideSharedCveEdges,
       hideDependencies,
@@ -271,7 +277,7 @@ export default function GraphCanvas({
       hasDepNodes,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
+  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -389,6 +395,7 @@ export default function GraphCanvas({
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
+        format: (node.data.format || "").toLowerCase(),
         ...(node.type === "dependency"
           ? { type: "hexagon" }
           : nodeImage
@@ -427,6 +434,7 @@ export default function GraphCanvas({
     });
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
+    const RING_COUNT = 2;
     const criticalNodes: Array<{ id: string; size: number }> = [];
     graph.forEachNode((nid, attrs) => {
       if (attrs.nodeType === "package" && attrs.severity === "Critical") {
@@ -436,14 +444,15 @@ export default function GraphCanvas({
     for (const cn of criticalNodes) {
       const x = graph.getNodeAttribute(cn.id, "x");
       const y = graph.getNodeAttribute(cn.id, "y");
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < RING_COUNT; i++) {
         graph.addNode(`echo:${cn.id}:${i}`, {
           x, y,
           size: cn.size,
           baseSize: cn.size,
-          phaseOffset: i * 0.5,
+          phaseOffset: i / RING_COUNT,
           color: "rgba(255,77,77,0)",
           nodeType: "echo",
+          type: "ring",
           parentId: cn.id,
           label: "",
           zIndex: -1,
@@ -460,7 +469,7 @@ export default function GraphCanvas({
       enableEdgeEvents: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram },
+      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -469,6 +478,7 @@ export default function GraphCanvas({
       labelSize: 12,
       stagePadding: 40,
       zIndex: true,
+      defaultDrawNodeHover: drawDarkNodeHover,
 
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
@@ -494,6 +504,11 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
+          // Hide ring when format filter excludes parent
+          if (st.formatFilter && graph.getNodeAttribute(parentId, "format") !== st.formatFilter) {
+            res.hidden = true;
+            return res;
+          }
           // Hide ring during search if parent isn't visible
           if (st.searchResults.length > 0 && !st.searchResults.includes(parentId) && !st.searchConnected.has(parentId)) {
             res.hidden = true;
@@ -501,9 +516,20 @@ export default function GraphCanvas({
           }
           const phase = (st.pulsePhase / (2 * Math.PI) + (attrs as any).phaseOffset) % 1;
           const baseSize = (attrs as any).baseSize as number;
-          res.size = baseSize * (1 + phase * 2.2);
-          const alpha = Math.max(0, 0.5 * (1 - phase));
-          res.color = `rgba(255,77,77,${alpha.toFixed(3)})`;
+          // Each ring expands continuously from 1x → 4x its parent radius.
+          res.size = baseSize * (1 + phase * 3);
+          // Fade in quickly, then a long gentle fade out across the rest of the cycle.
+          const fadeIn = Math.min(1, phase / 0.08);
+          const fadeOut = Math.pow(1 - Math.min(1, Math.max(0, (phase - 0.08) / 0.92)), 1.6);
+          const alpha = Math.max(0, 0.85 * fadeIn * fadeOut);
+          // Shift colour from a deep red at the centre to a lighter, washed-out
+          // red as the ring expands outward.
+          const t = Math.min(1, Math.max(0, phase));
+          const r = Math.round(180 + (255 - 180) * t);   // 180 → 255
+          const g = Math.round(20 + (160 - 20) * t);     //  20 → 160
+          const b = Math.round(20 + (160 - 20) * t);     //  20 → 160
+          res.color = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+          res.type = "ring";
           res.label = "";
           return res;
         }
@@ -537,6 +563,14 @@ export default function GraphCanvas({
           else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
           else show = sev === st.filter;
           if (!show) {
+            res.hidden = true;
+            return res;
+          }
+        }
+
+        /* --- Format filter --- */
+        if (st.formatFilter && attrs.nodeType !== "repo") {
+          if ((attrs as any).format !== st.formatFilter) {
             res.hidden = true;
             return res;
           }
@@ -659,7 +693,7 @@ export default function GraphCanvas({
     let rafId = 0;
     const startTime = performance.now();
     const tick = () => {
-      stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.9;
+      stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.35;
       // Sync echo node positions to their parent (in case layout moved parents)
       graph.forEachNode((nid, attrs) => {
         if (attrs.nodeType === "echo") {

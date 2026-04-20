@@ -13,6 +13,15 @@ interface Props {
   onDisconnect: () => void;
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  repo: "Repositories",
+  user: "Members",
+  service: "Services",
+  team: "Teams",
+  entitlement: "Entitlements",
+  upstream: "Upstreams",
+};
+
 export default function OrgLeftPanel({
   orgData,
   hasKey,
@@ -22,6 +31,26 @@ export default function OrgLeftPanel({
   onConnectClick,
   onDisconnect,
 }: Props) {
+
+  // Counts per node type from the loaded graph
+  const counts: Record<string, number> = {};
+  let totalFilterable = 0;
+  if (orgData?.nodes) {
+    for (const n of orgData.nodes) {
+      if (n.type === "org") continue;
+      counts[n.type] = (counts[n.type] || 0) + 1;
+      totalFilterable++;
+    }
+  }
+
+  const types = (Object.keys(ORG_NODE_COLORS) as Array<keyof typeof ORG_NODE_COLORS>)
+    .filter((t) => t !== "org");
+
+  const handleClick = (t: OrgNodeFilter) => {
+    // Click active filter again to clear back to "all"
+    if (filter === t) onFilterChange("all");
+    else onFilterChange(t);
+  };
 
   return (
     <div className="left-panel org-left-panel">
@@ -38,69 +67,54 @@ export default function OrgLeftPanel({
         </button>
       </div>
 
-      {orgData?.stats && (
-        <div className="left-panel-stats">
-          <div className="stat-row">
-            <span className="stat-label">Repositories</span>
-            <span className="stat-value">{orgData.stats.total_repos}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Members</span>
-            <span className="stat-value">{orgData.stats.total_members}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Services</span>
-            <span className="stat-value">{orgData.stats.total_services}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Teams</span>
-            <span className="stat-value">{orgData.stats.total_teams}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Upstreams</span>
-            <span className="stat-value">{orgData.stats.total_upstreams}</span>
-          </div>
-          {orgData.stats.shared_upstreams > 0 && (
-            <div className="stat-row">
-              <span className="stat-label">Shared Upstreams</span>
-              <span className="stat-value" style={{ color: "#ff5722" }}>{orgData.stats.shared_upstreams}</span>
-            </div>
-          )}
-          <div className="stat-row">
-            <span className="stat-label">Nodes</span>
-            <span className="stat-value">{orgData.stats.total_nodes}</span>
-          </div>
-          <div className="stat-row">
-            <span className="stat-label">Edges</span>
-            <span className="stat-value">{orgData.stats.total_edges}</span>
-          </div>
-        </div>
-      )}
-
       <div className="left-panel-section">
-        <span className="left-panel-section-title">Filters</span>
-        <div className="filter-buttons org-filter-buttons">
+        <div className="org-filter-header">
+          <span className="left-panel-section-title">Filter by type</span>
+          {filter !== "all" && (
+            <button
+              type="button"
+              className="org-filter-clear"
+              onClick={() => onFilterChange("all")}
+              title="Show all node types"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="org-filter-list">
           <button
-            className={`filter-btn${filter === "all" ? " active" : ""}`}
+            type="button"
+            className={`org-filter-row${filter === "all" ? " active" : ""}`}
             onClick={() => onFilterChange("all")}
           >
-            All
+            <span className="org-filter-dot org-filter-dot-all" />
+            <span className="org-filter-label">All types</span>
+            <span className="org-filter-count">{totalFilterable}</span>
           </button>
-          {(Object.keys(ORG_NODE_COLORS) as Array<keyof typeof ORG_NODE_COLORS>)
-            .filter((t) => t !== "org")
-            .map((type) => (
+          {types.map((type) => {
+            const count = counts[type] || 0;
+            const isActive = filter === type;
+            const isDisabled = !orgData || count === 0;
+            return (
               <button
                 key={type}
-                className={`filter-btn${filter === type ? " active" : ""}`}
-                style={{
-                  borderColor: ORG_NODE_COLORS[type],
-                  ...(filter === type ? { background: ORG_NODE_COLORS[type], color: "#fff" } : {}),
-                }}
-                onClick={() => onFilterChange(type as OrgNodeFilter)}
+                type="button"
+                className={`org-filter-row${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}`}
+                onClick={() => !isDisabled && handleClick(type as OrgNodeFilter)}
+                disabled={isDisabled}
+                style={isActive ? { borderColor: ORG_NODE_COLORS[type] } : undefined}
               >
-                {type.charAt(0).toUpperCase() + type.slice(1)}
+                <span
+                  className="org-filter-dot"
+                  style={{ background: ORG_NODE_COLORS[type] }}
+                />
+                <span className="org-filter-label">
+                  {TYPE_LABELS[type] || type}
+                </span>
+                <span className="org-filter-count">{count}</span>
               </button>
-            ))}
+            );
+          })}
         </div>
       </div>
 

@@ -1,24 +1,62 @@
 import { useMemo } from "react";
 import { useState } from "react";
-import type { GraphResponse, GraphNode, CVERecord } from "../types";
+import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
+import { getFormatIcon } from "../lib/formatIcons";
 
 interface Props {
   data: GraphResponse;
   nodeId: string;
   owner: string;
   repo: string;
+  expanded?: boolean;
+  filter?: FilterType;
+  formatFilter?: string | null;
+  onFilterChange?: (f: FilterType) => void;
+  onFormatFilterChange?: (f: string | null) => void;
 }
 
-export default function SidePanel({ data, nodeId, owner, repo }: Props) {
+export default function SidePanel({
+  data,
+  nodeId,
+  owner,
+  repo,
+  expanded = false,
+  filter = "all",
+  formatFilter = null,
+  onFilterChange,
+  onFormatFilterChange,
+}: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
+  const [cveQuery, setCveQuery] = useState<string>("");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
   /* Repo node gets a completely different detail view */
   if (node.type === "repo") {
-    return <RepoDetail data={data} node={node} owner={owner} repo={repo} />;
+    return (
+      <RepoDetail
+        data={data}
+        node={node}
+        owner={owner}
+        repo={repo}
+        expanded={expanded}
+        filter={filter}
+        formatFilter={formatFilter}
+        onFilterChange={onFilterChange}
+        onFormatFilterChange={onFormatFilterChange}
+      />
+    );
   }
+
+  const toggleSeverity = (s: FilterType) => {
+    if (!onFilterChange) return;
+    onFilterChange(filter === s ? "all" : s);
+  };
+  const toggleFormat = (f: string) => {
+    if (!onFormatFilterChange) return;
+    onFormatFilterChange(formatFilter === f ? null : f);
+  };
 
   const d = node.data;
   const sev = d.max_severity || "None";
@@ -52,16 +90,24 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
     : null;
 
   return (
-    <div className="side-panel">
+    <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
       <div className="panel-header">
         <h2 className="panel-title">{node.label}</h2>
         <span className="panel-version">{d.version}</span>
       </div>
 
       <div className="panel-status-row">
-        <span className="severity-badge" style={{ background: sevColor }}>
+        <button
+          type="button"
+          className={`severity-badge severity-badge-clickable${filter === sev ? " active" : ""}`}
+          style={{ background: sevColor }}
+          onClick={() => toggleSeverity(sev as FilterType)}
+          title={filter === sev ? `Clear ${sev} filter — showing all` : `Filter graph by ${sev}`}
+          disabled={!onFilterChange || sev === "None" || sev === "Unknown"}
+        >
           {sev}
-        </span>
+        </button>
         <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
           {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
         </span>
@@ -80,13 +126,21 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
 
       {/* Metadata grid */}
       <div className="panel-meta">
-        <MetaRow label="Format" value={d.format} />
+        <MetaRow
+          label="Format"
+          value={d.format}
+          onClick={d.format ? () => toggleFormat(d.format.toLowerCase()) : undefined}
+          active={!!d.format && formatFilter === d.format.toLowerCase()}
+        />
         <MetaRow label="License" value={d.license} />
         <MetaRow label="Size" value={sizeStr} />
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
         <MetaRow label="Scan Status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
       </div>
+      </div>
+
+      <div className="panel-details">
 
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
@@ -97,7 +151,16 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
         for (const c of sorted) {
           sevCounts[c.severity] = (sevCounts[c.severity] || 0) + 1;
         }
-        const filtered = sevFilter === "All" ? sorted : sorted.filter((c) => c.severity === sevFilter);
+        const q = cveQuery.trim().toLowerCase();
+        const filtered = sorted.filter((c) => {
+          if (sevFilter !== "All" && c.severity !== sevFilter) return false;
+          if (!q) return true;
+          return (
+            (c.id || "").toLowerCase().includes(q) ||
+            (c.description || "").toLowerCase().includes(q) ||
+            (c.affected || "").toLowerCase().includes(q)
+          );
+        });
         const filterOptions = ["All", "Critical", "High", "Medium", "Low"].filter(
           (s) => s === "All" || sevCounts[s]
         );
@@ -108,6 +171,26 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
               CVEs ({filtered.length}{filtered.length !== d.cves.length ? ` of ${d.cves.length}` : ""}
               {d.vuln_count > d.cves.length ? ` — ${d.vuln_count} total` : ""})
             </h3>
+            <div className="cve-search-row">
+              <span className="cve-search-icon" aria-hidden="true">⌕</span>
+              <input
+                type="text"
+                className="cve-search-input"
+                placeholder="Search CVEs (e.g. CVE-2024-1234)"
+                value={cveQuery}
+                onChange={(e) => setCveQuery(e.target.value)}
+              />
+              {cveQuery && (
+                <button
+                  type="button"
+                  className="cve-search-clear"
+                  onClick={() => setCveQuery("")}
+                  title="Clear"
+                >
+                  ×
+                </button>
+              )}
+            </div>
             <div className="cve-filter-bar">
               {filterOptions.map((s) => (
                 <button
@@ -121,7 +204,9 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
               ))}
             </div>
             <div className="cve-list">
-              {filtered.map((cve, i) => (
+              {filtered.length === 0 ? (
+                <div className="cve-empty">No CVEs match your search.</div>
+              ) : filtered.map((cve, i) => (
                 <CveCard
                   key={`${cve.id}-${i}`}
                   cve={cve}
@@ -144,11 +229,44 @@ export default function SidePanel({ data, nodeId, owner, repo }: Props) {
         </div>
       )}
 
-      {d.vuln_count === 0 && node.type === "package" && (
-        <div className="panel-section">
-          <p style={{ color: "#666" }}>No CVEs recorded for this package.</p>
-        </div>
-      )}
+      {d.vuln_count === 0 && node.type === "package" && (() => {
+        const unsupported = /not supported/i.test(d.scan_status || "");
+        if (unsupported) {
+          return (
+            <div className="panel-section">
+              <div className="no-cves-card no-cves-card-unsupported">
+                <div className="no-cves-icon" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <div className="no-cves-text">
+                  <strong>Scan not supported</strong>
+                  <span>Security scanning isn't available for this package format.</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="panel-section">
+            <div className="no-cves-card">
+              <div className="no-cves-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </div>
+              <div className="no-cves-text">
+                <strong>All clear</strong>
+                <span>No CVEs recorded for this package.</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      </div>
     </div>
   );
 }
@@ -157,17 +275,34 @@ function MetaRow({
   label,
   value,
   valueColor,
+  onClick,
+  active,
 }: {
   label: string;
   value: string;
   valueColor?: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
+  const text = value || "—";
   return (
     <>
       <span className="meta-label">{label}</span>
-      <span className="meta-value" style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}>
-        {value || "—"}
-      </span>
+      {onClick ? (
+        <button
+          type="button"
+          className={`meta-value meta-value-clickable${active ? " active" : ""}`}
+          style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}
+          onClick={onClick}
+          title={active ? "Clear filter" : `Filter graph by ${value}`}
+        >
+          {text}
+        </button>
+      ) : (
+        <span className="meta-value" style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}>
+          {text}
+        </span>
+      )}
     </>
   );
 }
@@ -244,11 +379,21 @@ function RepoDetail({
   node,
   owner,
   repo,
+  expanded = false,
+  filter = "all",
+  formatFilter = null,
+  onFilterChange,
+  onFormatFilterChange,
 }: {
   data: GraphResponse;
   node: GraphNode;
   owner: string;
   repo: string;
+  expanded?: boolean;
+  filter?: FilterType;
+  formatFilter?: string | null;
+  onFilterChange?: (f: FilterType) => void;
+  onFormatFilterChange?: (f: string | null) => void;
 }) {
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
@@ -288,8 +433,18 @@ function RepoDetail({
 
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
 
+  const toggleSeverity = (s: FilterType) => {
+    if (!onFilterChange) return;
+    onFilterChange(filter === s ? "all" : s);
+  };
+  const toggleFormat = (f: string) => {
+    if (!onFormatFilterChange) return;
+    onFormatFilterChange(formatFilter === f ? null : f);
+  };
+
   return (
-    <div className="side-panel">
+    <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
       <div className="panel-header">
         <div className="repo-header-row">
           <img src="/cloudsmith.png" alt="" className="repo-header-logo" />
@@ -331,42 +486,80 @@ function RepoDetail({
           <span className="repo-card-label">Total Findings</span>
         </div>
       </div>
+      </div>
 
-      {/* Severity breakdown */}
+      <div className="panel-details">
+
+      {/* Format breakdown */}
       <div className="panel-section">
-        <h3 className="section-title">Severity Breakdown</h3>
-        <div className="repo-sev-bars">
-          {(["Critical", "High", "Medium", "Low"] as const).map((s) => {
-            const count = stats.sevCounts[s];
-            const max = Math.max(...Object.values(stats.sevCounts), 1);
+        <h3 className="section-title">Package Formats</h3>
+        <div className="repo-format-grid">
+          {stats.formats.map(([fmt, count]) => {
+            const icon = getFormatIcon(fmt);
+            const fmtKey = fmt.toLowerCase();
+            const active = formatFilter === fmtKey;
+            const clickable = !!onFormatFilterChange && fmt !== "unknown";
             return (
-              <div key={s} className="repo-sev-row">
-                <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
-                <div className="repo-sev-track">
-                  <div
-                    className="repo-sev-fill"
-                    style={{ width: `${(count / max) * 100}%`, background: SEVERITY_COLORS[s] }}
-                  />
+              <button
+                key={fmt}
+                type="button"
+                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}`}
+                onClick={clickable ? () => toggleFormat(fmtKey) : undefined}
+                disabled={!clickable}
+                title={active ? "Clear format filter" : `Filter graph by ${fmt}`}
+              >
+                <div className="repo-format-card-icon">
+                  {icon ? (
+                    <img src={icon} alt={fmt} />
+                  ) : (
+                    <span className="repo-format-card-icon-fallback">{fmt.slice(0, 2).toUpperCase()}</span>
+                  )}
                 </div>
-                <span className="repo-sev-count">{count}</span>
-              </div>
+                <div className="repo-format-card-meta">
+                  <span className="repo-format-card-name">{fmt}</span>
+                  <span className="repo-format-card-count">{count}</span>
+                </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Format breakdown */}
-      <div className="panel-section">
-        <h3 className="section-title">Package Formats</h3>
-        <div className="repo-format-list">
-          {stats.formats.map(([fmt, count]) => (
-            <div key={fmt} className="repo-format-row">
-              <span className="repo-format-name">{fmt}</span>
-              <span className="repo-format-count">{count}</span>
-            </div>
-          ))}
+      {/* Severity breakdown */}
+      {(["Critical", "High", "Medium", "Low"] as const).some((s) => stats.sevCounts[s] > 0) && (
+        <div className="panel-section">
+          <h3 className="section-title">Severity Breakdown</h3>
+          <div className="repo-sev-bars">
+            {(["Critical", "High", "Medium", "Low"] as const)
+              .filter((s) => stats.sevCounts[s] > 0)
+              .map((s) => {
+                const count = stats.sevCounts[s];
+                const max = Math.max(...Object.values(stats.sevCounts), 1);
+                const active = filter === s;
+                const clickable = !!onFilterChange && count > 0;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`repo-sev-row${clickable ? " repo-sev-row-clickable" : ""}${active ? " active" : ""}`}
+                    onClick={clickable ? () => toggleSeverity(s) : undefined}
+                    disabled={!clickable}
+                    title={active ? `Clear ${s} filter` : `Filter graph by ${s}`}
+                  >
+                    <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
+                    <div className="repo-sev-track">
+                      <div
+                        className="repo-sev-fill"
+                        style={{ width: `${(count / max) * 100}%`, background: SEVERITY_COLORS[s] }}
+                      />
+                    </div>
+                    <span className="repo-sev-count">{count}</span>
+                  </button>
+                );
+              })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Most vulnerable packages */}
       {stats.topVuln.length > 0 && (
@@ -387,6 +580,7 @@ function RepoDetail({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
