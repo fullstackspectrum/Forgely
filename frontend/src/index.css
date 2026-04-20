@@ -1088,7 +1088,7 @@ body {
   text-align: right;
 }
 
-/* Format list */
+/* Format list (legacy) */
 .repo-format-list {
   display: flex;
   flex-direction: column;
@@ -1115,6 +1115,68 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent);
+}
+
+/* Format grid — icon cards */
+.repo-format-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.repo-format-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, background 0.15s;
+}
+.repo-format-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+.repo-format-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+}
+.repo-format-card-icon img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.repo-format-card-icon-fallback {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+.repo-format-card-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.repo-format-card-name {
+  font-size: 12px;
+  color: #ddd;
+  text-transform: capitalize;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.repo-format-card-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.2;
 }
 
 /* Most vulnerable */

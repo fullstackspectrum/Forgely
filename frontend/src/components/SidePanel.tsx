@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useState } from "react";
 import type { GraphResponse, GraphNode, CVERecord } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
+import { getFormatIcon } from "../lib/formatIcons";
 
 interface Props {
   data: GraphResponse;
@@ -344,6 +345,31 @@ function RepoDetail({
 
       <div className="panel-details">
 
+      {/* Format breakdown */}
+      <div className="panel-section">
+        <h3 className="section-title">Package Formats</h3>
+        <div className="repo-format-grid">
+          {stats.formats.map(([fmt, count]) => {
+            const icon = getFormatIcon(fmt);
+            return (
+              <div key={fmt} className="repo-format-card">
+                <div className="repo-format-card-icon">
+                  {icon ? (
+                    <img src={icon} alt={fmt} />
+                  ) : (
+                    <span className="repo-format-card-icon-fallback">{fmt.slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="repo-format-card-meta">
+                  <span className="repo-format-card-name">{fmt}</span>
+                  <span className="repo-format-card-count">{count}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Severity breakdown */}
       <div className="panel-section">
         <h3 className="section-title">Severity Breakdown</h3>
@@ -364,19 +390,6 @@ function RepoDetail({
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Format breakdown */}
-      <div className="panel-section">
-        <h3 className="section-title">Package Formats</h3>
-        <div className="repo-format-list">
-          {stats.formats.map(([fmt, count]) => (
-            <div key={fmt} className="repo-format-row">
-              <span className="repo-format-name">{fmt}</span>
-              <span className="repo-format-count">{count}</span>
-            </div>
-          ))}
         </div>
       </div>
 
