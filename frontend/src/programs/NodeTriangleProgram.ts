@@ -5,6 +5,7 @@
 import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
+import { drawDarkNodeHover } from "../lib/hoverRenderer";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
 
@@ -109,7 +110,7 @@ function drawTriangleNodeHover(
 
 export class NodeTriangleProgram extends NodeProgram<typeof UNIFORMS[number]> {
   drawLabel = drawDiscNodeLabel;
-  drawHover = drawTriangleNodeHover;
+  drawHover = drawDarkNodeHover;
 
   getDefinition() {
     return {

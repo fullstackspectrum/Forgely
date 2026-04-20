@@ -7,6 +7,7 @@
 import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
+import { drawDarkNodeHover } from "../lib/hoverRenderer";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
 
@@ -90,7 +91,7 @@ const UNIFORMS = ["u_sizeRatio", "u_correctionRatio", "u_matrix"] as const;
 
 export class NodeRingProgram extends NodeProgram<typeof UNIFORMS[number]> {
   drawLabel = drawDiscNodeLabel;
-  drawHover = drawDiscNodeLabel;
+  drawHover = drawDarkNodeHover;
 
   getDefinition() {
     return {

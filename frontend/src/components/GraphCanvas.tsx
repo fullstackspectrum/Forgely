@@ -9,6 +9,7 @@ import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
+import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -472,6 +473,7 @@ export default function GraphCanvas({
       labelSize: 12,
       stagePadding: 40,
       zIndex: true,
+      defaultDrawNodeHover: drawDarkNodeHover,
 
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
