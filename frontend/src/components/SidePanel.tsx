@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useState } from "react";
-import type { GraphResponse, GraphNode, CVERecord } from "../types";
+import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { getFormatIcon } from "../lib/formatIcons";
 
@@ -10,17 +10,52 @@ interface Props {
   owner: string;
   repo: string;
   expanded?: boolean;
+  filter?: FilterType;
+  formatFilter?: string | null;
+  onFilterChange?: (f: FilterType) => void;
+  onFormatFilterChange?: (f: string | null) => void;
 }
 
-export default function SidePanel({ data, nodeId, owner, repo, expanded = false }: Props) {
+export default function SidePanel({
+  data,
+  nodeId,
+  owner,
+  repo,
+  expanded = false,
+  filter = "all",
+  formatFilter = null,
+  onFilterChange,
+  onFormatFilterChange,
+}: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
   /* Repo node gets a completely different detail view */
   if (node.type === "repo") {
-    return <RepoDetail data={data} node={node} owner={owner} repo={repo} expanded={expanded} />;
+    return (
+      <RepoDetail
+        data={data}
+        node={node}
+        owner={owner}
+        repo={repo}
+        expanded={expanded}
+        filter={filter}
+        formatFilter={formatFilter}
+        onFilterChange={onFilterChange}
+        onFormatFilterChange={onFormatFilterChange}
+      />
+    );
   }
+
+  const toggleSeverity = (s: FilterType) => {
+    if (!onFilterChange) return;
+    onFilterChange(filter === s ? "all" : s);
+  };
+  const toggleFormat = (f: string) => {
+    if (!onFormatFilterChange) return;
+    onFormatFilterChange(formatFilter === f ? null : f);
+  };
 
   const d = node.data;
   const sev = d.max_severity || "None";
@@ -62,9 +97,16 @@ export default function SidePanel({ data, nodeId, owner, repo, expanded = false 
       </div>
 
       <div className="panel-status-row">
-        <span className="severity-badge" style={{ background: sevColor }}>
+        <button
+          type="button"
+          className={`severity-badge severity-badge-clickable${filter === sev ? " active" : ""}`}
+          style={{ background: sevColor }}
+          onClick={() => toggleSeverity(sev as FilterType)}
+          title={filter === sev ? `Clear ${sev} filter — showing all` : `Filter graph by ${sev}`}
+          disabled={!onFilterChange || sev === "None" || sev === "Unknown"}
+        >
           {sev}
-        </span>
+        </button>
         <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
           {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
         </span>
@@ -83,7 +125,12 @@ export default function SidePanel({ data, nodeId, owner, repo, expanded = false 
 
       {/* Metadata grid */}
       <div className="panel-meta">
-        <MetaRow label="Format" value={d.format} />
+        <MetaRow
+          label="Format"
+          value={d.format}
+          onClick={d.format ? () => toggleFormat(d.format.toLowerCase()) : undefined}
+          active={!!d.format && formatFilter === d.format.toLowerCase()}
+        />
         <MetaRow label="License" value={d.license} />
         <MetaRow label="Size" value={sizeStr} />
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
@@ -196,17 +243,34 @@ function MetaRow({
   label,
   value,
   valueColor,
+  onClick,
+  active,
 }: {
   label: string;
   value: string;
   valueColor?: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
+  const text = value || "—";
   return (
     <>
       <span className="meta-label">{label}</span>
-      <span className="meta-value" style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}>
-        {value || "—"}
-      </span>
+      {onClick ? (
+        <button
+          type="button"
+          className={`meta-value meta-value-clickable${active ? " active" : ""}`}
+          style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}
+          onClick={onClick}
+          title={active ? "Clear filter" : `Filter graph by ${value}`}
+        >
+          {text}
+        </button>
+      ) : (
+        <span className="meta-value" style={valueColor ? { color: valueColor, fontWeight: 600 } : undefined}>
+          {text}
+        </span>
+      )}
     </>
   );
 }
@@ -284,12 +348,20 @@ function RepoDetail({
   owner,
   repo,
   expanded = false,
+  filter = "all",
+  formatFilter = null,
+  onFilterChange,
+  onFormatFilterChange,
 }: {
   data: GraphResponse;
   node: GraphNode;
   owner: string;
   repo: string;
   expanded?: boolean;
+  filter?: FilterType;
+  formatFilter?: string | null;
+  onFilterChange?: (f: FilterType) => void;
+  onFormatFilterChange?: (f: string | null) => void;
 }) {
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
@@ -328,6 +400,15 @@ function RepoDetail({
   }, [data]);
 
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
+
+  const toggleSeverity = (s: FilterType) => {
+    if (!onFilterChange) return;
+    onFilterChange(filter === s ? "all" : s);
+  };
+  const toggleFormat = (f: string) => {
+    if (!onFormatFilterChange) return;
+    onFormatFilterChange(formatFilter === f ? null : f);
+  };
 
   return (
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
@@ -383,8 +464,18 @@ function RepoDetail({
         <div className="repo-format-grid">
           {stats.formats.map(([fmt, count]) => {
             const icon = getFormatIcon(fmt);
+            const fmtKey = fmt.toLowerCase();
+            const active = formatFilter === fmtKey;
+            const clickable = !!onFormatFilterChange && fmt !== "unknown";
             return (
-              <div key={fmt} className="repo-format-card">
+              <button
+                key={fmt}
+                type="button"
+                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}`}
+                onClick={clickable ? () => toggleFormat(fmtKey) : undefined}
+                disabled={!clickable}
+                title={active ? "Clear format filter" : `Filter graph by ${fmt}`}
+              >
                 <div className="repo-format-card-icon">
                   {icon ? (
                     <img src={icon} alt={fmt} />
@@ -396,7 +487,7 @@ function RepoDetail({
                   <span className="repo-format-card-name">{fmt}</span>
                   <span className="repo-format-card-count">{count}</span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -409,8 +500,17 @@ function RepoDetail({
           {(["Critical", "High", "Medium", "Low"] as const).map((s) => {
             const count = stats.sevCounts[s];
             const max = Math.max(...Object.values(stats.sevCounts), 1);
+            const active = filter === s;
+            const clickable = !!onFilterChange && count > 0;
             return (
-              <div key={s} className="repo-sev-row">
+              <button
+                key={s}
+                type="button"
+                className={`repo-sev-row${clickable ? " repo-sev-row-clickable" : ""}${active ? " active" : ""}`}
+                onClick={clickable ? () => toggleSeverity(s) : undefined}
+                disabled={!clickable}
+                title={active ? `Clear ${s} filter` : `Filter graph by ${s}`}
+              >
                 <span className="repo-sev-label" style={{ color: SEVERITY_COLORS[s] }}>{s}</span>
                 <div className="repo-sev-track">
                   <div
@@ -419,7 +519,7 @@ function RepoDetail({
                   />
                 </div>
                 <span className="repo-sev-count">{count}</span>
-              </div>
+              </button>
             );
           })}
         </div>
