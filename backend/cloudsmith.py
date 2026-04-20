@@ -7,12 +7,17 @@ import logging
 import time
 
 import requests
+from requests.adapters import HTTPAdapter
 
 log = logging.getLogger("forgely.cloudsmith")
 
 BASE_URL = "https://api.cloudsmith.io/v1"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2
+# Match the largest ThreadPoolExecutor used by main.py so concurrent
+# requests don't exhaust the urllib3 connection pool (which logs
+# "Connection pool is full, discarding connection").
+CONNECTION_POOL_SIZE = 32
 
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
@@ -20,6 +25,13 @@ SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 def create_session(api_key: str) -> requests.Session:
     s = requests.Session()
     s.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
+    adapter = HTTPAdapter(
+        pool_connections=CONNECTION_POOL_SIZE,
+        pool_maxsize=CONNECTION_POOL_SIZE,
+        pool_block=False,
+    )
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
     return s
 
 
