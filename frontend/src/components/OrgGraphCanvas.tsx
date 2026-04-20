@@ -9,6 +9,7 @@ import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
+import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 
@@ -285,6 +286,7 @@ export default function OrgGraphCanvas({
           labelSize: 12,
           stagePadding: 40,
           zIndex: true,
+          defaultDrawNodeHover: drawDarkNodeHover,
 
           nodeReducer: (node, attrs) => {
             const st = stateRef.current;
