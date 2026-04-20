@@ -772,7 +772,7 @@ body {
   top: 0;
   z-index: 2;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 4px;
   padding: 10px 14px 0;
@@ -790,6 +790,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: color 0.15s, background 0.15s;
+  margin-right: auto;
 }
 .panel-expand-btn:hover {
   color: var(--text-primary);
