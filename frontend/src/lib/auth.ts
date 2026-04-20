@@ -1,4 +1,4 @@
-const STORAGE_KEY = "artigraphly_api_key";
+const STORAGE_KEY = "forgely_api_key";
 
 /** Store API key in localStorage (base64 encoded) */
 export function saveApiKey(key: string): void {

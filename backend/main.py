@@ -1,4 +1,4 @@
-"""Artigraphly backend – FastAPI service that fetches Cloudsmith data."""
+"""Forgely backend – FastAPI service that fetches Cloudsmith data."""
 
 from __future__ import annotations
 
@@ -45,9 +45,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(name)s  %(message)s",
     datefmt="%H:%M:%S",
 )
-log = logging.getLogger("artigraphly.api")
+log = logging.getLogger("forgely.api")
 
-app = FastAPI(title="Artigraphly API", version="2.0.0")
+app = FastAPI(title="Forgely API", version="2.0.0")
 
 _allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(

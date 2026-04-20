@@ -1,4 +1,4 @@
-"""Cloudsmith API client for the Artigraphly backend."""
+"""Cloudsmith API client for the Forgely backend."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import time
 
 import requests
 
-log = logging.getLogger("artigraphly.cloudsmith")
+log = logging.getLogger("forgely.cloudsmith")
 
 BASE_URL = "https://api.cloudsmith.io/v1"
 MAX_RETRIES = 3

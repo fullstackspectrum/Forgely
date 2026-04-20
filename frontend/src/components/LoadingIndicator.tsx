@@ -41,7 +41,7 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
   return (
     <div className="loading-indicator">
       <div className="loading-logo-pulse">
-        <img src="/artigraphly-logo.png" alt="" className="loading-logo-img" />
+        <img src="/forgely-logo.png" alt="" className="loading-logo-img" />
       </div>
 
       <div className="loading-stages">
