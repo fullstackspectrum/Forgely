@@ -8,13 +8,18 @@
 
 **Forgely** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
-![Example – Packages Overview](assets/readme/example1.jpg)
+![Example – Artifacts Overview](assets/readme/example1.jpg)
 
-![Example – Packages Inspect](assets/readme/example2.jpg)
+![Example – Critical Artifacts](assets/readme/example2.jpg)
 
-![Example – Workspace Overview](assets/readme/example3.jpg)
+![Example – Artifacts Inspect](assets/readme/example3.jpg)
 
-![Example – Workspace Inspect](assets/readme/example4.jpg)
+![Example – Repo Inspect](assets/readme/example4.jpg)
+
+![Example – Workspace Overview](assets/readme/example5.jpg)
+
+![Example – User Inspect](assets/readme/example6.jpg)
+
 
 ## Architecture
 
