@@ -1,4 +1,4 @@
-/* ===== Artigraphly – Global Styles ===== */
+/* ===== Forgely – Global Styles ===== */
 
 :root {
   --bg-primary: #0f0f1a;
@@ -329,7 +329,7 @@ body {
 }
 
 .left-panel-header {
-  padding: 10px 14px;
+  padding: 16px 8px;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -339,7 +339,7 @@ body {
 }
 
 .left-panel-logo {
-  max-width: 70%;
+  width: 100%;
   height: auto;
   object-fit: contain;
 }

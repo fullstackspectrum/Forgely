@@ -26,8 +26,7 @@ export default function OrgLeftPanel({
   return (
     <div className="left-panel org-left-panel">
       <div className="left-panel-header">
-        <img src="/artigraphly-logo.png" alt="Artigraphly" className="left-panel-logo" />
-        <span className="left-panel-sub">Artifact Security Graph</span>
+        <img src="/forgely-logo.png" alt="Forgely" className="left-panel-logo" />
       </div>
 
       <div className="left-panel-tabs">

@@ -41,7 +41,7 @@ cleanup() {
 trap cleanup INT TERM
 
 echo ""
-echo "✔ Artigraphly running — open http://localhost:3000"
+echo "✔ Forgely running — open http://localhost:3000"
 echo "  Press Ctrl+C to stop."
 echo ""
 
