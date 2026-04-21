@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.0.0-beta.4 — 21 April 2026
+
+### Vulnly Integration
+- Integrated [vulnly](https://pypi.org/project/vulnly/) to generate self-contained HTML vulnerability reports
+- New backend endpoint `GET /api/vulnly-report/{owner}/{repo}/{slug}` fetches the latest Cloudsmith scan, pipes it through `vulnly --source cloudsmith`, and streams the rendered HTML
+- "Vulnly Report" button in the package side panel opens the report in a new tab
+  - Red variant for vulnerable packages, green variant for clean-scanned packages
+  - Inline spinner while generating, with error messaging on failure
+- Added `vulnly>=1.0.0b8` to `backend/requirements.txt`
+
+### Side Panel
+- Added a Dependencies section listing direct dependencies of the selected package
+- Summary card shows the total count and toggles the dependency list open/closed
+- Each dependency row shows name, version, and a severity-coloured vulnerability badge
+- Clicking a dependency selects it in the graph and refocuses the panel
+
 ## v1.0.0-beta.3 — 20 April 2026
 
 ### Branding
