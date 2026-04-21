@@ -1476,6 +1476,118 @@ body {
   text-align: center;
 }
 
+/* Dependencies section */
+.dep-summary-card {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.dep-summary-card-clickable {
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dep-summary-card-clickable:hover {
+  background: var(--bg-hover, #2a2a2a);
+  border-color: var(--accent, #4a90d9);
+}
+
+.dep-summary-card.expanded {
+  border-color: var(--accent, #4a90d9);
+}
+
+.dep-summary-chevron {
+  margin-left: auto;
+  font-size: 12px;
+  color: #888;
+  align-self: center;
+}
+
+.dep-summary-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
+.dep-summary-label {
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.dep-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.dep-row-clickable {
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+
+.dep-row-clickable:hover {
+  background: var(--bg-hover, #2a2a2a);
+  border-color: var(--accent, #4a90d9);
+}
+
+.dep-row:disabled {
+  cursor: default;
+}
+
+.dep-row-name {
+  flex: 1;
+  font-size: 12px;
+  color: #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dep-row-version {
+  font-size: 11px;
+  color: #888;
+  font-family: var(--font-mono, monospace);
+}
+
+.dep-row-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  min-width: 24px;
+  text-align: center;
+}
+
 /* CVE list */
 .cve-list {
   display: flex;
