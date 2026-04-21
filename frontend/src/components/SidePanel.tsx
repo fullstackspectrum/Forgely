@@ -14,6 +14,7 @@ interface Props {
   formatFilter?: string | null;
   onFilterChange?: (f: FilterType) => void;
   onFormatFilterChange?: (f: string | null) => void;
+  onNodeSelect?: (id: string) => void;
 }
 
 export default function SidePanel({
@@ -26,9 +27,11 @@ export default function SidePanel({
   formatFilter = null,
   onFilterChange,
   onFormatFilterChange,
+  onNodeSelect,
 }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [cveQuery, setCveQuery] = useState<string>("");
+  const [depsExpanded, setDepsExpanded] = useState(false);
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -89,6 +92,25 @@ export default function SidePanel({
     ? `https://app.cloudsmith.com/${owner}/r/${repo}/package-group/${d.format}/${encodeURIComponent(node.label)}/${d.slug}`
     : null;
 
+  /* Direct dependencies of this node (outgoing "dependency" edges) */
+  const dependencies = useMemo(() => {
+    const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
+    const seen = new Set<string>();
+    const list: GraphNode[] = [];
+    for (const e of data.edges) {
+      if (e.type !== "dependency" || e.source !== nodeId) continue;
+      if (seen.has(e.target)) continue;
+      seen.add(e.target);
+      const target = nodeMap.get(e.target);
+      if (target) list.push(target);
+    }
+    list.sort((a, b) => {
+      const av = (b.data.vuln_count || 0) - (a.data.vuln_count || 0);
+      return av !== 0 ? av : a.label.localeCompare(b.label);
+    });
+    return list;
+  }, [data, nodeId]);
+
   return (
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
       <div className="panel-summary">
@@ -141,6 +163,62 @@ export default function SidePanel({
       </div>
 
       <div className="panel-details">
+
+      {/* Dependencies */}
+      {dependencies.length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Dependencies</h3>
+          <button
+            type="button"
+            className={`dep-summary-card dep-summary-card-clickable${depsExpanded ? " expanded" : ""}`}
+            onClick={() => setDepsExpanded((v) => !v)}
+            aria-expanded={depsExpanded}
+            title={depsExpanded ? "Hide dependency list" : "Show dependency list"}
+          >
+            <span className="dep-summary-value">{dependencies.length}</span>
+            <span className="dep-summary-label">
+              direct {dependencies.length === 1 ? "dependency" : "dependencies"}
+            </span>
+            <span className="dep-summary-chevron" aria-hidden="true">
+              {depsExpanded ? "▾" : "▸"}
+            </span>
+          </button>
+          {depsExpanded && (
+            <div className="dep-list">
+              {dependencies.map((dep) => {
+                const sev = dep.data.max_severity || "None";
+                const sevColor = SEVERITY_COLORS[sev] || SEVERITY_COLORS.None;
+                const hasVulns = dep.data.vuln_count > 0;
+                const clickable = !!onNodeSelect;
+                return (
+                  <button
+                    key={dep.id}
+                    type="button"
+                    className={`dep-row${clickable ? " dep-row-clickable" : ""}`}
+                    onClick={clickable ? () => onNodeSelect!(dep.id) : undefined}
+                    disabled={!clickable}
+                    title={clickable ? `Focus ${dep.label} in graph` : dep.label}
+                  >
+                    <span className="dep-row-name">{dep.label}</span>
+                    {dep.data.version && (
+                      <span className="dep-row-version">{dep.data.version}</span>
+                    )}
+                    {hasVulns && (
+                      <span
+                        className="dep-row-badge"
+                        style={{ background: sevColor }}
+                        title={`${dep.data.vuln_count} ${dep.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}`}
+                      >
+                        {dep.data.vuln_count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
