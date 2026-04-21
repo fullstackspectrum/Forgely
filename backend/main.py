@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
+import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from cloudsmith import (
     SEVERITY_RANK,
@@ -24,7 +29,9 @@ from cloudsmith import (
     fetch_repo_privileges,
     fetch_repo_upstreams,
     fetch_repos,
+    fetch_scan_details,
     fetch_team_members,
+    fetch_vulnerability_scans,
     get_package_vulnerabilities,
 )
 from models import (
@@ -406,6 +413,58 @@ def validate_api_key(request: Request):
     except Exception as exc:
         log.warning("API key validation failed: %s", exc)
         return {"valid": False, "error": str(exc)}
+
+
+@app.get("/api/vulnly-report/{owner}/{repo}/{slug}")
+def vulnly_report(owner: str, repo: str, slug: str, request: Request):
+    """Generate an HTML vulnerability report for a package using vulnly.
+
+    Fetches the latest Cloudsmith vulnerability scan for the package, wraps
+    it in the expected `{"data": ...}` envelope, pipes it through the
+    `vulnly` CLI, and returns the rendered HTML inline.
+    """
+    api_key = _get_api_key(request)
+    session = create_session(api_key)
+
+    scans = fetch_vulnerability_scans(session, owner, repo, slug)
+    if not scans:
+        raise HTTPException(status_code=404, detail="No vulnerability scan available for this package.")
+
+    latest = max(scans, key=lambda s: s.get("created_at", ""))
+    scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
+
+    details: dict = {}
+    if scan_id:
+        details = fetch_scan_details(session, owner, repo, slug, str(scan_id)) or {}
+    if not details:
+        details = latest
+
+    payload = json.dumps({"data": details}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, "report.html")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith", "-o", out_path],
+                input=payload,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail=f"vulnly is not installed: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise HTTPException(status_code=504, detail="vulnly report generation timed out.") from exc
+
+        if proc.returncode != 0 or not os.path.exists(out_path):
+            err = proc.stderr.decode("utf-8", errors="replace")[:1000]
+            log.warning("vulnly failed (rc=%s): %s", proc.returncode, err)
+            raise HTTPException(status_code=500, detail=f"vulnly failed: {err.strip() or 'unknown error'}")
+
+        with open(out_path, "rb") as f:
+            html = f.read()
+
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 # ──────────────────────────────────────────────────────────────
