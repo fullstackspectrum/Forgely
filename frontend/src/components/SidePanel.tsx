@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { getFormatIcon } from "../lib/formatIcons";
+import { apiFetch } from "../lib/auth";
 
 interface Props {
   data: GraphResponse;
@@ -32,6 +33,8 @@ export default function SidePanel({
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [cveQuery, setCveQuery] = useState<string>("");
   const [depsExpanded, setDepsExpanded] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -92,6 +95,42 @@ export default function SidePanel({
     ? `https://app.cloudsmith.com/${owner}/r/${repo}/package-group/${d.format}/${encodeURIComponent(node.label)}/${d.slug}`
     : null;
 
+  const canGenerateReport =
+    node.type === "package" &&
+    !!d.slug &&
+    (d.vuln_count > 0 || /scanned/i.test(d.scan_status || ""));
+  const handleGenerateReport = async () => {
+    if (!canGenerateReport || reportLoading) return;
+    setReportLoading(true);
+    setReportError(null);
+    /* Open the new tab synchronously to avoid popup blockers,
+       then navigate it once the blob URL is ready. */
+    const win = window.open("", "_blank");
+    try {
+      const resp = await apiFetch(
+        `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}`,
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      if (win) {
+        win.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
+      /* Revoke after the new tab has had a chance to load. */
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      if (win) win.close();
+      setReportError(err instanceof Error ? err.message : "Failed to generate report");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   /* Direct dependencies of this node (outgoing "dependency" edges) */
   const dependencies = useMemo(() => {
     const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
@@ -133,6 +172,27 @@ export default function SidePanel({
         <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
           {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
         </span>
+        {canGenerateReport && (
+          <button
+            type="button"
+            className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}`}
+            onClick={handleGenerateReport}
+            disabled={reportLoading}
+            title={reportLoading ? "Generating report…" : "Generate Vulnly HTML report"}
+          >
+            {reportLoading ? (
+              <span className="vulnly-spinner" aria-hidden="true" />
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="15" y2="17" />
+              </svg>
+            )}
+            <span>{reportLoading ? "Generating…" : "Vulnly Report"}</span>
+          </button>
+        )}
         {cloudsmithUrl && (
           <a
             className="cloudsmith-view-btn"
@@ -145,6 +205,11 @@ export default function SidePanel({
           </a>
         )}
       </div>
+      {reportError && (
+        <div className="vulnly-report-error" role="alert">
+          ⚠ {reportError}
+        </div>
+      )}
 
       {/* Metadata grid */}
       <div className="panel-meta">
