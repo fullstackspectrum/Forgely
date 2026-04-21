@@ -36,6 +36,8 @@
 - **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low
 - **Layout switcher** — Force-directed, Circular, Radial, Tree (top-down), Horizontal (left-to-right)
 - **Refresh button** — force re-fetch from Cloudsmith API
+- **Vulnly reports** — generate self-contained HTML vulnerability reports for any scanned package via [vulnly](https://pypi.org/project/vulnly/), opened directly in a new tab
+- **Dependencies panel** — expandable list of a package’s direct dependencies with severity badges; click to refocus the graph on that node
 - **Dark security-product theme** — graph-paper grid background, glassmorphism toolbars, custom scrollbars
 
 ## 🚀 Quick Start
@@ -158,6 +160,7 @@ Forgely/
 | `/api/repos/{owner}` | GET | List repositories for a workspace |
 | `/api/graph` | GET | Fetch graph data (cached for 5 min) |
 | `/api/graph/refresh` | POST | Force re-fetch from Cloudsmith |
+| `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate an HTML vulnerability report for a package using [vulnly](https://pypi.org/project/vulnly/) |
 
 ## ⚙️ Configuration
 
