@@ -157,9 +157,9 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     pkg_metas: list[dict] = []
     for pkg in packages:
         slug = pkg["slug_perm"]
-        name = pkg["name"]
-        version = pkg.get("version", "")
-        node_id = f"{name}@{version}" if version else name
+        name = pkg.get("name") or pkg.get("slug_perm") or ""
+        version = pkg.get("version") or ""
+        node_id = f"{name}@{version}" if version else (name or slug)
 
         if node_id in seen_ids:
             slug_to_id.setdefault(slug, node_id)
