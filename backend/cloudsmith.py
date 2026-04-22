@@ -214,9 +214,9 @@ def fetch_dependencies(session: requests.Session, owner: str, repo: str, slug: s
         data = _api_get(session, url)
         return data.get("dependencies", []) if isinstance(data, dict) else data
     except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
-            return []
-        raise
+        status = exc.response.status_code if exc.response is not None else None
+        log.warning("fetch_dependencies failed for %s (HTTP %s) – skipping", slug, status)
+        return []
 
 
 def fetch_vulnerability_scans(session: requests.Session, owner: str, repo: str, slug: str) -> list[dict]:
