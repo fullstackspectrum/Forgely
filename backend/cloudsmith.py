@@ -60,8 +60,17 @@ def fetch_namespaces(session: requests.Session) -> list[dict]:
 def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all repositories within a namespace."""
     url = f"{BASE_URL}/repos/{owner}/"
-    data = _api_get(session, url)
-    return data if isinstance(data, list) else []
+    page = 1
+    repos: list[dict] = []
+    while True:
+        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        if not data:
+            break
+        repos.extend(data if isinstance(data, list) else [])
+        if not isinstance(data, list) or len(data) < 100:
+            break
+        page += 1
+    return repos
 
 
 def fetch_org_members(session: requests.Session, owner: str) -> list[dict]:
