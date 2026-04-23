@@ -213,6 +213,7 @@ export default function GraphCanvas({
     hideSharedCveEdges,
     hideUnsupported,
     neighbors: new Set<string>(),
+    hoverNeighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
@@ -225,6 +226,11 @@ export default function GraphCanvas({
     const neighbors = new Set<string>();
     if (selectedNode && graphRef.current) {
       graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
+    }
+
+    const hoverNeighbors = new Set<string>();
+    if (hoveredNode && graphRef.current) {
+      graphRef.current.forEachNeighbor(hoveredNode, (n) => hoverNeighbors.add(n));
     }
 
     /* Nodes connected to search results via shared_cve or dependency edges */
@@ -272,6 +278,7 @@ export default function GraphCanvas({
       hideDependencies,
       hideUnsupported,
       neighbors,
+      hoverNeighbors,
       searchConnected,
       sharedCveNodes,
       hasDepNodes,
@@ -586,23 +593,46 @@ export default function GraphCanvas({
           return res;
         }
 
-        /* --- Selection / hover --- */
-        if (st.selectedNode) {
+        /* --- Severity-based z-layering so important nodes render in front --- */
+        if (attrs.nodeType === "repo") {
+          res.zIndex = 4;
+        } else if (attrs.nodeType === "package") {
+          const sev = (attrs as any).severity;
+          if (sev === "Critical")     res.zIndex = 3;
+          else if (sev === "High")    res.zIndex = 2;
+          else if (sev === "Medium")  res.zIndex = 1;
+        }
+
+        /* --- Selection / hover: fade everything that isn't directly relevant --- */
+        if (st.hoveredNode === node) {
+          /* Always bring hovered node to the front regardless of selection */
+          res.highlighted = true;
+          res.size = (attrs.size ?? 1) * 1.25;
+          res.zIndex = 9;
+        } else if (st.selectedNode) {
           if (node === st.selectedNode) {
             res.highlighted = true;
-            res.zIndex = 1;
+            res.zIndex = 10;
           } else if (st.neighbors.has(node)) {
-            /* keep visible */
+            /* Direct neighbours stay visible, just slightly behind selected */
+            res.zIndex = 5;
           } else {
-            res.color = "#1a1a2e";
+            /* Everything else: ghost — tiny, near-background, pushed to back */
+            res.color = "#111220";
+            res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
             res.label = "";
+            res.zIndex = -2;
+          }
+        } else if (st.hoveredNode) {
+          /* Hover-only (no selection): fade non-connected nodes more subtly */
+          if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
+            res.color = "#0e0f1c";
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
+            res.label = "";
+            res.zIndex = -1;
           }
         }
-        if (st.hoveredNode === node) {
-          res.highlighted = true;
-          res.size = attrs.size * 1.25;
-          res.zIndex = 2;
-        }
+
         return res;
       },
 
@@ -652,17 +682,19 @@ export default function GraphCanvas({
           if (src !== st.selectedNode && tgt !== st.selectedNode) {
             res.hidden = true;
           } else {
-            res.size = (attrs.size ?? 1) * 1.5;
+            res.size = (attrs.size ?? 1) * 2;
+            const kind = graph.getEdgeAttribute(edge, "edgeKind");
+            if (kind === "shared_cve")    res.color = "rgba(255,90,90,0.90)";
+            else if (kind === "dependency") res.color = "rgba(155,80,210,0.90)";
+            else                            res.color = "rgba(74,144,217,0.90)";
           }
         }
 
-        if (st.hoveredNode) {
+        if (st.hoveredNode && !st.selectedNode) {
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
-            if (!st.selectedNode) {
-              res.color = "rgba(50,50,50,0.15)";
-            }
+            res.color = "rgba(30, 32, 50, 0.08)";
           }
         }
 
@@ -693,6 +725,8 @@ export default function GraphCanvas({
     let rafId = 0;
     const startTime = performance.now();
     const tick = () => {
+      // Stop looping if this sigma instance has been torn down
+      if (cancelled) return;
       stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.35;
       // Sync echo node positions to their parent (in case layout moved parents)
       graph.forEachNode((nid, attrs) => {
@@ -706,6 +740,8 @@ export default function GraphCanvas({
       });
       sigma.refresh({ skipIndexation: true });
       rafId = requestAnimationFrame(tick);
+      // Keep the stored id current so cleanup always cancels the latest frame
+      (sigma as any)._pulseRaf = rafId;
     };
     rafId = requestAnimationFrame(tick);
     (sigma as any)._pulseRaf = rafId;
