@@ -1,7 +1,9 @@
 /**
  * Glass-style node hover renderer: layered canvas card with gradient body,
  * top sheen, severity accent bar, and an inline severity badge.
+ * Also exports a custom label drawer that renders a lock badge for quarantined nodes.
  */
+import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -27,9 +29,10 @@ export function drawDarkNodeHover(
   const fontSize  = settings.labelSize  ?? 12;
   const font      = settings.labelFont  ?? "Inter, system-ui, sans-serif";
   const weight    = settings.labelWeight ?? "600";
-  const label     = (data.label as string | null | undefined) ?? "";
-  const severity  = data.severity  as string | undefined;
-  const nodeType  = data.nodeType  as string | undefined;
+  const label          = (data.label as string | null | undefined) ?? "";
+  const severity       = data.severity      as string | undefined;
+  const nodeType       = data.nodeType      as string | undefined;
+  const isQuarantined  = !!data.is_quarantined;
 
   // Skip empty hover for repo nodes
   if (!label) return;
@@ -52,10 +55,16 @@ export function drawDarkNodeHover(
     contentW = Math.max(contentW, context.measureText(severity).width + 16);
     context.font = `${weight} ${fontSize}px ${font}`;
   }
+  if (isQuarantined) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    contentW = Math.max(contentW, context.measureText("Quarantined").width + 22);
+    context.font = `${weight} ${fontSize}px ${font}`;
+  }
 
   const accentW   = SEVERITY_COLORS[severity ?? ""] ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
-  const boxHeight = Math.round(fontSize + PAD_Y * 2 + (showSeverity ? fontSize + INNER_GAP : 0));
+  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
+  const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
 
   const x = data.x + data.size + 8;
   const y = data.y - boxHeight / 2;
@@ -109,21 +118,128 @@ export function drawDarkNodeHover(
   }
 
   // ── Layer 6: severity badge ───────────────────────────────────────────────
+  let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(255,255,255,0.08)", "#aaa"];
-    const sevW    = context.measureText(severity).width + 14;
-    const badgeH  = Math.round(fontSize - 1);
-    const badgeY  = y + PAD_Y + fontSize + INNER_GAP;
+    const sevW   = context.measureText(severity).width + 14;
+    const badgeH = Math.round(fontSize - 1);
 
     context.fillStyle = badgeBg;
-    roundedRect(context, textX, badgeY, sevW, badgeH, 3);
+    roundedRect(context, textX, nextRowY, sevW, badgeH, 3);
     context.fill();
 
     context.fillStyle    = badgeFg;
     context.textBaseline = "top";
-    context.fillText(severity, textX + 7, badgeY + 1);
+    context.fillText(severity, textX + 7, nextRowY + 1);
+    nextRowY += fontSize + INNER_GAP;
   }
+
+  // ── Layer 7: quarantine badge row ────────────────────────────────────────
+  if (isQuarantined) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    const qText  = "Quarantined";
+    const qW     = context.measureText(qText).width + 22;
+    const badgeH = Math.round(fontSize - 1);
+
+    context.fillStyle = "rgba(245,158,11,0.20)";
+    roundedRect(context, textX, nextRowY, qW, badgeH, 3);
+    context.fill();
+
+    context.fillStyle    = "#f59e0b";
+    context.textBaseline = "top";
+    context.fillText(qText, textX + 15, nextRowY + 1);
+
+    // Small lock glyph before the text
+    const lx = textX + 7, ly = nextRowY + badgeH / 2;
+    const lr = badgeH * 0.28;
+    context.strokeStyle = "#f59e0b";
+    context.lineWidth   = lr * 0.7;
+    context.lineCap     = "round";
+    context.beginPath();
+    context.arc(lx, ly - lr * 0.5, lr * 0.6, Math.PI, 0);
+    context.stroke();
+    context.fillStyle = "#f59e0b";
+    context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
+  }
+
+  // ── Layer 8: corner lock badge on the node itself ────────────────────────
+  if (isQuarantined) {
+    const br = Math.max(5, (data.size ?? 1) * 0.58);
+    drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, br);
+  }
+}
+
+/** Custom label drawer: renders the standard disc label then overlays a
+ *  lock badge at the top-right corner for quarantined package nodes. */
+export function drawNodeLabel(
+  context: CanvasRenderingContext2D,
+  data: any,
+  settings: Settings,
+): void {
+  drawDiscNodeLabel(context, data, settings);
+  if (data.is_quarantined) {
+    const r = Math.max(5, (data.size ?? 1) * 0.58);
+    drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, r);
+  }
+}
+
+/** Draws a small amber lock badge centred at (cx, cy) with radius r. */
+function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+
+  // Amber circle background with drop shadow
+  ctx.shadowColor   = "rgba(0,0,0,0.60)";
+  ctx.shadowBlur    = r * 1.0;
+  ctx.shadowOffsetY = r * 0.35;
+  ctx.fillStyle = "#f59e0b";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dark border
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(0,0,0,0.40)";
+  ctx.lineWidth   = r * 0.20;
+  ctx.stroke();
+
+  // Lock icon (white)
+  ctx.strokeStyle = "#fff";
+  ctx.fillStyle   = "#fff";
+  ctx.lineWidth   = r * 0.25;
+  ctx.lineCap     = "round";
+
+  // Shackle (open arc, top half)
+  const shackleR = r * 0.3;
+  const shackleY = cy - r * 0.1;
+  ctx.beginPath();
+  ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
+  ctx.stroke();
+
+  // Lock body (filled rounded rect)
+  const bw = r * 0.68, bh = r * 0.48;
+  const bx = cx - bw / 2, by = cy + r * 0.08;
+  const br = r * 0.1;
+  ctx.beginPath();
+  ctx.moveTo(bx + br, by);
+  ctx.lineTo(bx + bw - br, by);
+  ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+  ctx.lineTo(bx + bw, by + bh - br);
+  ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+  ctx.lineTo(bx + br, by + bh);
+  ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+  ctx.lineTo(bx, by + br);
+  ctx.quadraticCurveTo(bx, by, bx + br, by);
+  ctx.closePath();
+  ctx.fill();
+
+  // Keyhole dot (amber cutout)
+  ctx.fillStyle = "#f59e0b";
+  ctx.beginPath();
+  ctx.arc(cx, by + bh * 0.46, r * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
