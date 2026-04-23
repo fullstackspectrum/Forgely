@@ -24,15 +24,27 @@ const NODE_SIZE: Record<string, number> = {
 };
 
 const EDGE_COLORS: Record<string, string> = {
-  org_repo: "rgba(40,167,69,0.5)",
-  member_org: "rgba(255,140,26,0.5)",
-  service_org: "rgba(167,109,255,0.5)",
-  team_org: "rgba(255,77,135,0.5)",
-  team_member: "rgba(255,77,135,0.6)",
-  access: "rgba(74,144,217,0.25)",
+  org_repo:         "rgba(40,167,69,0.5)",
+  member_org:       "rgba(255,140,26,0.5)",
+  service_org:      "rgba(167,109,255,0.5)",
+  team_org:         "rgba(255,77,135,0.5)",
+  team_member:      "rgba(255,77,135,0.6)",
+  access:           "rgba(74,144,217,0.25)",
   entitlement_repo: "rgba(255,209,26,0.4)",
-  repo_upstream: "rgba(0,188,212,0.5)",
-  shared_upstream: "rgba(255,87,34,0.7)",
+  repo_upstream:    "rgba(0,188,212,0.5)",
+  shared_upstream:  "rgba(255,87,34,0.7)",
+};
+
+const EDGE_COLORS_BRIGHT: Record<string, string> = {
+  org_repo:         "rgba(40,167,69,0.90)",
+  member_org:       "rgba(255,140,26,0.90)",
+  service_org:      "rgba(167,109,255,0.90)",
+  team_org:         "rgba(255,77,135,0.90)",
+  team_member:      "rgba(255,77,135,0.90)",
+  access:           "rgba(74,144,217,0.85)",
+  entitlement_repo: "rgba(255,209,26,0.90)",
+  repo_upstream:    "rgba(0,188,212,0.90)",
+  shared_upstream:  "rgba(255,87,34,0.90)",
 };
 
 function assignOrgTreeLayout(graph: Graph, horizontal: boolean) {
@@ -144,7 +156,15 @@ export default function OrgGraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
-  const stateRef = useRef({ selectedNode, neighbors: new Set<string>(), filter, filterConnected: new Set<string>(), searchResults: new Set<string>() });
+  const stateRef = useRef({
+    selectedNode,
+    hoveredNode: null as string | null,
+    neighbors: new Set<string>(),
+    hoverNeighbors: new Set<string>(),
+    filter,
+    filterConnected: new Set<string>(),
+    searchResults: new Set<string>(),
+  });
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -161,7 +181,14 @@ export default function OrgGraphCanvas({
         }
       });
     }
-    stateRef.current = { selectedNode, neighbors, filter, filterConnected, searchResults: new Set(searchResults) };
+    stateRef.current = {
+      ...stateRef.current,
+      selectedNode,
+      neighbors,
+      filter,
+      filterConnected,
+      searchResults: new Set(searchResults),
+    };
     sigmaRef.current?.refresh();
   }, [selectedNode, filter, searchResults]);
 
@@ -292,12 +319,11 @@ export default function OrgGraphCanvas({
             const st = stateRef.current;
             const res = { ...attrs };
             const nType = attrs.nodeType as string;
+            const isOrg = nType === "org";
 
             /* Type filter: show org, matching type, and connected neighbors */
-            if (st.filter !== "all" && nType !== "org" && nType !== st.filter) {
+            if (st.filter !== "all" && !isOrg && nType !== st.filter) {
               if (st.filterConnected.has(node)) {
-                /* Connected to a filtered node — show but dimmed */
-                res.color = res.color ?? "#666";
                 res.zIndex = 0;
               } else {
                 res.hidden = true;
@@ -310,26 +336,41 @@ export default function OrgGraphCanvas({
               if (st.searchResults.has(node)) {
                 res.highlighted = true;
                 res.zIndex = 10;
-              } else if (nType === "org") {
-                /* keep org visible */
-              } else {
-                res.color = "#1a1a2e";
+              } else if (!isOrg) {
+                res.color = "#111220";
+                res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
                 res.label = "";
+                res.zIndex = -2;
               }
               return res;
             }
 
-            if (st.selectedNode) {
+            /* --- Selection / hover: ghost everything that isn't relevant --- */
+            if (st.hoveredNode === node) {
+              res.highlighted = true;
+              res.size = (attrs.size ?? 1) * 1.25;
+              res.zIndex = 9;
+            } else if (st.selectedNode) {
               if (node === st.selectedNode) {
                 res.highlighted = true;
                 res.zIndex = 10;
               } else if (st.neighbors.has(node)) {
-                /* keep visible */
-              } else {
-                res.color = "#1a1a2e";
+                res.zIndex = 5;
+              } else if (!isOrg) {
+                res.color = "#111220";
+                res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
                 res.label = "";
+                res.zIndex = -2;
+              }
+            } else if (st.hoveredNode) {
+              if (!st.hoverNeighbors.has(node) && !isOrg) {
+                res.color = "#0e0f1c";
+                res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
+                res.label = "";
+                res.zIndex = -1;
               }
             }
+
             return res;
           },
 
@@ -338,8 +379,9 @@ export default function OrgGraphCanvas({
             const res = { ...attrs };
             const src = graph.source(edge);
             const tgt = graph.target(edge);
+            const kind = graph.getEdgeAttribute(edge, "edgeKind") as string;
 
-            /* Show edges where at least one endpoint matches the filter */
+            /* Type filter */
             if (st.filter !== "all") {
               const srcType = graph.getNodeAttribute(src, "nodeType") as string;
               const tgtType = graph.getNodeAttribute(tgt, "nodeType") as string;
@@ -363,17 +405,33 @@ export default function OrgGraphCanvas({
               if (src !== st.selectedNode && tgt !== st.selectedNode) {
                 res.hidden = true;
               } else {
-                res.size = (attrs.size ?? 1) * 1.5;
+                res.size = (attrs.size ?? 1) * 2;
+                res.color = EDGE_COLORS_BRIGHT[kind] ?? "rgba(180,180,220,0.90)";
+              }
+            } else if (st.hoveredNode) {
+              if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
+                res.color = "rgba(30, 32, 50, 0.08)";
               }
             }
+
             return res;
           },
         });
 
         sigma.on("clickNode", ({ node }) => onNodeSelect(node));
         sigma.on("clickStage", () => onNodeSelect(null));
-        sigma.on("enterNode", () => { container.style.cursor = "pointer"; });
-        sigma.on("leaveNode", () => { container.style.cursor = "default"; });
+        sigma.on("enterNode", ({ node }) => {
+          container.style.cursor = "pointer";
+          const hoverNeighbors = new Set<string>();
+          graph.forEachNeighbor(node, (n) => hoverNeighbors.add(n));
+          stateRef.current = { ...stateRef.current, hoveredNode: node, hoverNeighbors };
+          sigma.refresh();
+        });
+        sigma.on("leaveNode", () => {
+          container.style.cursor = "default";
+          stateRef.current = { ...stateRef.current, hoveredNode: null, hoverNeighbors: new Set() };
+          sigma.refresh();
+        });
 
         sigmaRef.current = sigma;
         graphRef.current = graph;
