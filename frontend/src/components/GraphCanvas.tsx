@@ -707,6 +707,8 @@ export default function GraphCanvas({
     let rafId = 0;
     const startTime = performance.now();
     const tick = () => {
+      // Stop looping if this sigma instance has been torn down
+      if (cancelled) return;
       stateRef.current.pulsePhase = ((performance.now() - startTime) / 1000) * 2 * Math.PI * 0.35;
       // Sync echo node positions to their parent (in case layout moved parents)
       graph.forEachNode((nid, attrs) => {
@@ -720,6 +722,8 @@ export default function GraphCanvas({
       });
       sigma.refresh({ skipIndexation: true });
       rafId = requestAnimationFrame(tick);
+      // Keep the stored id current so cleanup always cancels the latest frame
+      (sigma as any)._pulseRaf = rafId;
     };
     rafId = requestAnimationFrame(tick);
     (sigma as any)._pulseRaf = rafId;
