@@ -36,6 +36,28 @@ export default function SidePanel({
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const node = data.nodes.find((n) => n.id === nodeId);
+
+  /* Direct dependencies of this node (outgoing "dependency" edges).
+     Must be declared before any early returns to satisfy the Rules of Hooks. */
+  const dependencies = useMemo(() => {
+    if (!node || node.type !== "package") return [];
+    const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
+    const seen = new Set<string>();
+    const list: GraphNode[] = [];
+    for (const e of data.edges) {
+      if (e.type !== "dependency" || e.source !== nodeId) continue;
+      if (seen.has(e.target)) continue;
+      seen.add(e.target);
+      const target = nodeMap.get(e.target);
+      if (target) list.push(target);
+    }
+    list.sort((a, b) => {
+      const av = (b.data.vuln_count || 0) - (a.data.vuln_count || 0);
+      return av !== 0 ? av : a.label.localeCompare(b.label);
+    });
+    return list;
+  }, [data, nodeId, node]);
+
   if (!node) return null;
 
   /* Repo node gets a completely different detail view */
@@ -130,25 +152,6 @@ export default function SidePanel({
       setReportLoading(false);
     }
   };
-
-  /* Direct dependencies of this node (outgoing "dependency" edges) */
-  const dependencies = useMemo(() => {
-    const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
-    const seen = new Set<string>();
-    const list: GraphNode[] = [];
-    for (const e of data.edges) {
-      if (e.type !== "dependency" || e.source !== nodeId) continue;
-      if (seen.has(e.target)) continue;
-      seen.add(e.target);
-      const target = nodeMap.get(e.target);
-      if (target) list.push(target);
-    }
-    list.sort((a, b) => {
-      const av = (b.data.vuln_count || 0) - (a.data.vuln_count || 0);
-      return av !== 0 ? av : a.label.localeCompare(b.label);
-    });
-    return list;
-  }, [data, nodeId]);
 
   return (
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
