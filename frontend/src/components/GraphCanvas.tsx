@@ -586,22 +586,32 @@ export default function GraphCanvas({
           return res;
         }
 
+        /* --- Severity-based z-layering so important nodes render in front --- */
+        if (attrs.nodeType === "repo") {
+          res.zIndex = 4;
+        } else if (attrs.nodeType === "package") {
+          const sev = (attrs as any).severity;
+          if (sev === "Critical")     res.zIndex = 3;
+          else if (sev === "High")    res.zIndex = 2;
+          else if (sev === "Medium")  res.zIndex = 1;
+        }
+
         /* --- Selection / hover --- */
         if (st.selectedNode) {
           if (node === st.selectedNode) {
             res.highlighted = true;
-            res.zIndex = 1;
+            res.zIndex = 10;
           } else if (st.neighbors.has(node)) {
             /* keep visible */
           } else {
-            res.color = "#1a1a2e";
+            res.color = "#1e2038";
             res.label = "";
           }
         }
         if (st.hoveredNode === node) {
           res.highlighted = true;
           res.size = attrs.size * 1.25;
-          res.zIndex = 2;
+          res.zIndex = 9;
         }
         return res;
       },
@@ -652,7 +662,11 @@ export default function GraphCanvas({
           if (src !== st.selectedNode && tgt !== st.selectedNode) {
             res.hidden = true;
           } else {
-            res.size = (attrs.size ?? 1) * 1.5;
+            res.size = (attrs.size ?? 1) * 2;
+            const kind = graph.getEdgeAttribute(edge, "edgeKind");
+            if (kind === "shared_cve")    res.color = "rgba(255,90,90,0.90)";
+            else if (kind === "dependency") res.color = "rgba(155,80,210,0.90)";
+            else                            res.color = "rgba(74,144,217,0.90)";
           }
         }
 
@@ -661,7 +675,7 @@ export default function GraphCanvas({
           const tgt = graph.target(edge);
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
             if (!st.selectedNode) {
-              res.color = "rgba(50,50,50,0.15)";
+              res.color = "rgba(38, 40, 62, 0.12)";
             }
           }
         }
