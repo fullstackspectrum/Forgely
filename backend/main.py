@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from cloudsmith import (
+    APP_VERSION,
     SEVERITY_RANK,
     create_session,
     fetch_all_packages,
@@ -54,7 +55,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("forgely.api")
 
-app = FastAPI(title="Forgely API", version="2.0.0")
+app = FastAPI(title="Forgely API", version=APP_VERSION)
 
 _allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
