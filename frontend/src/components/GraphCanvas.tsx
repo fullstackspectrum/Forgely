@@ -9,7 +9,7 @@ import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
-import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -403,6 +403,7 @@ export default function GraphCanvas({
         severity: sev,
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
+        is_quarantined: node.data.is_quarantined ?? false,
         ...(node.type === "dependency"
           ? { type: "hexagon" }
           : nodeImage
@@ -486,6 +487,7 @@ export default function GraphCanvas({
       stagePadding: 40,
       zIndex: true,
       defaultDrawNodeHover: drawDarkNodeHover,
+      defaultDrawNodeLabel: drawNodeLabel,
 
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;

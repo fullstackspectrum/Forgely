@@ -23,6 +23,7 @@ export interface NodeData {
   uploaded_at: string;
   slug: string;
   pkg_type: string;
+  is_quarantined: boolean;
 }
 
 export interface GraphNode {

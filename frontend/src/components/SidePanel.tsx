@@ -175,6 +175,15 @@ export default function SidePanel({
         <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
           {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
         </span>
+        {d.is_quarantined && (
+          <span className="quarantine-badge" title="This package is quarantined">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Quarantined
+          </span>
+        )}
         {canGenerateReport && (
           <button
             type="button"
