@@ -11,6 +11,7 @@ from requests.adapters import HTTPAdapter
 
 log = logging.getLogger("forgely.cloudsmith")
 
+APP_VERSION = "1.0.0-beta.5"
 BASE_URL = "https://api.cloudsmith.io/v1"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2
@@ -24,7 +25,11 @@ SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
 def create_session(api_key: str) -> requests.Session:
     s = requests.Session()
-    s.headers.update({"X-Api-Key": api_key, "Accept": "application/json"})
+    s.headers.update({
+        "X-Api-Key": api_key,
+        "Accept": "application/json",
+        "User-Agent": f"Forgely/{APP_VERSION}",
+    })
     adapter = HTTPAdapter(
         pool_connections=CONNECTION_POOL_SIZE,
         pool_maxsize=CONNECTION_POOL_SIZE,
