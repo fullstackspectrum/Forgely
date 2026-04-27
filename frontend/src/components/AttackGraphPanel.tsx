@@ -106,6 +106,13 @@ interface Props {
 export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }: Props) {
   const [cveExpanded, setCveExpanded] = useState(false);
 
+  /* Close on Escape key */
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   const packageNode = data.nodes.find((n) => n.id === packageNodeId);
   if (!packageNode) return null;
 
@@ -146,7 +153,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
             <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
             <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
           </svg>
-          <span className="ag-header-title">Attack Graph</span>
+          <span className="ag-header-title">Attack Path</span>
           <span className="ag-header-pkg">{packageNode.label}</span>
           {isQuarantined && (
             <span className="ag-header-quarantine-badge">
@@ -167,7 +174,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
         displayRepos={displayRepos}
         criticalCves={topCves}
         cveExpanded={cveExpanded}
-        onToggleCve={() => setCveExpanded((v) => !v)}
+        onToggleCve={() => { if (topCves.length <= 10) setCveExpanded((v) => !v); }}
         owner={owner}
         repoSlug={data.repo}
         maxSev={maxSev}
@@ -637,11 +644,11 @@ function AttackGraphCanvas({
               );
             })
           ) : (
-            /* CVE summary — clickable */
+            /* CVE summary — clickable when ≤ 10 CVEs */
             <g
-              data-clickable="1"
-              onClick={onToggleCve}
-              style={{ cursor: "pointer" }}
+              data-clickable={criticalCves.length <= 10 ? "1" : undefined}
+              onClick={criticalCves.length <= 10 ? onToggleCve : undefined}
+              style={{ cursor: criticalCves.length <= 10 ? "pointer" : "default" }}
             >
               <SvgNode
                 id="cve-summary"
@@ -649,7 +656,7 @@ function AttackGraphCanvas({
                 w={NW} h={NH} r={NR}
                 color={STAGE_COLORS.cve}
                 label={`${criticalCves.length} ${maxSev ?? "High"} CVE${criticalCves.length !== 1 ? "s" : ""}`}
-                sub="Click to expand ▾"
+                sub={criticalCves.length > 10 ? "Too many to expand" : "Click to expand ▾"}
                 delay="0.45s"
                 icon={
                   <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.cve.icon}

@@ -210,7 +210,7 @@ export default function SidePanel({
               type="button"
               className="attack-graph-btn"
               onClick={onOpenAttackGraph}
-              title="View Attack Graph"
+              title="View Attack Path"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3"/>
@@ -219,7 +219,7 @@ export default function SidePanel({
                 <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
               </svg>
-              <span>Attack Graph</span>
+              <span>Attack Path</span>
             </button>
           )}
           {(canGenerateReport || cloudsmithUrl) && (

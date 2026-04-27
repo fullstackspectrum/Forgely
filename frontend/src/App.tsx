@@ -310,12 +310,16 @@ export default function App() {
           )}
 
           {attackGraphOpen && selectedNode && data && (
-            <AttackGraphPanel
-              packageNodeId={selectedNode}
-              data={data}
-              owner={owner}
-              onClose={() => setAttackGraphOpen(false)}
-            />
+            <div className="attack-graph-backdrop" onClick={() => setAttackGraphOpen(false)}>
+              <div onClick={(e) => e.stopPropagation()}>
+                <AttackGraphPanel
+                  packageNodeId={selectedNode}
+                  data={data}
+                  owner={owner}
+                  onClose={() => setAttackGraphOpen(false)}
+                />
+              </div>
+            </div>
           )}
 
           <Legend />
