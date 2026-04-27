@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import type { FilterType, GraphStats } from "../types";
 
 type TabType = "packages" | "organisation";
@@ -20,10 +20,18 @@ interface Props {
   onDisconnect: () => void;
 }
 
-const FILTERS: { key: FilterType; label: string; color?: string }[] = [
+const CircleSlashIcon = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="17" y1="7" x2="7" y2="17" />
+  </svg>
+);
+
+const FILTERS: { key: FilterType; label: string; color?: string; icon?: React.ReactNode }[] = [
   { key: "all", label: "All" },
   { key: "vulnerable", label: "⚠ Vulnerable" },
   { key: "safe", label: "✔ Safe" },
+  { key: "quarantined", label: "Quarantined", icon: <CircleSlashIcon /> },
   { key: "shared_cve", label: "🔗 Shared CVEs" },
   { key: "has_deps", label: "🔀 Has Dependencies" },
   { key: "Critical", label: "Critical", color: "#ff4d4d" },
@@ -115,7 +123,9 @@ export default function FilterBar({
               }
               onClick={() => onFilterChange(f.key)}
             >
-              {f.label}
+              {f.icon
+                ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{f.icon}{f.label}</span>
+                : f.label}
             </button>
           ))}
         </div>

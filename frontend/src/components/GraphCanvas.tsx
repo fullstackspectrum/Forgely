@@ -217,6 +217,7 @@ export default function GraphCanvas({
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
+    quarantinedDeps: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -255,8 +256,11 @@ export default function GraphCanvas({
     const sharedCveNodes = new Set<string>();
     /* Nodes that are sources of dependency edges */
     const hasDepNodes = new Set<string>();
+    /* Dependency neighbours of quarantined packages */
+    const quarantinedDeps = new Set<string>();
     if (graphRef.current) {
-      graphRef.current.forEachEdge((_edge, attrs, source, target) => {
+      const g = graphRef.current;
+      g.forEachEdge((_edge, attrs, source, target) => {
         if (attrs.edgeKind === "shared_cve") {
           sharedCveNodes.add(source);
           sharedCveNodes.add(target);
@@ -264,6 +268,10 @@ export default function GraphCanvas({
         if (attrs.edgeKind === "dependency") {
           hasDepNodes.add(source);
         }
+      });
+      g.forEachNode((nodeId, attrs) => {
+        if (!attrs.is_quarantined) return;
+        g.forEachNeighbor(nodeId, (neighborId) => quarantinedDeps.add(neighborId));
       });
     }
 
@@ -282,6 +290,7 @@ export default function GraphCanvas({
       searchConnected,
       sharedCveNodes,
       hasDepNodes,
+      quarantinedDeps,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
@@ -501,7 +510,7 @@ export default function GraphCanvas({
             return res;
           }
           // Hide ring when filtering excludes Critical nodes
-          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps") {
+          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps" && st.filter !== "quarantined") {
             res.hidden = true;
             return res;
           }
@@ -568,6 +577,7 @@ export default function GraphCanvas({
           let show = true;
           if (st.filter === "vulnerable") show = vc > 0;
           else if (st.filter === "safe") show = vc === 0;
+          else if (st.filter === "quarantined") show = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
           else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
           else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
           else show = sev === st.filter;
