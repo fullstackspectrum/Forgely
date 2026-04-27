@@ -195,6 +195,7 @@ interface Props {
   hideSharedCveEdges?: boolean;
   hideDependencies?: boolean;
   hideUnsupported?: boolean;
+  hideCriticalAnimation?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -215,6 +216,7 @@ export default function GraphCanvas({
   hideSharedCveEdges = false,
   hideDependencies = false,
   hideUnsupported = false,
+  hideCriticalAnimation = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -310,6 +312,7 @@ export default function GraphCanvas({
       hideSharedCveEdges,
       hideDependencies,
       hideUnsupported,
+      hideCriticalAnimation,
       neighbors,
       hoverNeighbors,
       searchConnected,
@@ -318,7 +321,7 @@ export default function GraphCanvas({
       quarantinedDeps,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
+  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -513,6 +516,10 @@ export default function GraphCanvas({
 
         /* --- Echo ring around Critical nodes --- */
         if (attrs.nodeType === "echo") {
+          if (st.hideCriticalAnimation) {
+            res.hidden = true;
+            return res;
+          }
           const parentId = (attrs as any).parentId as string;
           if (!graph.hasNode(parentId)) {
             res.hidden = true;
@@ -577,7 +584,7 @@ export default function GraphCanvas({
         }
 
         /* --- Pulse Critical-severity package nodes --- */
-        if (attrs.nodeType === "package" && (attrs as any).severity === "Critical") {
+        if (!st.hideCriticalAnimation && attrs.nodeType === "package" && (attrs as any).severity === "Critical") {
           const pulse = 1 + 0.18 * Math.sin(st.pulsePhase);
           res.size = (attrs.size ?? 1) * pulse;
         }
