@@ -90,7 +90,7 @@ function getAccessMethods(format: string): AccessMethod[] {
 
   return [
     ...native,
-    cs("cloudsmith-cli", "Cloudsmith CLI", "cloudsmith"),
+    cs("cloudsmith download", "Cloudsmith CLI", "cloudsmith"),
     cs("REST API",       "API Client",     "api"),
     cs("Web UI",         "Browser",        "browser"),
   ];
@@ -231,10 +231,10 @@ function AttackGraphCanvas({
     const padX = 80;
     const padY = 60;
     const scaleX = (cw - padX * 2) / graphW;
-    const scaleY = (ch - padY * 2) / (graphH + 36 /* label */);
+    const scaleY = (ch - padY * 2) / (graphH + 36);
     const s = Math.min(scaleX, scaleY, 1.2);
     const stx = (cw - graphW * s) / 2;
-    const sty = (ch - graphH * s) / 2 + 18 * s;
+    const sty = ch / 2;  // y=0 is the graph's vertical centre
 
     setScale(s);
     setTx(stx);
