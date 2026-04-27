@@ -3,20 +3,28 @@ import type { GraphResponse, CVERecord } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
 /* ── Layout constants ───────────────────────────────────────── */
-const NW = 164;       // node card width
-const NH = 62;        // node card height
-const NR = 10;        // card corner radius
+const NW = 164;       // main node card width
+const NH = 62;        // main node card height
+const NR = 10;        // main node corner radius
 const HX = 200;       // horizontal gap between stages
-const CVE_NH = 80;    // CVE card height (more text)
-const CVE_VGAP = 16;  // vertical gap between CVE cards
+const CVE_NH = 80;    // CVE card height
+const CVE_VGAP = 16;  // gap between CVE cards
 
-const X_INTERNET = 0;
-const X_REGISTRY  = X_INTERNET + NW + HX;
-const X_REPO      = X_REGISTRY  + NW + HX;
-const X_PKG       = X_REPO      + NW + HX;
-const X_CVE       = X_PKG       + NW + HX;
+const CNW = 148;      // client tool node width
+const CNH = 46;       // client tool node height
+const CGAP = 10;      // vertical gap between client tool nodes
+const CPAD_X = 18;    // client box horizontal padding
+const CPAD_Y = 18;    // client box vertical padding
+const CLIENT_BOX_W = CNW + CPAD_X * 2;  // = 184
+
+const X_INTERNET = CLIENT_BOX_W + HX;
+const X_REGISTRY = X_INTERNET + NW + HX;
+const X_REPO     = X_REGISTRY  + NW + HX;
+const X_PKG      = X_REPO      + NW + HX;
+const X_CVE      = X_PKG       + NW + HX;
 
 const STAGE_COLORS: Record<string, { accent: string; border: string; icon: string }> = {
+  client:   { accent: "#0ea5e9", border: "rgba(14,165,233,0.4)",   icon: "#0ea5e9" },
   internet: { accent: "#4a90d9", border: "rgba(74,144,217,0.45)",  icon: "#4a90d9" },
   registry: { accent: "#8b5cf6", border: "rgba(139,92,246,0.45)", icon: "#8b5cf6" },
   repo:     { accent: "#10b981", border: "rgba(16,185,129,0.45)",  icon: "#10b981" },
@@ -29,55 +37,62 @@ const STAGE_COLORS: Record<string, { accent: string; border: string; icon: strin
 interface AccessMethod {
   label: string;
   type: "native" | "cloudsmith";
+  clientName: string;
+  iconType: string;
 }
 
 function getAccessMethods(format: string): AccessMethod[] {
   const fmt = (format || "").toLowerCase();
 
+  const n = (label: string, clientName: string, iconType: string): AccessMethod =>
+    ({ label, type: "native", clientName, iconType });
+  const cs = (label: string, clientName: string, iconType: string): AccessMethod =>
+    ({ label, type: "cloudsmith", clientName, iconType });
+
   let native: AccessMethod[];
   if (fmt.includes("docker") || fmt.includes("container") || fmt.includes("oci")) {
-    native = [{ label: "docker pull", type: "native" }];
+    native = [n("docker pull", "Docker CLI", "docker")];
   } else if (fmt.includes("python") || fmt.includes("pypi")) {
-    native = [{ label: "pip install", type: "native" }, { label: "poetry add", type: "native" }];
+    native = [n("pip install", "pip", "python"), n("poetry add", "Poetry", "python")];
   } else if (fmt.includes("npm") || fmt.includes("node") || fmt.includes("javascript")) {
-    native = [{ label: "npm install", type: "native" }, { label: "yarn add", type: "native" }];
+    native = [n("npm install", "npm", "node"), n("yarn add", "Yarn", "node")];
   } else if (fmt.includes("maven") || fmt.includes("java")) {
-    native = [{ label: "mvn", type: "native" }, { label: "gradle", type: "native" }];
+    native = [n("mvn", "Maven CLI", "java"), n("gradle", "Gradle", "java")];
   } else if (fmt.includes("nuget") || fmt.includes("dotnet") || fmt.includes(".net")) {
-    native = [{ label: "dotnet add", type: "native" }, { label: "nuget install", type: "native" }];
+    native = [n("dotnet add", ".NET CLI", "terminal"), n("nuget install", "NuGet", "terminal")];
   } else if (fmt.includes("ruby") || fmt.includes("gem") || fmt.includes("rubygem")) {
-    native = [{ label: "gem install", type: "native" }, { label: "bundle install", type: "native" }];
+    native = [n("gem install", "Ruby gem", "ruby"), n("bundle install", "Bundler", "ruby")];
   } else if (fmt.includes("cargo") || fmt.includes("rust") || fmt.includes("crate")) {
-    native = [{ label: "cargo add", type: "native" }];
+    native = [n("cargo add", "Cargo CLI", "rust")];
   } else if (fmt.includes("golang") || fmt === "go") {
-    native = [{ label: "go get", type: "native" }];
+    native = [n("go get", "Go CLI", "go")];
   } else if (fmt.includes("helm")) {
-    native = [{ label: "helm pull", type: "native" }, { label: "helm install", type: "native" }];
+    native = [n("helm pull", "Helm CLI", "terminal"), n("helm install", "Helm CLI", "terminal")];
   } else if (fmt.includes("debian") || fmt.includes("deb")) {
-    native = [{ label: "apt install", type: "native" }];
+    native = [n("apt install", "apt", "terminal")];
   } else if (fmt.includes("rpm") || fmt.includes("redhat") || fmt.includes("rhel") || fmt.includes("fedora")) {
-    native = [{ label: "yum install", type: "native" }, { label: "dnf install", type: "native" }];
+    native = [n("yum install", "yum", "terminal"), n("dnf install", "dnf", "terminal")];
   } else if (fmt.includes("terraform")) {
-    native = [{ label: "terraform", type: "native" }];
+    native = [n("terraform", "Terraform CLI", "terminal")];
   } else if (fmt.includes("conan")) {
-    native = [{ label: "conan install", type: "native" }];
+    native = [n("conan install", "Conan CLI", "terminal")];
   } else if (fmt.includes("composer") || fmt.includes("php")) {
-    native = [{ label: "composer require", type: "native" }];
+    native = [n("composer require", "Composer", "terminal")];
   } else if (fmt.includes("dart") || fmt.includes("pub")) {
-    native = [{ label: "dart pub get", type: "native" }];
+    native = [n("dart pub get", "Dart CLI", "terminal")];
   } else if (fmt.includes("conda")) {
-    native = [{ label: "conda install", type: "native" }];
+    native = [n("conda install", "Conda CLI", "python")];
   } else if (fmt.includes("swift") || fmt.includes("spm")) {
-    native = [{ label: "swift package", type: "native" }];
+    native = [n("swift package", "Swift CLI", "terminal")];
   } else {
-    native = [{ label: "curl", type: "native" }, { label: "wget", type: "native" }];
+    native = [n("curl", "curl", "terminal"), n("wget", "wget", "terminal")];
   }
 
   return [
     ...native,
-    { label: "cloudsmith-cli", type: "cloudsmith" },
-    { label: "REST API",       type: "cloudsmith" },
-    { label: "Web UI",         type: "cloudsmith" },
+    cs("cloudsmith-cli", "Cloudsmith CLI", "cloudsmith"),
+    cs("REST API",       "API Client",     "api"),
+    cs("Web UI",         "Browser",        "browser"),
   ];
 }
 
@@ -115,8 +130,10 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
     if (fb) displayRepos.push(fb);
   }
 
-  const criticalCves = packageNode.data.cves.filter((c) => c.severity === "Critical");
   const maxSev = packageNode.data.max_severity;
+  const topCves = packageNode.data.cves.filter(
+    (c) => c.severity === "Critical" || c.severity === "High",
+  );
 
   return (
     <div className="attack-graph-panel">
@@ -137,7 +154,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
       <AttackGraphCanvas
         packageNode={packageNode}
         displayRepos={displayRepos}
-        criticalCves={criticalCves}
+        criticalCves={topCves}
         cveExpanded={cveExpanded}
         onToggleCve={() => setCveExpanded((v) => !v)}
         owner={owner}
@@ -153,7 +170,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
 interface CanvasProps {
   packageNode: ReturnType<GraphResponse["nodes"]["find"]> & {};
   displayRepos: NonNullable<ReturnType<Map<string, any>["get"]>>[];
-  criticalCves: CVERecord[];
+  criticalCves: CVERecord[];  // Critical + High CVEs
   cveExpanded: boolean;
   onToggleCve: () => void;
   owner: string;
@@ -185,8 +202,11 @@ function AttackGraphCanvas({
     const cveH = cveExpanded
       ? numCves * CVE_NH + (numCves - 1) * CVE_VGAP
       : CVE_NH;
+    const methods = getAccessMethods(packageNode.data.format);
+    const clientContentH = methods.length * CNH + Math.max(0, methods.length - 1) * CGAP;
+    const clientBoxH = clientContentH + CPAD_Y * 2 + 18;
     const graphW = X_CVE + NW;
-    const graphH = Math.max(NH, cveH);
+    const graphH = Math.max(clientBoxH, NH, cveH);
 
     const padX = 80;
     const padY = 60;
@@ -300,11 +320,11 @@ function AttackGraphCanvas({
 
           {/* ── Stage labels ── */}
           {[
-            { label: "Origin",       x: X_INTERNET + NW / 2 },
-            { label: "Registry",     x: X_REGISTRY  + NW / 2 },
-            { label: "Repository",   x: X_REPO      + NW / 2 },
-            { label: "Package",      x: X_PKG       + NW / 2 },
-            { label: "Vulnerabilities", x: X_CVE    + NW / 2 },
+            { label: "Internet",        x: X_INTERNET + NW / 2 },
+            { label: "Registry",        x: X_REGISTRY + NW / 2 },
+            { label: "Repository",      x: X_REPO     + NW / 2 },
+            { label: "Package",         x: X_PKG      + NW / 2 },
+            { label: "Vulnerabilities", x: X_CVE      + NW / 2 },
           ].map(({ label, x }) => (
             <text key={label} x={x} y={-NH / 2 - 44} textAnchor="middle"
               fontSize="10" fontWeight="600" letterSpacing="0.06em"
@@ -314,50 +334,97 @@ function AttackGraphCanvas({
             </text>
           ))}
 
-          {/* ── Access method edges: Internet → Registry ── */}
-          {getAccessMethods(packageNode!.data.format).map((method, i, arr) => {
-            const spacing = 30;
-            const offset = -(arr.length - 1) * spacing / 2 + i * spacing;
-            const sy = offset * 0.35;
-            const cy = offset;
-            const x1 = X_INTERNET + NW;
-            const x2 = X_REGISTRY;
-            const cpDist = 70;
-            const d = `M ${x1} ${sy} C ${x1 + cpDist} ${cy}, ${x2 - cpDist} ${cy}, ${x2} ${sy}`;
-            const lx = (x1 + x2) / 2;
-            const ly = 0.125 * (sy + sy) + 0.75 * cy;
-            const isNative = method.type === "native";
-            const edgeColor = isNative ? "rgba(74,144,217,0.55)" : "rgba(139,92,246,0.55)";
-            const labelBg   = isNative ? "rgba(74,144,217,0.88)" : "rgba(139,92,246,0.88)";
-            const lw = method.label.length * 5.2 + 12;
-            const lh = 14;
-            const animDelay = `${0.04 + i * 0.06}s`;
+          {/* ── Client group box + individual tool nodes + edges ── */}
+          {(() => {
+            const methods = getAccessMethods(packageNode!.data.format);
+            const clientContentH = methods.length * CNH + Math.max(0, methods.length - 1) * CGAP;
+            const boxLabelH = 18;
+            const boxH = clientContentH + CPAD_Y * 2 + boxLabelH;
+            const boxY = -(clientContentH / 2) - CPAD_Y - boxLabelH;
             return (
-              <g key={method.label}>
-                <path
-                  d={d}
-                  stroke={edgeColor} strokeWidth="1.5" fill="none"
-                  markerEnd={isNative ? "url(#ag-arrow-flow)" : "url(#ag-arrow-cs)"}
-                  strokeDasharray="800" className="ag-edge-draw"
-                  style={{ animationDelay: animDelay }}
+              <>
+                {/* Dashed bounding box */}
+                <rect
+                  x={0} y={boxY} width={CLIENT_BOX_W} height={boxH} rx={14}
+                  fill="rgba(14,165,233,0.04)"
+                  stroke="rgba(14,165,233,0.25)"
+                  strokeWidth="1.5" strokeDasharray="6,4"
+                  className="ag-node-enter" style={{ animationDelay: "0s" }}
                 />
-                <g
-                  className="ag-node-enter"
-                  style={{ animationDelay: animDelay, transformOrigin: `${lx}px ${ly}px` }}
-                >
-                  <rect x={lx - lw / 2} y={ly - lh / 2} width={lw} height={lh} rx={4} fill={labelBg} />
-                  <text
-                    x={lx} y={ly + 4.5} textAnchor="middle"
-                    fontSize="8.5" fontWeight="600" fill="#fff"
-                    fontFamily='ui-monospace,"SF Mono",Consolas,monospace'
-                    style={{ pointerEvents: "none" }}
-                  >
-                    {method.label}
-                  </text>
-                </g>
-              </g>
+                {/* "CLIENT" label inside top of box */}
+                <text
+                  x={CLIENT_BOX_W / 2} y={boxY + 13}
+                  textAnchor="middle" fontSize="9" fontWeight="700" letterSpacing="0.07em"
+                  fill="rgba(14,165,233,0.5)" fontFamily="Geist, system-ui, sans-serif"
+                  style={{ textTransform: "uppercase", pointerEvents: "none" }}
+                >CLIENT</text>
+
+                {methods.map((method, i) => {
+                  const nodeY = -(clientContentH / 2) + i * (CNH + CGAP);
+                  const nodeCenterY = nodeY + CNH / 2;
+                  const isNative = method.type === "native";
+                  const nodeColor = isNative ? STAGE_COLORS.client : STAGE_COLORS.registry;
+                  const edgeColor = isNative ? "rgba(74,144,217,0.5)" : "rgba(139,92,246,0.5)";
+                  const labelBg   = isNative ? "rgba(74,144,217,0.88)" : "rgba(139,92,246,0.88)";
+                  const animDelay = `${0.05 + i * 0.06}s`;
+
+                  // Bezier from client node right edge → Internet left center
+                  const ox = CLIENT_BOX_W;
+                  const oy = nodeCenterY;
+                  const ex = X_INTERNET;
+                  const ey = 0;
+                  const cpx = (ox + ex) / 2;
+                  const edgePath = `M ${ox} ${oy} C ${cpx} ${oy}, ${cpx} ${ey}, ${ex} ${ey}`;
+
+                  // Label at t=0.5: y = 0.5*oy (symmetric CP)
+                  const lx = cpx;
+                  const ly = oy / 2;
+                  const lw = method.label.length * 5.2 + 12;
+
+                  return (
+                    <g key={method.label}>
+                      {/* Bezier edge */}
+                      <path
+                        d={edgePath}
+                        stroke={edgeColor} strokeWidth="1.5" fill="none"
+                        markerEnd={isNative ? "url(#ag-arrow-flow)" : "url(#ag-arrow-cs)"}
+                        strokeDasharray="800" className="ag-edge-draw"
+                        style={{ animationDelay: animDelay }}
+                      />
+                      {/* Edge label pill */}
+                      <g className="ag-node-enter" style={{ animationDelay: animDelay, transformOrigin: `${lx}px ${ly}px` }}>
+                        <rect x={lx - lw / 2} y={ly - 7} width={lw} height={14} rx={4} fill={labelBg} />
+                        <text
+                          x={lx} y={ly + 4.5} textAnchor="middle"
+                          fontSize="8.5" fontWeight="600" fill="#fff"
+                          fontFamily='ui-monospace,"SF Mono",Consolas,monospace'
+                          style={{ pointerEvents: "none" }}
+                        >{method.label}</text>
+                      </g>
+                      {/* Client tool node */}
+                      <SvgClientNode
+                        id={`client-${i}`}
+                        x={CPAD_X} y={nodeY}
+                        label={method.clientName}
+                        iconType={method.iconType}
+                        color={nodeColor}
+                        delay={animDelay}
+                      />
+                    </g>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
+
+          {/* ── Flow edge: Internet → Registry ── */}
+          <line
+            x1={X_INTERNET + NW} y1={0} x2={X_REGISTRY} y2={0}
+            stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
+            markerEnd="url(#ag-arrow-flow)"
+            strokeDasharray="800" className="ag-edge-draw"
+            style={{ animationDelay: "0.15s" }}
+          />
 
           {/* ── Flow edge: Registry → Repo ── */}
           <line
@@ -419,8 +486,8 @@ function AttackGraphCanvas({
             w={NW} h={NH} r={NR}
             color={STAGE_COLORS.internet}
             label="Internet"
-            sub="Public access"
-            delay="0s"
+            sub="Public network"
+            delay="0.1s"
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.internet.icon}
                 strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -477,7 +544,7 @@ function AttackGraphCanvas({
             color={STAGE_COLORS.package}
             label={packageNode!.label}
             sub={packageNode!.data.version || ""}
-            pill={{ text: "Critical", color: SEVERITY_COLORS.Critical }}
+            pill={{ text: maxSev ?? "High", color: SEVERITY_COLORS[maxSev ?? "High"] ?? SEVERITY_COLORS.High }}
             delay="0.35s"
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.package.icon}
@@ -529,7 +596,7 @@ function AttackGraphCanvas({
                 x={X_CVE} y={-NH / 2}
                 w={NW} h={NH} r={NR}
                 color={STAGE_COLORS.cve}
-                label={`${criticalCves.length} Critical CVE${criticalCves.length !== 1 ? "s" : ""}`}
+                label={`${criticalCves.length} ${maxSev ?? "High"} CVE${criticalCves.length !== 1 ? "s" : ""}`}
                 sub="Click to expand ▾"
                 delay="0.45s"
                 icon={
@@ -654,4 +721,63 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
       )}
     </g>
   );
+}
+
+/* ── Client tool node (compact) ─────────────────────────────── */
+
+interface SvgClientNodeProps {
+  id: string;
+  x: number; y: number;
+  label: string;
+  iconType: string;
+  color: { accent: string; border: string; icon: string };
+  delay: string;
+}
+
+function SvgClientNode({ id, x, y, label, iconType, color, delay }: SvgClientNodeProps) {
+  const w = CNW; const h = CNH; const r = 8;
+  const clipId = `cclip-${id}`;
+  return (
+    <g className="ag-node-enter" style={{ animationDelay: delay, transformOrigin: `${x + w / 2}px ${y + h / 2}px` }}>
+      <rect x={x + 1} y={y + 2} width={w} height={h} rx={r} fill="rgba(0,0,0,0.06)" />
+      <rect x={x} y={y} width={w} height={h} rx={r} fill="rgba(255,255,255,0.93)" stroke={color.border} strokeWidth="1" />
+      <clipPath id={clipId}><rect x={x} y={y} width={w} height={h} rx={r} /></clipPath>
+      <rect x={x} y={y} width={w} height={4} fill={color.accent} clipPath={`url(#${clipId})`} />
+      <foreignObject x={x + 9} y={y + 13} width={18} height={18}>
+        <div style={{ width: 18, height: 18 }}>{getClientIcon(iconType, color.icon)}</div>
+      </foreignObject>
+      <text x={x + 34} y={y + h / 2 + 4} fontSize="11.5" fontWeight="600" fill="#111827"
+        fontFamily="Geist, system-ui, sans-serif">
+        {label.length > 16 ? label.slice(0, 15) + "…" : label}
+      </text>
+    </g>
+  );
+}
+
+function getClientIcon(iconType: string, color: string) {
+  const props = { viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (iconType) {
+    case "browser":
+      return <svg {...props}><rect x="2" y="3" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><circle cx="6" cy="6" r="1" fill={color}/><circle cx="10" cy="6" r="1" fill={color}/></svg>;
+    case "docker":
+      return <svg {...props}><rect x="2" y="11" width="20" height="9" rx="2"/><rect x="4" y="6" width="5" height="5" rx="1"/><rect x="10" y="6" width="5" height="5" rx="1"/><rect x="7" y="2" width="5" height="4" rx="1"/></svg>;
+    case "python":
+      return <svg {...props}><path d="M12 2C9 2 7 4 7 6v2h5v1H6C4 9 2 11 2 14s2 5 4 5h2v-3H6v-2h6v1c0 2 2 4 5 4s5-2 5-5-2-5-5-5h-1V8h-1V6c0-2-2-4-5-4z" strokeWidth="1.5"/><circle cx="9.5" cy="5.5" r="1" fill={color} stroke="none"/><circle cx="14.5" cy="18.5" r="1" fill={color} stroke="none"/></svg>;
+    case "node":
+      return <svg {...props}><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/><path d="M12 2v20M2 7l10 5M22 7l-10 5"/></svg>;
+    case "java":
+      return <svg {...props}><path d="M9 20c0 0 2 1 4 1s4-1 4-1M8 17c0 0 2 1.5 4 1.5S16 17 16 17"/><path d="M10 3c0 0-2 3-2 5s2 4 2 4-4-1-4-4 1-5 4-5z"/><path d="M14 3c0 0 2 3 2 5s-2 4-2 4 4-1 4-4-1-5-4-5z"/><rect x="8" y="11" width="8" height="5" rx="1"/></svg>;
+    case "ruby":
+      return <svg {...props}><path d="M12 2l4 4-1 6-3 3-3-3-1-6L12 2z"/><path d="M8 6l-4 8h16l-4-8"/><line x1="12" y1="14" x2="12" y2="20"/></svg>;
+    case "rust":
+      return <svg {...props}><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/><circle cx="12" cy="12" r="3" fill={color} stroke="none" opacity="0.4"/></svg>;
+    case "go":
+      return <svg {...props}><path d="M5 12a7 7 0 0 1 14 0"/><path d="M5 12a7 7 0 0 0 14 0"/><line x1="12" y1="5" x2="12" y2="19"/><polyline points="9 16 12 19 15 16"/></svg>;
+    case "api":
+      return <svg {...props}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="12" y1="4" x2="12" y2="20" strokeWidth="1.2"/></svg>;
+    case "cloudsmith":
+      return <image href="/cloudsmith.png" x="0" y="0" width="18" height="18" />;
+    default: // terminal
+      return <svg {...props}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>;
+  }
 }
