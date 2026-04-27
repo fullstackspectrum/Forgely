@@ -6,7 +6,8 @@ import { SEVERITY_COLORS } from "../types";
 const NW = 164;       // main node card width
 const NH = 62;        // main node card height
 const NR = 10;        // main node corner radius
-const HX = 200;       // horizontal gap between stages
+const ICON_R = 24;    // icon circle radius
+const HX = 100;       // horizontal gap between stages
 const CVE_NH = 80;    // CVE card height
 const CVE_VGAP = 16;  // gap between CVE cards
 
@@ -18,10 +19,9 @@ const CPAD_Y = 18;    // client box vertical padding
 const CLIENT_BOX_W = CNW + CPAD_X * 2;  // = 184
 
 const X_INTERNET = CLIENT_BOX_W + HX;
-const X_REGISTRY = X_INTERNET + NW + HX;
-const X_REPO     = X_REGISTRY  + NW + HX;
-const X_PKG      = X_REPO      + NW + HX;
-const X_CVE      = X_PKG       + NW + HX;
+const X_REPO     = X_INTERNET + NW + HX;
+const X_PKG      = X_REPO     + NW + HX;
+const X_CVE      = X_PKG      + NW + HX;
 
 const STAGE_COLORS: Record<string, { accent: string; border: string; icon: string }> = {
   client:   { accent: "#0ea5e9", border: "rgba(14,165,233,0.4)",   icon: "#0ea5e9" },
@@ -338,22 +338,6 @@ function AttackGraphCanvas({
 
         <g transform={`translate(${tx},${ty}) scale(${scale})`}>
 
-          {/* ── Stage labels ── */}
-          {[
-            { label: "Internet",        x: X_INTERNET + NW / 2 },
-            { label: "Workspace",       x: X_REGISTRY + NW / 2 },
-            { label: "Repository",      x: X_REPO     + NW / 2 },
-            { label: "Package",         x: X_PKG      + NW / 2 },
-            { label: "Vulnerabilities", x: X_CVE      + NW / 2 },
-          ].map(({ label, x }) => (
-            <text key={label} x={x} y={-NH / 2 - 44} textAnchor="middle"
-              fontSize="10" fontWeight="600" letterSpacing="0.06em"
-              fill="rgba(0,0,0,0.35)" fontFamily="Geist, system-ui, sans-serif"
-              style={{ textTransform: "uppercase" }}>
-              {label}
-            </text>
-          ))}
-
           {/* ── Client group box + individual tool nodes + edges ── */}
           {(() => {
             const methods = getAccessMethods(packageNode!.data.format);
@@ -391,7 +375,7 @@ function AttackGraphCanvas({
                   // Bezier from client node right edge → Internet left center
                   const ox = CLIENT_BOX_W;
                   const oy = nodeCenterY;
-                  const ex = X_INTERNET;
+                  const ex = X_INTERNET + NW / 2 - ICON_R;
                   const ey = 0;
                   const cpx = (ox + ex) / 2;
                   const edgePath = `M ${ox} ${oy} C ${cpx} ${oy}, ${cpx} ${ey}, ${ex} ${ey}`;
@@ -437,23 +421,14 @@ function AttackGraphCanvas({
             );
           })()}
 
-          {/* ── Flow edge: Internet → Registry ── */}
+          {/* ── Flow edge: Internet → Repo ── */}
           <line
-            x1={X_INTERNET + NW} y1={0} x2={X_REGISTRY} y2={0}
+            x1={X_INTERNET + NW / 2 + ICON_R} y1={0}
+            x2={X_REPO + NW / 2 - ICON_R} y2={repoCount === 1 ? 0 : repoStartY + NH / 2}
             stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
             markerEnd="url(#ag-arrow-flow)"
             strokeDasharray="800" className="ag-edge-draw"
             style={{ animationDelay: "0.15s" }}
-          />
-
-          {/* ── Flow edge: Registry → Repo ── */}
-          <line
-            x1={X_REGISTRY + NW} y1={0}
-            x2={X_REPO} y2={repoCount === 1 ? 0 : repoStartY + NH / 2}
-            stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
-            markerEnd="url(#ag-arrow-flow)"
-            strokeDasharray="800" className="ag-edge-draw"
-            style={{ animationDelay: "0.2s" }}
           />
 
           {/* Repo → Package edge(s) */}
@@ -461,12 +436,12 @@ function AttackGraphCanvas({
             const ry = repoStartY + i * (NH + 12) + NH / 2;
             return (
               <line key={repo.id}
-                x1={X_REPO + NW} y1={ry} x2={X_PKG} y2={0}
+                x1={X_REPO + NW / 2 + ICON_R} y1={ry} x2={X_PKG + NW / 2 - ICON_R} y2={0}
                 stroke={isQuarantined ? "rgba(239,68,68,0.5)" : "rgba(100,116,180,0.45)"}
                 strokeWidth="1.5"
                 markerEnd="url(#ag-arrow-flow)"
                 strokeDasharray="800" className="ag-edge-draw"
-                style={{ animationDelay: "0.3s" }}
+                style={{ animationDelay: "0.25s" }}
               />
             );
           })}
@@ -503,9 +478,9 @@ function AttackGraphCanvas({
           {cveExpanded ? (
             criticalCves.map((cve, i) => {
               const cveY = cveStartY + i * (CVE_NH + CVE_VGAP) + CVE_NH / 2;
-              const ox = X_PKG + NW;
+              const ox = X_PKG + NW / 2 + ICON_R;
               const oy = 0;
-              const ex = X_CVE;
+              const ex = X_CVE + NW / 2 - ICON_R;
               const ey = cveY;
               const cpx = (ox + ex) / 2;
               return (
@@ -520,7 +495,7 @@ function AttackGraphCanvas({
             })
           ) : (
             <line
-              x1={X_PKG + NW} y1={0} x2={X_CVE} y2={0}
+              x1={X_PKG + NW / 2 + ICON_R} y1={0} x2={X_CVE + NW / 2 - ICON_R} y2={0}
               stroke="rgba(239,68,68,0.5)" strokeWidth="1.5"
               markerEnd="url(#ag-arrow-cve)"
               strokeDasharray="800" className="ag-edge-draw"
@@ -548,21 +523,6 @@ function AttackGraphCanvas({
             }
           />
 
-          {/* ── Registry node ── */}
-          <SvgNode
-            id="registry"
-            x={X_REGISTRY} y={-NH / 2}
-            w={NW} h={NH} r={NR}
-            color={STAGE_COLORS.registry}
-            label="Cloudsmith"
-            sub={owner}
-            delay="0.15s"
-            icon={
-              <image href="/cloudsmith.png" x="0" y="0" width="20" height="20"
-                style={{ borderRadius: 4 }} />
-            }
-          />
-
           {/* ── Repo node(s) ── */}
           {displayRepos.map((repo, i) => {
             const ry = repoStartY + i * (NH + 12);
@@ -574,8 +534,8 @@ function AttackGraphCanvas({
                 w={NW} h={NH} r={NR}
                 color={STAGE_COLORS.repo}
                 label={repo.label || repoSlug}
-                sub="Repository"
-                delay={`${0.25 + i * 0.05}s`}
+                sub={owner}
+                delay={`${0.15 + i * 0.05}s`}
                 icon={
                   <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.repo.icon}
                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -718,67 +678,60 @@ interface SvgNodeProps {
 }
 
 function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s", labelMono, clickable }: SvgNodeProps) {
-  const clipId = `clip-${id}`;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
   return (
     <g
       className="ag-node-enter"
-      style={{ animationDelay: delay, transformOrigin: `${x + w / 2}px ${y + h / 2}px` }}
+      style={{ animationDelay: delay, transformOrigin: `${cx}px ${cy}px` }}
     >
-      {/* Shadow */}
-      <rect x={x + 1} y={y + 3} width={w} height={h} rx={r} fill="rgba(0,0,0,0.07)" />
-      {/* Card */}
-      <rect
-        x={x} y={y} width={w} height={h} rx={r}
-        fill={clickable ? "rgba(255,245,245,0.9)" : "rgba(255,255,255,0.95)"}
-        stroke={color.border}
-        strokeWidth="1"
+      {/* Circle background */}
+      <circle cx={cx} cy={cy} r={ICON_R}
+        fill={color.accent} fillOpacity={0.10}
+        stroke={color.border} strokeWidth="1.5"
       />
-      {/* Accent bar */}
-      <clipPath id={clipId}>
-        <rect x={x} y={y} width={w} height={h} rx={r} />
-      </clipPath>
-      <rect x={x} y={y} width={w} height={4} fill={color.accent} clipPath={`url(#${clipId})`} />
 
       {/* Icon */}
       {icon && (
-        <foreignObject x={x + 10} y={y + 14} width={20} height={20}>
-          <div style={{ width: 20, height: 20 }}>{icon}</div>
+        <foreignObject x={cx - 14} y={cy - 14} width={28} height={28}>
+          <div style={{ width: 28, height: 28 }}>{icon}</div>
         </foreignObject>
       )}
 
       {/* Label */}
-      <text
-        x={x + (icon ? 38 : 12)} y={y + h / 2 - (sub ? 8 : 0) - (pill ? 4 : 0)}
-        fontSize="12.5" fontWeight="600"
-        fill="#111827"
+      <text x={cx} y={cy + ICON_R + 16} textAnchor="middle"
+        fontSize="12" fontWeight="600" fill="#1e293b"
         fontFamily={labelMono ? 'ui-monospace,"SF Mono",Consolas,monospace' : "Geist, system-ui, sans-serif"}
       >
-        {label.length > 18 ? label.slice(0, 17) + "…" : label}
+        {label.length > 20 ? label.slice(0, 19) + "…" : label}
       </text>
 
       {/* Sub */}
       {sub && (
-        <text
-          x={x + (icon ? 38 : 12)} y={y + h / 2 + 10 - (pill ? 4 : 0)}
-          fontSize="10.5" fill="#6b7280"
+        <text x={cx} y={cy + ICON_R + 30} textAnchor="middle"
+          fontSize="10" fill="#6b7280"
           fontFamily="Geist, system-ui, sans-serif"
         >
-          {sub.length > 22 ? sub.slice(0, 21) + "…" : sub}
+          {sub.length > 24 ? sub.slice(0, 23) + "…" : sub}
         </text>
       )}
 
       {/* Pill badge */}
-      {pill && (
-        <>
-          <rect x={x + (icon ? 38 : 12)} y={y + h - 18} width={pill.text.length * 6.5 + 10} height={13} rx={3}
-            fill={pill.color} opacity="0.9" />
-          <text x={x + (icon ? 43 : 17)} y={y + h - 8}
-            fontSize="9.5" fontWeight="700" fill="#fff"
-            fontFamily="Geist, system-ui, sans-serif" letterSpacing="0.04em">
-            {pill.text}
-          </text>
-        </>
-      )}
+      {pill && (() => {
+        const pw = pill.text.length * 6.5 + 12;
+        const pillY = cy + ICON_R + (sub ? 36 : 20);
+        return (
+          <>
+            <rect x={cx - pw / 2} y={pillY} width={pw} height={16} rx={8}
+              fill={pill.color} opacity="0.9" />
+            <text x={cx} y={pillY + 11.5} textAnchor="middle"
+              fontSize="9" fontWeight="700" fill="#fff"
+              fontFamily="Geist, system-ui, sans-serif" letterSpacing="0.04em">
+              {pill.text}
+            </text>
+          </>
+        );
+      })()}
     </g>
   );
 }
@@ -795,18 +748,20 @@ interface SvgClientNodeProps {
 }
 
 function SvgClientNode({ id, x, y, label, iconType, color, delay }: SvgClientNodeProps) {
-  const w = CNW; const h = CNH; const r = 8;
-  const clipId = `cclip-${id}`;
+  const w = CNW; const h = CNH;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const r = 18;
   return (
-    <g className="ag-node-enter" style={{ animationDelay: delay, transformOrigin: `${x + w / 2}px ${y + h / 2}px` }}>
-      <rect x={x + 1} y={y + 2} width={w} height={h} rx={r} fill="rgba(0,0,0,0.06)" />
-      <rect x={x} y={y} width={w} height={h} rx={r} fill="rgba(255,255,255,0.93)" stroke={color.border} strokeWidth="1" />
-      <clipPath id={clipId}><rect x={x} y={y} width={w} height={h} rx={r} /></clipPath>
-      <rect x={x} y={y} width={w} height={4} fill={color.accent} clipPath={`url(#${clipId})`} />
-      <foreignObject x={x + 9} y={y + 13} width={18} height={18}>
-        <div style={{ width: 18, height: 18 }}>{getClientIcon(iconType, color.icon)}</div>
+    <g className="ag-node-enter" style={{ animationDelay: delay, transformOrigin: `${cx}px ${cy}px` }}>
+      <circle cx={cx} cy={cy} r={r}
+        fill={color.accent} fillOpacity={0.10}
+        stroke={color.border} strokeWidth="1.5"
+      />
+      <foreignObject x={cx - 10} y={cy - 10} width={20} height={20}>
+        <div style={{ width: 20, height: 20 }}>{getClientIcon(iconType, color.icon)}</div>
       </foreignObject>
-      <text x={x + 34} y={y + h / 2 + 4} fontSize="11.5" fontWeight="600" fill="#111827"
+      <text x={cx} y={cy + r + 14} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="#1e293b"
         fontFamily="Geist, system-ui, sans-serif">
         {label.length > 16 ? label.slice(0, 15) + "…" : label}
       </text>
