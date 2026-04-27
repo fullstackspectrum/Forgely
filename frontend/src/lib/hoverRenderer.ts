@@ -170,74 +170,33 @@ export function drawDarkNodeHover(
   }
 }
 
-/** Custom label drawer: renders the standard disc label then overlays a
- *  lock badge at the top-right corner for quarantined package nodes. */
 export function drawNodeLabel(
   context: CanvasRenderingContext2D,
   data: any,
   settings: Settings,
 ): void {
   drawDiscNodeLabel(context, data, settings);
-  if (data.is_quarantined) {
-    const r = Math.max(5, (data.size ?? 1) * 0.58);
-    drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, r);
-  }
 }
 
-/** Draws a small amber lock badge centred at (cx, cy) with radius r. */
+export { drawLockBadge };
+
+/** Draws a small amber circle-slash icon centred at (cx, cy) with radius r. */
 function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.save();
 
-  // Amber circle background with drop shadow
-  ctx.shadowColor   = "rgba(0,0,0,0.60)";
-  ctx.shadowBlur    = r * 1.0;
-  ctx.shadowOffsetY = r * 0.35;
-  ctx.fillStyle = "#f59e0b";
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Dark border
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(0,0,0,0.40)";
-  ctx.lineWidth   = r * 0.20;
-  ctx.stroke();
-
-  // Lock icon (white)
-  ctx.strokeStyle = "#fff";
-  ctx.fillStyle   = "#fff";
-  ctx.lineWidth   = r * 0.25;
+  ctx.strokeStyle = "#f59e0b";
+  ctx.lineWidth   = r * 0.28;
   ctx.lineCap     = "round";
 
-  // Shackle (open arc, top half)
-  const shackleR = r * 0.3;
-  const shackleY = cy - r * 0.1;
   ctx.beginPath();
-  ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Lock body (filled rounded rect)
-  const bw = r * 0.68, bh = r * 0.48;
-  const bx = cx - bw / 2, by = cy + r * 0.08;
-  const br = r * 0.1;
+  const d = r * 0.707;
   ctx.beginPath();
-  ctx.moveTo(bx + br, by);
-  ctx.lineTo(bx + bw - br, by);
-  ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
-  ctx.lineTo(bx + bw, by + bh - br);
-  ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
-  ctx.lineTo(bx + br, by + bh);
-  ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
-  ctx.lineTo(bx, by + br);
-  ctx.quadraticCurveTo(bx, by, bx + br, by);
-  ctx.closePath();
-  ctx.fill();
-
-  // Keyhole dot (amber cutout)
-  ctx.fillStyle = "#f59e0b";
-  ctx.beginPath();
-  ctx.arc(cx, by + bh * 0.46, r * 0.1, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(cx + d, cy - d);
+  ctx.lineTo(cx - d, cy + d);
+  ctx.stroke();
 
   ctx.restore();
 }

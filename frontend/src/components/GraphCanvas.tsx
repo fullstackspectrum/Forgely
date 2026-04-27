@@ -9,7 +9,7 @@ import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
-import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -702,6 +702,22 @@ export default function GraphCanvas({
 
         return res;
       },
+    });
+
+    /* Always render quarantine badges on top of all nodes */
+    sigma.on("afterRender", () => {
+      const labelsCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).labels;
+      if (!labelsCanvas) return;
+      const ctx = labelsCanvas.getContext("2d");
+      if (!ctx) return;
+      graph.forEachNode((nodeId, attrs) => {
+        if (!attrs.is_quarantined || attrs.hidden) return;
+        const d = sigma.getNodeDisplayData(nodeId);
+        if (!d) return;
+        const { x, y } = (sigma as any).framedGraphToViewport(d);
+        const size = (sigma as any).scaleSize(d.size);
+        drawLockBadge(ctx, x + size * 0.72, y - size * 0.72, Math.max(5, size * 0.58));
+      });
     });
 
     /* Events */
