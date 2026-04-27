@@ -710,13 +710,25 @@ export default function GraphCanvas({
       if (!labelsCanvas) return;
       const ctx = labelsCanvas.getContext("2d");
       if (!ctx) return;
+      const st = stateRef.current;
       graph.forEachNode((nodeId, attrs) => {
-        if (!attrs.is_quarantined || attrs.hidden) return;
+        if (!attrs.is_quarantined) return;
         const d = sigma.getNodeDisplayData(nodeId);
-        if (!d) return;
+        if (!d || d.hidden) return;
         const { x, y } = (sigma as any).framedGraphToViewport(d);
         const size = (sigma as any).scaleSize(d.size);
+
+        let alpha = 1;
+        if (st.selectedNode) {
+          if (nodeId !== st.selectedNode && !st.neighbors.has(nodeId)) alpha = 0.08;
+        } else if (st.hoveredNode) {
+          if (!st.hoverNeighbors.has(nodeId) && nodeId !== st.hoveredNode && attrs.nodeType !== "repo") alpha = 0.2;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
         drawLockBadge(ctx, x + size * 0.72, y - size * 0.72, Math.max(5, size * 0.58));
+        ctx.restore();
       });
     });
 
