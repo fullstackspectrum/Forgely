@@ -200,6 +200,7 @@ interface Props {
   onRefresh?: () => void;
   onLayoutChange?: (l: LayoutType) => void;
   onEdgeStyleChange?: (e: EdgeStyle) => void;
+  onOpenAttackGraph?: (nodeId: string) => void;
 }
 
 export default function GraphCanvas({
@@ -219,10 +220,13 @@ export default function GraphCanvas({
   onRefresh,
   onLayoutChange,
   onEdgeStyleChange,
+  onOpenAttackGraph,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  const contextMenuHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
   /* Mutable ref for state that reducers read */
   const stateRef = useRef({
@@ -766,6 +770,7 @@ export default function GraphCanvas({
     sigma.on("clickNode", ({ node }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeSelect(node);
+      setContextMenu(null);
     });
     sigma.on("enterNode", ({ node }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
@@ -776,7 +781,24 @@ export default function GraphCanvas({
       onNodeHover(null);
       containerRef.current!.style.cursor = "default";
     });
-    sigma.on("clickStage", () => onNodeSelect(null));
+    sigma.on("clickStage", () => { onNodeSelect(null); setContextMenu(null); });
+
+    /* Right-click context menu for package nodes */
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const hovered = stateRef.current.hoveredNode;
+      if (
+        hovered &&
+        graph.getNodeAttribute(hovered, "nodeType") === "package" &&
+        ["Critical", "High"].includes(graph.getNodeAttribute(hovered, "severity"))
+      ) {
+        setContextMenu({ x: e.clientX, y: e.clientY, nodeId: hovered });
+      } else {
+        setContextMenu(null);
+      }
+    };
+    contextMenuHandlerRef.current = handleContextMenu;
+    containerRef.current!.addEventListener("contextmenu", handleContextMenu);
 
     sigmaRef.current = sigma;
     graphRef.current = graph;
@@ -822,6 +844,10 @@ export default function GraphCanvas({
 
     return () => {
       cancelled = true;
+      if (contextMenuHandlerRef.current) {
+        containerRef.current?.removeEventListener("contextmenu", contextMenuHandlerRef.current);
+        contextMenuHandlerRef.current = null;
+      }
       if (sigmaRef.current) {
         const raf = (sigmaRef.current as any)._pulseRaf;
         if (raf) cancelAnimationFrame(raf);
@@ -832,9 +858,47 @@ export default function GraphCanvas({
     };
   }, [data]);
 
+  /* Close context menu on outside click */
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [contextMenu]);
+
   return (
     <div className="graph-wrapper">
       <div ref={containerRef} className="graph-container" />
+
+      {contextMenu && (
+        <div
+          className="context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => {
+              if (onOpenAttackGraph) {
+                onNodeSelect(contextMenu.nodeId);
+                onOpenAttackGraph(contextMenu.nodeId);
+              }
+              setContextMenu(null);
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            View Attack Graph
+          </button>
+        </div>
+      )}
+
       <div className="graph-controls">
         {onLayoutChange && onEdgeStyleChange && (
           <LayoutPopout
