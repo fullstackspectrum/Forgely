@@ -21,7 +21,6 @@ const FORMAT_ICONS: Record<string, string> = {
   docker:    `${DI}/docker/docker-original.svg`,
   npm:       `${DI}/npm/npm-original-wordmark.svg`,
   python:    `${DI}/python/python-original.svg`,
-  maven:     `${DI}/maven/maven-original.svg`,
   nuget:     `${DI}/nuget/nuget-original.svg`,
   ruby:      `${DI}/ruby/ruby-original.svg`,
   go:        `${DI}/go/go-original.svg`,
@@ -443,10 +442,10 @@ export default function GraphCanvas({
     forceAtlas2.assign(graph, {
       iterations: 200,
       settings: {
-        gravity: 1,
-        scalingRatio: 10,
+        gravity: 0.5,
+        scalingRatio: 30,
         barnesHutOptimize: true,
-        strongGravityMode: true,
+        strongGravityMode: false,
       },
     });
 
@@ -490,9 +489,9 @@ export default function GraphCanvas({
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
-      labelFont: "Inter, system-ui, sans-serif",
+      labelFont: "Geist, system-ui, sans-serif",
       labelColor: { color: "#ddd" },
-      labelSize: 12,
+      labelSize: 13,
       stagePadding: 40,
       zIndex: true,
       defaultDrawNodeHover: drawDarkNodeHover,
@@ -522,6 +521,11 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
+          // Hide ring when quarantined filter excludes parent
+          if (st.filter === "quarantined" && !graph.getNodeAttribute(parentId, "is_quarantined") && !st.quarantinedDeps.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
           // Hide ring when format filter excludes parent
           if (st.formatFilter && graph.getNodeAttribute(parentId, "format") !== st.formatFilter) {
             res.hidden = true;
@@ -529,6 +533,16 @@ export default function GraphCanvas({
           }
           // Hide ring during search if parent isn't visible
           if (st.searchResults.length > 0 && !st.searchResults.includes(parentId) && !st.searchConnected.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          // Hide ring when a node is selected and the parent is not relevant
+          if (st.selectedNode && parentId !== st.selectedNode && !st.neighbors.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          // Hide ring when hovering dims the parent
+          if (st.hoveredNode && !st.selectedNode && parentId !== st.hoveredNode && !st.hoverNeighbors.has(parentId)) {
             res.hidden = true;
             return res;
           }
