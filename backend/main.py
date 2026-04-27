@@ -310,10 +310,13 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             src_id, deps = fut.result()
             for dep in deps:
                 dep_name = dep.get("name", dep.get("identifier", "unknown"))
+                dep_operator = dep.get("operator", dep.get("comparator", "")) or ""
+                dep_version_num = dep.get("version", dep.get("version_constraint", dep.get("constraints", ""))) or ""
+                dep_version = f"{dep_operator}{dep_version_num}" if dep_version_num else ""
                 if dep_name not in seen_ids:
-                    nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData()))
+                    nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData(version=dep_version)))
                     seen_ids.add(dep_name)
-                edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency"))
+                edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency", label=dep_version))
 
     graph_stats = GraphStats(
         critical=stats.get("Critical", 0),
