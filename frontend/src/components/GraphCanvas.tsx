@@ -9,7 +9,7 @@ import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
-import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import { SEVERITY_COLORS } from "../types";
 
@@ -217,6 +217,7 @@ export default function GraphCanvas({
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
+    quarantinedDeps: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -255,8 +256,11 @@ export default function GraphCanvas({
     const sharedCveNodes = new Set<string>();
     /* Nodes that are sources of dependency edges */
     const hasDepNodes = new Set<string>();
+    /* Dependency neighbours of quarantined packages */
+    const quarantinedDeps = new Set<string>();
     if (graphRef.current) {
-      graphRef.current.forEachEdge((_edge, attrs, source, target) => {
+      const g = graphRef.current;
+      g.forEachEdge((_edge, attrs, source, target) => {
         if (attrs.edgeKind === "shared_cve") {
           sharedCveNodes.add(source);
           sharedCveNodes.add(target);
@@ -264,6 +268,10 @@ export default function GraphCanvas({
         if (attrs.edgeKind === "dependency") {
           hasDepNodes.add(source);
         }
+      });
+      g.forEachNode((nodeId, attrs) => {
+        if (!attrs.is_quarantined) return;
+        g.forEachNeighbor(nodeId, (neighborId) => quarantinedDeps.add(neighborId));
       });
     }
 
@@ -282,6 +290,7 @@ export default function GraphCanvas({
       searchConnected,
       sharedCveNodes,
       hasDepNodes,
+      quarantinedDeps,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported]);
@@ -403,6 +412,7 @@ export default function GraphCanvas({
         severity: sev,
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
+        is_quarantined: node.data.is_quarantined ?? false,
         ...(node.type === "dependency"
           ? { type: "hexagon" }
           : nodeImage
@@ -486,6 +496,7 @@ export default function GraphCanvas({
       stagePadding: 40,
       zIndex: true,
       defaultDrawNodeHover: drawDarkNodeHover,
+      defaultDrawNodeLabel: drawNodeLabel,
 
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
@@ -499,7 +510,7 @@ export default function GraphCanvas({
             return res;
           }
           // Hide ring when filtering excludes Critical nodes
-          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps") {
+          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps" && st.filter !== "quarantined") {
             res.hidden = true;
             return res;
           }
@@ -566,6 +577,7 @@ export default function GraphCanvas({
           let show = true;
           if (st.filter === "vulnerable") show = vc > 0;
           else if (st.filter === "safe") show = vc === 0;
+          else if (st.filter === "quarantined") show = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
           else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
           else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
           else show = sev === st.filter;
@@ -700,6 +712,34 @@ export default function GraphCanvas({
 
         return res;
       },
+    });
+
+    /* Always render quarantine badges on top of all nodes */
+    sigma.on("afterRender", () => {
+      const labelsCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).labels;
+      if (!labelsCanvas) return;
+      const ctx = labelsCanvas.getContext("2d");
+      if (!ctx) return;
+      const st = stateRef.current;
+      graph.forEachNode((nodeId, attrs) => {
+        if (!attrs.is_quarantined) return;
+        const d = sigma.getNodeDisplayData(nodeId);
+        if (!d || d.hidden) return;
+        const { x, y } = (sigma as any).framedGraphToViewport(d);
+        const size = (sigma as any).scaleSize(d.size);
+
+        let alpha = 1;
+        if (st.selectedNode) {
+          if (nodeId !== st.selectedNode && !st.neighbors.has(nodeId)) alpha = 0.08;
+        } else if (st.hoveredNode) {
+          if (!st.hoverNeighbors.has(nodeId) && nodeId !== st.hoveredNode && attrs.nodeType !== "repo") alpha = 0.2;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        drawLockBadge(ctx, x + size * 0.72, y - size * 0.72, Math.max(5, size * 0.58));
+        ctx.restore();
+      });
     });
 
     /* Events */

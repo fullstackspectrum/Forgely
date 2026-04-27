@@ -1028,9 +1028,22 @@ body {
 
 .panel-status-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 16px;
+}
+
+.panel-status-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.panel-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .vuln-count-inline {
@@ -1069,6 +1082,22 @@ body {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
 }
 
+.quarantine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.40);
+  color: #f59e0b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .cloudsmith-view-btn {
   display: inline-flex;
   align-items: center;
@@ -1082,7 +1111,6 @@ body {
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
   flex-shrink: 0;
-  margin-left: auto;
 }
 .cloudsmith-view-btn:hover {
   background: rgba(74, 144, 217, 0.2);
@@ -1104,7 +1132,6 @@ body {
   color: #ff8a8a;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
-  margin-left: auto;
   flex-shrink: 0;
 }
 .vulnly-report-btn:hover:not(:disabled) {
@@ -1129,9 +1156,6 @@ body {
 .vulnly-report-btn-clean .vulnly-spinner {
   border-color: rgba(111, 208, 130, 0.3);
   border-top-color: #6fd082;
-}
-.vulnly-report-btn + .cloudsmith-view-btn {
-  margin-left: 0;
 }
 .vulnly-spinner {
   width: 12px;
