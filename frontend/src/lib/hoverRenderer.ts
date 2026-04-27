@@ -26,8 +26,8 @@ export function drawDarkNodeHover(
   data: any,
   settings: Settings,
 ): void {
-  const fontSize  = settings.labelSize  ?? 12;
-  const font      = settings.labelFont  ?? "Inter, system-ui, sans-serif";
+  const fontSize  = settings.labelSize  ?? 13;
+  const font      = settings.labelFont  ?? "Geist, system-ui, sans-serif";
   const weight    = settings.labelWeight ?? "600";
   const label          = (data.label as string | null | undefined) ?? "";
   const severity       = data.severity      as string | undefined;
