@@ -1226,6 +1226,110 @@ body {
   margin-top: 16px;
 }
 
+/* Dependency detail panel */
+.dep-panel-type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.dep-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(155, 89, 182, 0.18);
+  border: 1px solid rgba(155, 89, 182, 0.4);
+  color: #c084fc;
+}
+.dep-panel-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.dep-panel-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  margin-bottom: 8px;
+  transition: border-color 0.15s;
+}
+.dep-panel-search:focus {
+  outline: none;
+  border-color: rgba(155, 89, 182, 0.6);
+}
+.dep-panel-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.dep-pkg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dep-pkg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+.dep-pkg-name {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: left;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+.dep-pkg-name:hover {
+  color: #fff;
+}
+.dep-pkg-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dep-pkg-version {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dep-pkg-expr {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  color: #a78bfa;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .section-title {
   font-size: 14px;
   font-weight: 600;
