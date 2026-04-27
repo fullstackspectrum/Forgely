@@ -24,6 +24,63 @@ const STAGE_COLORS: Record<string, { accent: string; border: string; icon: strin
   cve:      { accent: "#ef4444", border: "rgba(239,68,68,0.45)",   icon: "#ef4444" },
 };
 
+/* ── Access method helpers ───────────────────────────────────── */
+
+interface AccessMethod {
+  label: string;
+  type: "native" | "cloudsmith";
+}
+
+function getAccessMethods(format: string): AccessMethod[] {
+  const fmt = (format || "").toLowerCase();
+
+  let native: AccessMethod[];
+  if (fmt.includes("docker") || fmt.includes("container") || fmt.includes("oci")) {
+    native = [{ label: "docker pull", type: "native" }];
+  } else if (fmt.includes("python") || fmt.includes("pypi")) {
+    native = [{ label: "pip install", type: "native" }, { label: "poetry add", type: "native" }];
+  } else if (fmt.includes("npm") || fmt.includes("node") || fmt.includes("javascript")) {
+    native = [{ label: "npm install", type: "native" }, { label: "yarn add", type: "native" }];
+  } else if (fmt.includes("maven") || fmt.includes("java")) {
+    native = [{ label: "mvn", type: "native" }, { label: "gradle", type: "native" }];
+  } else if (fmt.includes("nuget") || fmt.includes("dotnet") || fmt.includes(".net")) {
+    native = [{ label: "dotnet add", type: "native" }, { label: "nuget install", type: "native" }];
+  } else if (fmt.includes("ruby") || fmt.includes("gem") || fmt.includes("rubygem")) {
+    native = [{ label: "gem install", type: "native" }, { label: "bundle install", type: "native" }];
+  } else if (fmt.includes("cargo") || fmt.includes("rust") || fmt.includes("crate")) {
+    native = [{ label: "cargo add", type: "native" }];
+  } else if (fmt.includes("golang") || fmt === "go") {
+    native = [{ label: "go get", type: "native" }];
+  } else if (fmt.includes("helm")) {
+    native = [{ label: "helm pull", type: "native" }, { label: "helm install", type: "native" }];
+  } else if (fmt.includes("debian") || fmt.includes("deb")) {
+    native = [{ label: "apt install", type: "native" }];
+  } else if (fmt.includes("rpm") || fmt.includes("redhat") || fmt.includes("rhel") || fmt.includes("fedora")) {
+    native = [{ label: "yum install", type: "native" }, { label: "dnf install", type: "native" }];
+  } else if (fmt.includes("terraform")) {
+    native = [{ label: "terraform", type: "native" }];
+  } else if (fmt.includes("conan")) {
+    native = [{ label: "conan install", type: "native" }];
+  } else if (fmt.includes("composer") || fmt.includes("php")) {
+    native = [{ label: "composer require", type: "native" }];
+  } else if (fmt.includes("dart") || fmt.includes("pub")) {
+    native = [{ label: "dart pub get", type: "native" }];
+  } else if (fmt.includes("conda")) {
+    native = [{ label: "conda install", type: "native" }];
+  } else if (fmt.includes("swift") || fmt.includes("spm")) {
+    native = [{ label: "swift package", type: "native" }];
+  } else {
+    native = [{ label: "curl", type: "native" }, { label: "wget", type: "native" }];
+  }
+
+  return [
+    ...native,
+    { label: "cloudsmith-cli", type: "cloudsmith" },
+    { label: "REST API",       type: "cloudsmith" },
+    { label: "Web UI",         type: "cloudsmith" },
+  ];
+}
+
 interface Props {
   packageNodeId: string;
   data: GraphResponse;
@@ -220,6 +277,10 @@ function AttackGraphCanvas({
           <marker id="ag-arrow-cve" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
             <path d="M0,0 L0,6 L8,3 z" fill="rgba(239,68,68,0.7)" />
           </marker>
+          {/* Arrowhead for Cloudsmith-specific access edges */}
+          <marker id="ag-arrow-cs" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(139,92,246,0.7)" />
+          </marker>
           <style>{`
             .ag-node-enter { animation: agNodeIn 0.35s cubic-bezier(0.16,1,0.3,1) both; }
             .ag-edge-draw  { animation: agEdgeDraw 0.6s ease both; }
@@ -245,7 +306,7 @@ function AttackGraphCanvas({
             { label: "Package",      x: X_PKG       + NW / 2 },
             { label: "Vulnerabilities", x: X_CVE    + NW / 2 },
           ].map(({ label, x }) => (
-            <text key={label} x={x} y={-NH / 2 - 18} textAnchor="middle"
+            <text key={label} x={x} y={-NH / 2 - 44} textAnchor="middle"
               fontSize="10" fontWeight="600" letterSpacing="0.06em"
               fill="rgba(0,0,0,0.35)" fontFamily="Geist, system-ui, sans-serif"
               style={{ textTransform: "uppercase" }}>
@@ -253,19 +314,60 @@ function AttackGraphCanvas({
             </text>
           ))}
 
-          {/* ── Flow edges: Internet → Registry → Repo → Package ── */}
-          {[
-            { x1: X_INTERNET + NW, y1: 0, x2: X_REGISTRY, y2: 0, delay: "0.1s" },
-            { x1: X_REGISTRY  + NW, y1: 0, x2: X_REPO,    y2: repoCount === 1 ? 0 : repoStartY + NH / 2, delay: "0.2s" },
-          ].map((e, i) => (
-            <line key={i}
-              x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-              stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
-              markerEnd="url(#ag-arrow-flow)"
-              strokeDasharray="800" className="ag-edge-draw"
-              style={{ animationDelay: e.delay }}
-            />
-          ))}
+          {/* ── Access method edges: Internet → Registry ── */}
+          {getAccessMethods(packageNode!.data.format).map((method, i, arr) => {
+            const spacing = 30;
+            const offset = -(arr.length - 1) * spacing / 2 + i * spacing;
+            const sy = offset * 0.35;
+            const cy = offset;
+            const x1 = X_INTERNET + NW;
+            const x2 = X_REGISTRY;
+            const cpDist = 70;
+            const d = `M ${x1} ${sy} C ${x1 + cpDist} ${cy}, ${x2 - cpDist} ${cy}, ${x2} ${sy}`;
+            const lx = (x1 + x2) / 2;
+            const ly = 0.125 * (sy + sy) + 0.75 * cy;
+            const isNative = method.type === "native";
+            const edgeColor = isNative ? "rgba(74,144,217,0.55)" : "rgba(139,92,246,0.55)";
+            const labelBg   = isNative ? "rgba(74,144,217,0.88)" : "rgba(139,92,246,0.88)";
+            const lw = method.label.length * 5.2 + 12;
+            const lh = 14;
+            const animDelay = `${0.04 + i * 0.06}s`;
+            return (
+              <g key={method.label}>
+                <path
+                  d={d}
+                  stroke={edgeColor} strokeWidth="1.5" fill="none"
+                  markerEnd={isNative ? "url(#ag-arrow-flow)" : "url(#ag-arrow-cs)"}
+                  strokeDasharray="800" className="ag-edge-draw"
+                  style={{ animationDelay: animDelay }}
+                />
+                <g
+                  className="ag-node-enter"
+                  style={{ animationDelay: animDelay, transformOrigin: `${lx}px ${ly}px` }}
+                >
+                  <rect x={lx - lw / 2} y={ly - lh / 2} width={lw} height={lh} rx={4} fill={labelBg} />
+                  <text
+                    x={lx} y={ly + 4.5} textAnchor="middle"
+                    fontSize="8.5" fontWeight="600" fill="#fff"
+                    fontFamily='ui-monospace,"SF Mono",Consolas,monospace'
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {method.label}
+                  </text>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* ── Flow edge: Registry → Repo ── */}
+          <line
+            x1={X_REGISTRY + NW} y1={0}
+            x2={X_REPO} y2={repoCount === 1 ? 0 : repoStartY + NH / 2}
+            stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
+            markerEnd="url(#ag-arrow-flow)"
+            strokeDasharray="800" className="ag-edge-draw"
+            style={{ animationDelay: "0.2s" }}
+          />
 
           {/* Repo → Package edge(s) */}
           {displayRepos.map((repo, i) => {
