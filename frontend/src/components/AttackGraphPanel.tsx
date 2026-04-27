@@ -131,6 +131,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
   }
 
   const maxSev = packageNode.data.max_severity;
+  const isQuarantined = packageNode.data.is_quarantined;
   const topCves = packageNode.data.cves.filter(
     (c) => c.severity === "Critical" || c.severity === "High",
   );
@@ -147,6 +148,16 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
           </svg>
           <span className="ag-header-title">Attack Graph</span>
           <span className="ag-header-pkg">{packageNode.label}</span>
+          {isQuarantined && (
+            <span className="ag-header-quarantine-badge">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Quarantined
+            </span>
+          )}
         </div>
         <button className="ag-close-btn" onClick={onClose} title="Close">×</button>
       </div>
@@ -160,6 +171,7 @@ export default function AttackGraphPanel({ packageNodeId, data, owner, onClose }
         owner={owner}
         repoSlug={data.repo}
         maxSev={maxSev}
+        isQuarantined={isQuarantined}
       />
     </div>
   );
@@ -176,11 +188,12 @@ interface CanvasProps {
   owner: string;
   repoSlug: string;
   maxSev: string | null;
+  isQuarantined: boolean;
 }
 
 function AttackGraphCanvas({
   packageNode, displayRepos, criticalCves, cveExpanded,
-  onToggleCve, owner, repoSlug, maxSev,
+  onToggleCve, owner, repoSlug, maxSev, isQuarantined,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tx, setTx] = useState(0);
@@ -321,7 +334,7 @@ function AttackGraphCanvas({
           {/* ── Stage labels ── */}
           {[
             { label: "Internet",        x: X_INTERNET + NW / 2 },
-            { label: "Registry",        x: X_REGISTRY + NW / 2 },
+            { label: "Workspace",       x: X_REGISTRY + NW / 2 },
             { label: "Repository",      x: X_REPO     + NW / 2 },
             { label: "Package",         x: X_PKG      + NW / 2 },
             { label: "Vulnerabilities", x: X_CVE      + NW / 2 },
@@ -442,7 +455,8 @@ function AttackGraphCanvas({
             return (
               <line key={repo.id}
                 x1={X_REPO + NW} y1={ry} x2={X_PKG} y2={0}
-                stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
+                stroke={isQuarantined ? "rgba(239,68,68,0.5)" : "rgba(100,116,180,0.45)"}
+                strokeWidth="1.5"
                 markerEnd="url(#ag-arrow-flow)"
                 strokeDasharray="800" className="ag-edge-draw"
                 style={{ animationDelay: "0.3s" }}
@@ -450,7 +464,35 @@ function AttackGraphCanvas({
             );
           })}
 
-          {/* ── Package → CVE edge(s) ── */}
+          {/* Quarantine badge on Repo→Package edge midpoint */}
+          {isQuarantined && displayRepos.map((repo, i) => {
+            const ry = repoStartY + i * (NH + 12) + NH / 2;
+            const mx = (X_REPO + NW + X_PKG) / 2;
+            const my = ry / 2;
+            return (
+              <g key={`qbadge-${i}`} className="ag-node-enter"
+                style={{ animationDelay: "0.55s", transformOrigin: `${mx}px ${my}px` }}>
+                <rect x={mx - 47} y={my - 10} width={94} height={20} rx={5}
+                  fill="white" stroke="rgba(234,88,12,0.6)" strokeWidth="1.5" />
+                <foreignObject x={mx - 44} y={my - 7} width={14} height={14}>
+                  <div style={{ width: 14, height: 14 }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(234,88,12,0.9)"
+                      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </div>
+                </foreignObject>
+                <text x={mx - 25} y={my + 4.5} fontSize="9" fontWeight="700" letterSpacing="0.05em"
+                  fill="rgba(194,65,12,0.9)" fontFamily="Geist, system-ui, sans-serif">
+                  QUARANTINED
+                </text>
+              </g>
+            );
+          })}
+
+          {/* ── Package → CVE edge(s) (dimmed when quarantined) ── */}
+          <g opacity={isQuarantined ? 0.2 : 1}>
           {cveExpanded ? (
             criticalCves.map((cve, i) => {
               const cveY = cveStartY + i * (CVE_NH + CVE_VGAP) + CVE_NH / 2;
@@ -478,6 +520,7 @@ function AttackGraphCanvas({
               style={{ animationDelay: "0.4s" }}
             />
           )}
+          </g>
 
           {/* ── Internet node ── */}
           <SvgNode
@@ -541,22 +584,31 @@ function AttackGraphCanvas({
             id="package"
             x={X_PKG} y={pkgY}
             w={NW} h={NH} r={NR}
-            color={STAGE_COLORS.package}
+            color={isQuarantined ? { accent: "#f97316", border: "rgba(249,115,22,0.5)", icon: STAGE_COLORS.package.icon } : STAGE_COLORS.package}
             label={packageNode!.label}
             sub={packageNode!.data.version || ""}
-            pill={{ text: maxSev ?? "High", color: SEVERITY_COLORS[maxSev ?? "High"] ?? SEVERITY_COLORS.High }}
+            pill={isQuarantined
+              ? { text: "Quarantined", color: "#f97316" }
+              : { text: maxSev ?? "High", color: SEVERITY_COLORS[maxSev ?? "High"] ?? SEVERITY_COLORS.High }}
             delay="0.35s"
             icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.package.icon}
-                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                <line x1="12" y1="22.08" x2="12" y2="12"/>
-              </svg>
+              isQuarantined
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="#f97316"
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                : <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.package.icon}
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
             }
           />
 
-          {/* ── CVE node(s) ── */}
+          {/* ── CVE node(s) (dimmed when quarantined) ── */}
+          <g opacity={isQuarantined ? 0.2 : 1}>
           {cveExpanded ? (
             criticalCves.map((cve, i) => {
               const cy = cveStartY + i * (CVE_NH + CVE_VGAP);
@@ -635,6 +687,7 @@ function AttackGraphCanvas({
               </button>
             </foreignObject>
           )}
+          </g>{/* end CVE dimming group */}
 
         </g>
       </svg>
