@@ -443,10 +443,10 @@ export default function GraphCanvas({
     forceAtlas2.assign(graph, {
       iterations: 200,
       settings: {
-        gravity: 1,
-        scalingRatio: 10,
+        gravity: 0.5,
+        scalingRatio: 30,
         barnesHutOptimize: true,
-        strongGravityMode: true,
+        strongGravityMode: false,
       },
     });
 
@@ -490,9 +490,9 @@ export default function GraphCanvas({
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
-      labelFont: "Inter, system-ui, sans-serif",
+      labelFont: "Geist, system-ui, sans-serif",
       labelColor: { color: "#ddd" },
-      labelSize: 12,
+      labelSize: 13,
       stagePadding: 40,
       zIndex: true,
       defaultDrawNodeHover: drawDarkNodeHover,
