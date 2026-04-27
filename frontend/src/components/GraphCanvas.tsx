@@ -790,7 +790,7 @@ export default function GraphCanvas({
       if (
         hovered &&
         graph.getNodeAttribute(hovered, "nodeType") === "package" &&
-        graph.getNodeAttribute(hovered, "severity") === "Critical"
+        ["Critical", "High"].includes(graph.getNodeAttribute(hovered, "severity"))
       ) {
         setContextMenu({ x: e.clientX, y: e.clientY, nodeId: hovered });
       } else {
