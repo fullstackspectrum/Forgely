@@ -323,7 +323,7 @@ def get_package_vulnerabilities(
                     if vulns:
                         break
 
-    if not vulns and api_count > 0 and latest.get("max_severity"):
+    if not vulns and (api_count or 0) > 0 and latest.get("max_severity"):
         embedded = []
         for s in scans:
             sev = s.get("max_severity") or s.get("severity")
@@ -355,7 +355,8 @@ def get_package_vulnerabilities(
     # "no scans at all" (Python None).
     # The Cloudsmith API may also return "Unknown" as max_severity for scans
     # that completed with 0 vulnerabilities – normalise that to "None" too.
-    if not max_sev or (max_sev == "Unknown" and int(api_count) == 0 and not vulns):
+    api_count_int = int(api_count) if api_count is not None else 0
+    if not max_sev or (max_sev == "Unknown" and api_count_int == 0 and not vulns):
         max_sev = "None"
 
-    return max_sev, int(api_count), vulns
+    return max_sev, api_count_int, vulns
