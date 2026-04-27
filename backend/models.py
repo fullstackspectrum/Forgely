@@ -28,6 +28,7 @@ class NodeData(BaseModel):
     uploaded_at: str = ""
     slug: str = ""
     pkg_type: str = ""
+    is_quarantined: bool = False
 
 
 class GraphNode(BaseModel):

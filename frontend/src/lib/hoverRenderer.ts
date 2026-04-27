@@ -1,7 +1,9 @@
 /**
  * Glass-style node hover renderer: layered canvas card with gradient body,
  * top sheen, severity accent bar, and an inline severity badge.
+ * Also exports a custom label drawer that renders a lock badge for quarantined nodes.
  */
+import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -27,9 +29,10 @@ export function drawDarkNodeHover(
   const fontSize  = settings.labelSize  ?? 12;
   const font      = settings.labelFont  ?? "Inter, system-ui, sans-serif";
   const weight    = settings.labelWeight ?? "600";
-  const label     = (data.label as string | null | undefined) ?? "";
-  const severity  = data.severity  as string | undefined;
-  const nodeType  = data.nodeType  as string | undefined;
+  const label          = (data.label as string | null | undefined) ?? "";
+  const severity       = data.severity      as string | undefined;
+  const nodeType       = data.nodeType      as string | undefined;
+  const isQuarantined  = !!data.is_quarantined;
 
   // Skip empty hover for repo nodes
   if (!label) return;
@@ -52,10 +55,16 @@ export function drawDarkNodeHover(
     contentW = Math.max(contentW, context.measureText(severity).width + 16);
     context.font = `${weight} ${fontSize}px ${font}`;
   }
+  if (isQuarantined) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    contentW = Math.max(contentW, context.measureText("Quarantined").width + 22);
+    context.font = `${weight} ${fontSize}px ${font}`;
+  }
 
   const accentW   = SEVERITY_COLORS[severity ?? ""] ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
-  const boxHeight = Math.round(fontSize + PAD_Y * 2 + (showSeverity ? fontSize + INNER_GAP : 0));
+  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
+  const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
 
   const x = data.x + data.size + 8;
   const y = data.y - boxHeight / 2;
@@ -109,21 +118,87 @@ export function drawDarkNodeHover(
   }
 
   // ── Layer 6: severity badge ───────────────────────────────────────────────
+  let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(255,255,255,0.08)", "#aaa"];
-    const sevW    = context.measureText(severity).width + 14;
-    const badgeH  = Math.round(fontSize - 1);
-    const badgeY  = y + PAD_Y + fontSize + INNER_GAP;
+    const sevW   = context.measureText(severity).width + 14;
+    const badgeH = Math.round(fontSize - 1);
 
     context.fillStyle = badgeBg;
-    roundedRect(context, textX, badgeY, sevW, badgeH, 3);
+    roundedRect(context, textX, nextRowY, sevW, badgeH, 3);
     context.fill();
 
     context.fillStyle    = badgeFg;
     context.textBaseline = "top";
-    context.fillText(severity, textX + 7, badgeY + 1);
+    context.fillText(severity, textX + 7, nextRowY + 1);
+    nextRowY += fontSize + INNER_GAP;
   }
+
+  // ── Layer 7: quarantine badge row ────────────────────────────────────────
+  if (isQuarantined) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    const qText  = "Quarantined";
+    const qW     = context.measureText(qText).width + 22;
+    const badgeH = Math.round(fontSize - 1);
+
+    context.fillStyle = "rgba(245,158,11,0.20)";
+    roundedRect(context, textX, nextRowY, qW, badgeH, 3);
+    context.fill();
+
+    context.fillStyle    = "#f59e0b";
+    context.textBaseline = "top";
+    context.fillText(qText, textX + 15, nextRowY + 1);
+
+    // Small lock glyph before the text
+    const lx = textX + 7, ly = nextRowY + badgeH / 2;
+    const lr = badgeH * 0.28;
+    context.strokeStyle = "#f59e0b";
+    context.lineWidth   = lr * 0.7;
+    context.lineCap     = "round";
+    context.beginPath();
+    context.arc(lx, ly - lr * 0.5, lr * 0.6, Math.PI, 0);
+    context.stroke();
+    context.fillStyle = "#f59e0b";
+    context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
+  }
+
+  // ── Layer 8: corner lock badge on the node itself ────────────────────────
+  if (isQuarantined) {
+    const br = Math.max(5, (data.size ?? 1) * 0.58);
+    drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, br);
+  }
+}
+
+export function drawNodeLabel(
+  context: CanvasRenderingContext2D,
+  data: any,
+  settings: Settings,
+): void {
+  drawDiscNodeLabel(context, data, settings);
+}
+
+export { drawLockBadge };
+
+/** Draws a small amber circle-slash icon centred at (cx, cy) with radius r. */
+function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+
+  ctx.strokeStyle = "#f59e0b";
+  ctx.lineWidth   = r * 0.28;
+  ctx.lineCap     = "round";
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const d = r * 0.707;
+  ctx.beginPath();
+  ctx.moveTo(cx + d, cy - d);
+  ctx.lineTo(cx - d, cy + d);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
