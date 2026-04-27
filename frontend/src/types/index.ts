@@ -63,6 +63,7 @@ export type FilterType =
   | "all"
   | "vulnerable"
   | "safe"
+  | "quarantined"
   | "shared_cve"
   | "has_deps"
   | "Critical"
