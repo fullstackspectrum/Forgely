@@ -37,6 +37,7 @@ export default function App() {
   const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
   const [hideDependencies, setHideDependencies] = useState(false);
   const [hideUnsupported, setHideUnsupported] = useState(false);
+  const [hideCriticalAnimation, setHideCriticalAnimation] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
@@ -187,6 +188,7 @@ export default function App() {
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
           hideUnsupported={hideUnsupported}
+          hideCriticalAnimation={hideCriticalAnimation}
           hasKey={hasKey}
           tab={tab}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
@@ -194,6 +196,7 @@ export default function App() {
           onHideSharedCveEdgesChange={setHideSharedCveEdges}
           onHideDependenciesChange={setHideDependencies}
           onHideUnsupportedChange={setHideUnsupported}
+          onHideCriticalAnimationChange={setHideCriticalAnimation}
           onConnectClick={() => setConnectOpen(true)}
           onDisconnect={() => { clearApiKey(); setHasKey(false); }}
         />
@@ -280,6 +283,7 @@ export default function App() {
               hideSharedCveEdges={hideSharedCveEdges}
               hideDependencies={hideDependencies}
               hideUnsupported={hideUnsupported}
+              hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
               onRefresh={handleRefresh}
