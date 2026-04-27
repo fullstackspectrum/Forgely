@@ -4,7 +4,7 @@
 
 ---
 
-
+> **Disclaimer:** Forgely is a personal, community-driven project. It is **not** an official Cloudsmith product and is not endorsed, supported, or maintained by Cloudsmith.
 
 **Forgely** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
 
