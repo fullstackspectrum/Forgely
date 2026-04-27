@@ -77,6 +77,20 @@ export default function SidePanel({
     );
   }
 
+  /* Dependency node view */
+  if (node.type === "dependency") {
+    return (
+      <DependencyDetail
+        data={data}
+        node={node}
+        expanded={expanded}
+        filter={filter}
+        onFilterChange={onFilterChange}
+        onNodeSelect={onNodeSelect}
+      />
+    );
+  }
+
   const toggleSeverity = (s: FilterType) => {
     if (!onFilterChange) return;
     onFilterChange(filter === s ? "all" : s);
@@ -527,6 +541,119 @@ function CveCard({
           ⚠ Also affects: {otherPackages.join(", ")}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ================================================================
+   Dependency Detail View
+   ================================================================ */
+
+function DependencyDetail({
+  data,
+  node,
+  expanded = false,
+  filter,
+  onFilterChange,
+  onNodeSelect,
+}: {
+  data: GraphResponse;
+  node: GraphNode;
+  expanded?: boolean;
+  filter?: FilterType;
+  onFilterChange?: (f: FilterType) => void;
+  onNodeSelect?: (id: string) => void;
+}) {
+  const [pkgQuery, setPkgQuery] = useState("");
+
+  const linkedPackages = useMemo(() => {
+    const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
+    const seen = new Set<string>();
+    const list: { pkg: GraphNode; versionExpr: string }[] = [];
+    for (const e of data.edges) {
+      if (e.type !== "dependency" || e.target !== node.id) continue;
+      if (seen.has(e.source)) continue;
+      seen.add(e.source);
+      const src = nodeMap.get(e.source);
+      if (src) list.push({ pkg: src, versionExpr: e.label || "" });
+    }
+    list.sort((a, b) => {
+      const bv = (b.pkg.data.vuln_count || 0) - (a.pkg.data.vuln_count || 0);
+      return bv !== 0 ? bv : a.pkg.label.localeCompare(b.pkg.label);
+    });
+    return list;
+  }, [data, node.id]);
+
+  const filtered = pkgQuery
+    ? linkedPackages.filter(({ pkg }) => pkg.label.toLowerCase().includes(pkgQuery.toLowerCase()))
+    : linkedPackages;
+
+  return (
+    <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
+      <div className="panel-summary">
+        <div className="panel-header">
+          <h2 className="panel-title">{node.label}</h2>
+          {node.data.version && (
+            <span className="panel-version">
+              <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>requires </span>
+              <span style={{ fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" }}>{node.data.version}</span>
+            </span>
+          )}
+        </div>
+        <div className="dep-panel-type-row">
+          <span className="dep-panel-badge">Dependency</span>
+          <span className="dep-panel-count">{linkedPackages.length} {linkedPackages.length === 1 ? "package" : "packages"}</span>
+        </div>
+      </div>
+
+      <div className="panel-details">
+        <div className="panel-section">
+          <h3 className="section-title">Linked Packages</h3>
+          <input
+            className="dep-panel-search"
+            type="search"
+            placeholder="Filter packages…"
+            value={pkgQuery}
+            onChange={(e) => setPkgQuery(e.target.value)}
+          />
+          {filtered.length === 0 ? (
+            <p className="dep-panel-empty">{pkgQuery ? "No matches" : "No linked packages"}</p>
+          ) : (
+            <ul className="dep-pkg-list">
+              {filtered.map(({ pkg, versionExpr }) => {
+                const sev = pkg.data.max_severity || "None";
+                const sevColor = SEVERITY_COLORS[sev] || SEVERITY_COLORS.None;
+                const isActive = filter === sev;
+                return (
+                  <li key={pkg.id} className="dep-pkg-row">
+                    <button
+                      type="button"
+                      className="dep-pkg-name"
+                      onClick={() => onNodeSelect?.(pkg.id)}
+                      title={`Select ${pkg.label}`}
+                    >
+                      <span className="dep-pkg-label">{pkg.label}</span>
+                      {pkg.data.version && <span className="dep-pkg-version">{pkg.data.version}</span>}
+                      {versionExpr && <span className="dep-pkg-expr" title="Required version expression">{versionExpr}</span>}
+                    </button>
+                    {sev !== "None" && (
+                      <button
+                        type="button"
+                        className={`severity-badge severity-badge-clickable${isActive ? " active" : ""}`}
+                        style={{ background: sevColor }}
+                        onClick={() => onFilterChange?.(isActive ? "all" : sev as FilterType)}
+                        title={isActive ? `Clear ${sev} filter` : `Filter graph by ${sev}`}
+                      >
+                        {sev}
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
