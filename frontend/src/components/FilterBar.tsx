@@ -9,6 +9,7 @@ interface Props {
   hideSharedCveEdges: boolean;
   hideDependencies: boolean;
   hideUnsupported: boolean;
+  hideCriticalAnimation: boolean;
   hasKey: boolean;
   tab: TabType;
   onTabChange: (t: TabType) => void;
@@ -16,6 +17,7 @@ interface Props {
   onHideSharedCveEdgesChange: (v: boolean) => void;
   onHideDependenciesChange: (v: boolean) => void;
   onHideUnsupportedChange: (v: boolean) => void;
+  onHideCriticalAnimationChange: (v: boolean) => void;
   onConnectClick: () => void;
   onDisconnect: () => void;
 }
@@ -46,6 +48,7 @@ export default function FilterBar({
   hideSharedCveEdges,
   hideDependencies,
   hideUnsupported,
+  hideCriticalAnimation,
   hasKey,
   tab,
   onTabChange,
@@ -53,6 +56,7 @@ export default function FilterBar({
   onHideSharedCveEdgesChange,
   onHideDependenciesChange,
   onHideUnsupportedChange,
+  onHideCriticalAnimationChange,
   onConnectClick,
   onDisconnect,
 }: Props) {
@@ -147,6 +151,11 @@ export default function FilterBar({
             label="Unsupported scans"
             visible={!hideUnsupported}
             onToggle={() => onHideUnsupportedChange(!hideUnsupported)}
+          />
+          <VisibilityToggle
+            label="Critical animation"
+            visible={!hideCriticalAnimation}
+            onToggle={() => onHideCriticalAnimationChange(!hideCriticalAnimation)}
           />
         </div>
       </CollapsibleSection>
