@@ -6,6 +6,7 @@ import OrgLeftPanel from "./components/OrgLeftPanel";
 import OrgSidePanel from "./components/OrgSidePanel";
 import OrgLegend from "./components/OrgLegend";
 import SidePanel from "./components/SidePanel";
+import AttackGraphPanel from "./components/AttackGraphPanel";
 import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
@@ -51,6 +52,7 @@ export default function App() {
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [attackGraphOpen, setAttackGraphOpen] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -283,6 +285,7 @@ export default function App() {
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
+              onOpenAttackGraph={(nodeId) => { setSelectedNode(nodeId); setAttackGraphOpen(true); }}
             />
           ) : (
             <div className="empty-state">
@@ -290,7 +293,7 @@ export default function App() {
             </div>
           )}
 
-          {selectedNode && data && (
+          {selectedNode && data && !attackGraphOpen && (
             <div className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}>
               <div className="panel-toolbar">
                 <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
@@ -298,8 +301,17 @@ export default function App() {
                 </button>
                 <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
               </div>
-              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} />
+              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
             </div>
+          )}
+
+          {attackGraphOpen && selectedNode && data && (
+            <AttackGraphPanel
+              packageNodeId={selectedNode}
+              data={data}
+              owner={owner}
+              onClose={() => setAttackGraphOpen(false)}
+            />
           )}
 
           <Legend />
