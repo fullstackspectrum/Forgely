@@ -3106,23 +3106,43 @@ body {
    Attack Graph Panel
    ================================================================ */
 
-.attack-graph-panel {
+/* Backdrop overlay */
+.attack-graph-backdrop {
   position: fixed;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 75%;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: agBackdropIn 0.2s ease;
+}
+
+@keyframes agBackdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.attack-graph-panel {
+  position: relative;
+  width: calc(100vw - 80px);
+  height: calc(100vh - 80px);
+  max-width: 1600px;
   background: rgba(14, 16, 28, 0.98);
-  border-left: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   z-index: 200;
-  animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: agPanelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
-@keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+@keyframes agPanelIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
 
 .ag-header {
