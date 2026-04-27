@@ -161,6 +161,28 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
+/** ForceAtlas2 with size-aware repulsion for a well-spaced organic layout. */
+function applyForceLayout(graph: Graph) {
+  // Spread nodes randomly across a wide area so FA2 starts untangled
+  const spread = Math.max(200, graph.order * 15);
+  graph.forEachNode((id) => {
+    graph.setNodeAttribute(id, "x", (Math.random() - 0.5) * spread);
+    graph.setNodeAttribute(id, "y", (Math.random() - 0.5) * spread);
+  });
+
+  forceAtlas2.assign(graph, {
+    iterations: 400,
+    settings: {
+      gravity: 0.05,
+      scalingRatio: 12,
+      adjustSizes: true,
+      barnesHutOptimize: graph.order > 100,
+      strongGravityMode: false,
+      slowDown: 1 + Math.log(graph.order + 1),
+    },
+  });
+}
+
 interface Props {
   data: GraphResponse;
   selectedNode: string | null;
@@ -301,15 +323,7 @@ export default function GraphCanvas({
     if (!graph || !sigma) return;
 
     if (layout === "force") {
-      forceAtlas2.assign(graph, {
-        iterations: 200,
-        settings: {
-          gravity: 1,
-          scalingRatio: 10,
-          barnesHutOptimize: true,
-          strongGravityMode: true,
-        },
-      });
+      applyForceLayout(graph);
     } else if (layout === "circular") {
       circular.assign(graph);
     } else if (layout === "radial") {
@@ -405,8 +419,8 @@ export default function GraphCanvas({
             : node.type === "dependency"
               ? "#9b59b6"
               : sevColor,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
+        x: 0,
+        y: 0,
         nodeType: node.type,
         severity: sev,
         vulnCount: node.data.vuln_count,
@@ -439,15 +453,7 @@ export default function GraphCanvas({
     }
 
     /* --- Layout --- */
-    forceAtlas2.assign(graph, {
-      iterations: 200,
-      settings: {
-        gravity: 0.5,
-        scalingRatio: 30,
-        barnesHutOptimize: true,
-        strongGravityMode: false,
-      },
-    });
+    applyForceLayout(graph);
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
