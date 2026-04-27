@@ -3198,6 +3198,7 @@ body {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .ag-stage-label {
@@ -3322,7 +3323,7 @@ body {
   align-items: center;
   justify-content: center;
   color: rgba(255, 255, 255, 0.2);
-  padding: 0 8px;
+  padding: 0 4px;
   flex-shrink: 0;
   margin-top: 20px; /* offset to align with node centers (label pushes node down) */
 }
@@ -3336,6 +3337,95 @@ body {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.3);
   flex-shrink: 0;
+}
+
+.ag-node-clickable {
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ag-node-clickable:hover {
+  background: rgba(255, 77, 77, 0.07);
+  border-color: rgba(255, 77, 77, 0.4);
+}
+
+.ag-expand-hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 77, 77, 0.7);
+  margin-top: 5px;
+  letter-spacing: 0.04em;
+}
+
+.ag-stage-collapse {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.04em;
+  transition: color 0.15s;
+}
+.ag-stage-collapse:hover { color: rgba(255, 255, 255, 0.65); }
+
+/* CVE expanded graph area */
+.ag-body-expanded {
+  align-items: stretch !important;
+  padding-right: 0 !important;
+}
+
+.ag-body-expanded .ag-stage,
+.ag-body-expanded .ag-arrow {
+  align-self: center;
+}
+
+.ag-cve-graph {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ag-cve-graph-header {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.ag-cve-graph-svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ag-node-cve-item {
+  border-top: 2px solid rgba(255, 77, 77, 0.55);
+}
+
+.ag-cve-id {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 12px;
+  color: #ff8080;
+}
+
+.ag-cve-desc {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1.4;
+  margin-top: 3px;
+  display: block;
 }
 
 /* ================================================================
@@ -3405,4 +3495,29 @@ body {
 .context-menu-item:hover {
   background: rgba(99, 102, 241, 0.18);
   color: #c7d2fe;
+}
+
+/* ================================================================
+   Attack Graph canvas background
+   ================================================================ */
+
+.ag-canvas-bg {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: #ffffff;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+  cursor: grab;
+  user-select: none;
+}
+
+.ag-canvas-bg:active {
+  cursor: grabbing;
+}
+
+.ag-canvas-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }

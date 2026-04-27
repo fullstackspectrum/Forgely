@@ -787,7 +787,11 @@ export default function GraphCanvas({
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       const hovered = stateRef.current.hoveredNode;
-      if (hovered && graph.getNodeAttribute(hovered, "nodeType") === "package") {
+      if (
+        hovered &&
+        graph.getNodeAttribute(hovered, "nodeType") === "package" &&
+        graph.getNodeAttribute(hovered, "severity") === "Critical"
+      ) {
         setContextMenu({ x: e.clientX, y: e.clientY, nodeId: hovered });
       } else {
         setContextMenu(null);

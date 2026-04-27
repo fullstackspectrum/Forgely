@@ -203,9 +203,9 @@ export default function SidePanel({
             </span>
           )}
         </div>
-        {(onOpenAttackGraph || canGenerateReport || cloudsmithUrl) && (
+        {((onOpenAttackGraph && d.max_severity === "Critical") || canGenerateReport || cloudsmithUrl) && (
         <div className="panel-status-actions">
-          {onOpenAttackGraph && (
+          {onOpenAttackGraph && d.max_severity === "Critical" && (
             <button
               type="button"
               className="attack-graph-btn"
