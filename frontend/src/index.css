@@ -1431,6 +1431,20 @@ body {
   font-weight: 600;
 }
 
+.cve-filter-btn-shared {
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.35);
+}
+.cve-filter-btn-shared:hover {
+  border-color: #c084fc;
+  color: #fff;
+}
+.cve-filter-btn-shared.active {
+  background: rgba(192, 132, 252, 0.2);
+  border-color: #c084fc;
+  color: #c084fc;
+}
+
 /* ===== Repo Detail View ===== */
 
 .repo-header-row {

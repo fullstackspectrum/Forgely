@@ -31,6 +31,7 @@ export default function SidePanel({
   onNodeSelect,
 }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
+  const [showSharedOnly, setShowSharedOnly] = useState(false);
   const [cveQuery, setCveQuery] = useState<string>("");
   const [depsExpanded, setDepsExpanded] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -326,9 +327,11 @@ export default function SidePanel({
         for (const c of sorted) {
           sevCounts[c.severity] = (sevCounts[c.severity] || 0) + 1;
         }
+        const sharedCount = sorted.filter((c) => (cveIndex[c.id]?.length ?? 0) > 1).length;
         const q = cveQuery.trim().toLowerCase();
         const filtered = sorted.filter((c) => {
           if (sevFilter !== "All" && c.severity !== sevFilter) return false;
+          if (showSharedOnly && (cveIndex[c.id]?.length ?? 0) <= 1) return false;
           if (!q) return true;
           return (
             (c.id || "").toLowerCase().includes(q) ||
@@ -377,6 +380,15 @@ export default function SidePanel({
                   {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
                 </button>
               ))}
+              {sharedCount > 0 && (
+                <button
+                  className={`cve-filter-btn cve-filter-btn-shared${showSharedOnly ? " active" : ""}`}
+                  onClick={() => setShowSharedOnly((v) => !v)}
+                  title="Show only CVEs shared with other packages"
+                >
+                  Shared ({sharedCount})
+                </button>
+              )}
             </div>
             <div className="cve-list">
               {filtered.length === 0 ? (
