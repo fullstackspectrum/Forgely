@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGraphData } from "./hooks/useGraphData";
 import GraphCanvas from "./components/GraphCanvas";
 import OrgGraphCanvas from "./components/OrgGraphCanvas";
@@ -28,7 +28,9 @@ export default function App() {
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [selectedNodeY, setSelectedNodeY] = useState<number>(200);
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
@@ -287,7 +289,7 @@ export default function App() {
               hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
-              onNodeScreenY={setSelectedNodeY}
+              onNodeScreenY={(y) => { setSelectedNodeY(y); setPanelPos(null); }}
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
@@ -299,20 +301,52 @@ export default function App() {
             </div>
           )}
 
-          {selectedNode && data && !attackGraphOpen && (
-            <div
-              className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}
-              style={panelExpanded ? undefined : { top: Math.max(20, Math.min(selectedNodeY - 60, window.innerHeight - 480)) }}
-            >
-              <div className="panel-toolbar">
-                <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
-                  {panelExpanded ? "⇥" : "⇤"}
-                </button>
-                <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
+          {selectedNode && data && !attackGraphOpen && (() => {
+            const autoTop = Math.max(20, Math.min(selectedNodeY - 60, window.innerHeight - 480));
+            const panelStyle = panelExpanded
+              ? undefined
+              : panelPos
+                ? { top: panelPos.y, left: panelPos.x, right: "auto" as const }
+                : { top: autoTop };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (panelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = panelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => {
+                dx = me.clientX - startX;
+                dy = me.clientY - startY;
+                panel.style.transform = `translate(${dx}px,${dy}px)`;
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
+                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+                setPanelPos({ x: finalX, y: finalY });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={panelRef} className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
+                    {panelExpanded ? "⇥" : "⇤"}
+                  </button>
+                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
+                </div>
+                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
               </div>
-              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
-            </div>
-          )}
+            );
+          })()}
 
           {attackGraphOpen && selectedNode && data && (
             <div className="attack-graph-backdrop" onClick={() => setAttackGraphOpen(false)}>

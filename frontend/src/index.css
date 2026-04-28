@@ -885,6 +885,7 @@ body {
   overflow-y: auto;
   animation: floatIn 0.22s ease-out;
   transition: width 0.3s ease, right 0.3s ease, left 0.3s ease, top 0.3s ease, bottom 0.3s ease, border-radius 0.3s ease, max-height 0.3s ease;
+  will-change: transform;
 }
 .panel-overlay-expanded {
   top: 0 !important;
@@ -922,7 +923,11 @@ body {
   border-radius: inherit;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
+  cursor: move;
+  user-select: none;
 }
+.panel-toolbar button { cursor: pointer; }
+
 .panel-expand-btn {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
