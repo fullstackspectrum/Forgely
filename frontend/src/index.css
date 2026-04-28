@@ -872,31 +872,37 @@ body {
 
 .panel-overlay {
   position: fixed;
-  top: 0;
-  right: 0;
-  width: 420px;
-  height: 100%;
+  right: 20px;
+  width: 400px;
+  max-height: calc(100vh - 40px);
   z-index: 200;
-  background: rgba(16, 18, 32, 0.92);
-  border-left: 1px solid rgba(255, 255, 255, 0.09);
-  box-shadow: -8px 0 48px rgba(0, 0, 0, 0.65), inset 1px 0 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(16, 18, 32, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   overflow-y: auto;
-  animation: slideIn 0.25s ease-out;
-  transition: width 0.3s ease;
+  animation: floatIn 0.22s ease-out;
+  transition: width 0.3s ease, right 0.3s ease, left 0.3s ease, top 0.3s ease, bottom 0.3s ease, border-radius 0.3s ease, max-height 0.3s ease;
 }
 .panel-overlay-expanded {
-  width: 75%;
+  top: 0 !important;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-height: 100vh;
+  border-radius: 0;
 }
 
-@keyframes slideIn {
+@keyframes floatIn {
   from {
-    transform: translateX(100%);
+    transform: translateY(12px) scale(0.97);
     opacity: 0;
   }
   to {
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
@@ -910,6 +916,12 @@ body {
   align-items: center;
   gap: 4px;
   padding: 10px 14px 0;
+  background: rgba(16, 18, 32, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: inherit;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .panel-expand-btn {
   background: var(--bg-elevated);

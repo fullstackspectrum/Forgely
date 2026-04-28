@@ -27,6 +27,7 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [selectedNodeY, setSelectedNodeY] = useState<number>(200);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
@@ -286,6 +287,7 @@ export default function App() {
               hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
+              onNodeScreenY={setSelectedNodeY}
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
@@ -298,7 +300,10 @@ export default function App() {
           )}
 
           {selectedNode && data && !attackGraphOpen && (
-            <div className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}>
+            <div
+              className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}
+              style={panelExpanded ? undefined : { top: Math.max(20, Math.min(selectedNodeY - 60, window.innerHeight - 480)) }}
+            >
               <div className="panel-toolbar">
                 <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
                   {panelExpanded ? "⇥" : "⇤"}
