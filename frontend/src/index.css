@@ -81,14 +81,11 @@ body {
   background-color: var(--bg-primary);
   background-image:
     radial-gradient(ellipse at 50% 44%, rgba(74, 144, 217, 0.09) 0%, transparent 60%),
-    linear-gradient(rgba(100, 149, 237, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(100, 149, 237, 0.045) 1px, transparent 1px),
-    linear-gradient(rgba(100, 149, 237, 0.10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(100, 149, 237, 0.10) 1px, transparent 1px);
+    linear-gradient(rgba(100, 149, 237, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 149, 237, 0.08) 1px, transparent 1px);
   background-size:
     100% 100%,
-    20px 20px, 20px 20px,
-    100px 100px, 100px 100px;
+    80px 80px, 80px 80px;
 }
 
 .graph-controls {
