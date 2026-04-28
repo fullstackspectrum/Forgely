@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import pathlib
 import time
 
 import requests
@@ -11,7 +12,14 @@ from requests.adapters import HTTPAdapter
 
 log = logging.getLogger("forgely.cloudsmith")
 
-APP_VERSION = "1.0.0-beta.5"
+def _read_app_version() -> str:
+    try:
+        pkg = pathlib.Path(__file__).parent.parent / "frontend" / "package.json"
+        return json.loads(pkg.read_text())["version"]
+    except Exception:
+        return "unknown"
+
+APP_VERSION = _read_app_version()
 BASE_URL = "https://api.cloudsmith.io/v1"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2
