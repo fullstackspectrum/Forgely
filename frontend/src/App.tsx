@@ -363,11 +363,6 @@ export default function App() {
 
           <Legend />
 
-          {data && (
-            <div className="repo-badge">
-              {data.owner}/{data.repo}
-            </div>
-          )}
         </>
       )}
 
@@ -415,11 +410,6 @@ export default function App() {
 
           <OrgLegend />
 
-          {orgData && (
-            <div className="repo-badge">
-              🏢 {orgData.owner}
-            </div>
-          )}
         </>
       )}
     </div>
