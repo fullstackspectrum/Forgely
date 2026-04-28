@@ -779,15 +779,20 @@ export default function GraphCanvas({
       onNodeSelect(node);
       setContextMenu(null);
     });
+    const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
+    const setCursor = (c: string) => { if (mouseCanvas) mouseCanvas.style.cursor = c; };
+
     sigma.on("enterNode", ({ node }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeHover(node);
-      containerRef.current!.style.cursor = "pointer";
+      setCursor("grab");
     });
     sigma.on("leaveNode", () => {
       onNodeHover(null);
-      containerRef.current!.style.cursor = "default";
+      setCursor("default");
     });
+    sigma.on("downNode", () => { setCursor("grabbing"); });
+    sigma.on("clickNode", ({ node }) => { if (graph.getNodeAttribute(node, "nodeType") !== "echo") setCursor("grab"); });
     sigma.on("clickStage", () => { onNodeSelect(null); setContextMenu(null); });
 
     /* Right-click context menu for package nodes */
