@@ -457,13 +457,7 @@ export default function SidePanel({
               {filtered.length === 0 ? (
                 <div className="cve-empty">No CVEs match your search.</div>
               ) : filtered.map((cve, i) => (
-                <CveCard
-                  key={`${cve.id}-${i}`}
-                  cve={cve}
-                  otherPackages={(cveIndex[cve.id] || []).filter(
-                    (id) => id !== nodeId,
-                  )}
-                />
+                <CveCard key={`${cve.id}-${i}`} cve={cve} />
               ))}
             </div>
           </div>
@@ -557,13 +551,7 @@ function MetaRow({
   );
 }
 
-function CveCard({
-  cve,
-  otherPackages,
-}: {
-  cve: CVERecord;
-  otherPackages: string[];
-}) {
+function CveCard({ cve }: { cve: CVERecord }) {
   const color = SEVERITY_COLORS[cve.severity] || "#666";
   return (
     <div className="cve-card" style={{ borderLeftColor: color }}>
@@ -611,11 +599,6 @@ function CveCard({
           </a>
         )}
       </div>
-      {otherPackages.length > 0 && (
-        <div className="cve-shared">
-          ⚠ Also affects: {otherPackages.join(", ")}
-        </div>
-      )}
     </div>
   );
 }
