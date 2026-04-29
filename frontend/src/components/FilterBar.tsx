@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { FilterType, GraphStats } from "../types";
+import type { FilterType } from "../types";
 
 type TabType = "packages" | "organisation";
 
@@ -7,7 +7,6 @@ interface Props {
   filter: FilterType;
   filterFlags: Set<string>;
   filterFlagsMode: "and" | "or";
-  stats: GraphStats | null;
   hideSharedCveEdges: boolean;
   hideDependencies: boolean;
   hideUnsupported: boolean;
@@ -45,7 +44,6 @@ export default function FilterBar({
   filter,
   filterFlags,
   filterFlagsMode,
-  stats,
   hideSharedCveEdges,
   hideDependencies,
   hideUnsupported,
@@ -100,41 +98,6 @@ export default function FilterBar({
           🏢 Workspace
         </button>
       </div>
-
-      {stats && (
-        <CollapsibleSection title="Stats" defaultOpen={false} badge={String(stats.total_nodes)}>
-          <div className="left-panel-stats">
-            <div className="stat-row">
-              <span className="stat-label">Nodes</span>
-              <span className="stat-value">{stats.total_nodes}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label">CVEs</span>
-              <span className="stat-value">{stats.total_cves}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label stat-critical">Critical</span>
-              <span className="stat-value stat-critical">{stats.critical}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label stat-high">High</span>
-              <span className="stat-value stat-high">{stats.high}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label stat-medium">Medium</span>
-              <span className="stat-value stat-medium">{stats.medium}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label stat-low">Low</span>
-              <span className="stat-value stat-low">{stats.low}</span>
-            </div>
-            <div className="stat-row">
-              <span className="stat-label stat-safe">Safe</span>
-              <span className="stat-value stat-safe">{stats.safe}</span>
-            </div>
-          </div>
-        </CollapsibleSection>
-      )}
 
       <CollapsibleSection title="Status" defaultOpen={true}>
         {filterFlags.size >= 2 && (

@@ -194,7 +194,6 @@ export default function App() {
           filter={filter}
           filterFlags={filterFlags}
           filterFlagsMode={filterFlagsMode}
-          stats={data?.stats ?? null}
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
           hideUnsupported={hideUnsupported}
