@@ -848,6 +848,9 @@ function RepoDetail({
                 disabled={!clickable}
                 title={dimmed ? `No ${filter} packages in ${fmt}` : active ? "Clear format filter" : `Filter graph by ${fmt}`}
               >
+                {filter !== "all" && filteredCount > 0 && (
+                  <span className="repo-format-card-filter-badge">{filteredCount}</span>
+                )}
                 <div className="repo-format-card-icon">
                   {icon ? (
                     <img src={icon} alt={fmt} />

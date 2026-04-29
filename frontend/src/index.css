@@ -1609,6 +1609,7 @@ body {
   gap: 8px;
 }
 .repo-format-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1622,6 +1623,19 @@ body {
   color: inherit;
   text-align: left;
   width: 100%;
+}
+.repo-format-card-filter-badge {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  background: rgba(74, 144, 217, 0.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 8px;
+  pointer-events: none;
 }
 .repo-format-card-clickable {
   cursor: pointer;
