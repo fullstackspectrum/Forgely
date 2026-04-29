@@ -190,6 +190,7 @@ interface Props {
   selectedNode: string | null;
   hoveredNode: string | null;
   filter: FilterType;
+  filterFlags?: Set<string>;
   formatFilter?: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
@@ -211,6 +212,7 @@ export default function GraphCanvas({
   selectedNode,
   hoveredNode,
   filter,
+  filterFlags = new Set<string>(),
   formatFilter = null,
   layout,
   edgeStyle,
@@ -237,6 +239,7 @@ export default function GraphCanvas({
     selectedNode,
     hoveredNode,
     filter,
+    filterFlags,
     formatFilter,
     searchResults,
     hideSharedCveEdges,
@@ -311,6 +314,7 @@ export default function GraphCanvas({
       selectedNode,
       hoveredNode,
       filter,
+      filterFlags,
       formatFilter,
       searchResults,
       hideSharedCveEdges,
@@ -325,7 +329,7 @@ export default function GraphCanvas({
       quarantinedDeps,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -529,23 +533,27 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
-          // Hide ring when filtering excludes Critical nodes
-          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps" && st.filter !== "quarantined") {
+          // Hide ring when severity filter excludes Critical nodes
+          if (st.filter !== "all" && st.filter !== "Critical") {
             res.hidden = true;
             return res;
           }
-          if (st.filter === "shared_cve" && !st.sharedCveNodes.has(parentId)) {
-            res.hidden = true;
-            return res;
-          }
-          if (st.filter === "has_deps" && !st.hasDepNodes.has(parentId)) {
-            res.hidden = true;
-            return res;
-          }
-          // Hide ring when quarantined filter excludes parent
-          if (st.filter === "quarantined" && !graph.getNodeAttribute(parentId, "is_quarantined") && !st.quarantinedDeps.has(parentId)) {
-            res.hidden = true;
-            return res;
+          // Hide ring when status flags exclude parent (OR logic across flags)
+          if (st.filterFlags.size > 0) {
+            const pa = graph.getNodeAttributes(parentId);
+            const pvc = (pa.vulnCount as number) ?? 0;
+            let flagsPass = false;
+            for (const flag of st.filterFlags) {
+              if (flag === "vulnerable" && pvc > 0) { flagsPass = true; break; }
+              if (flag === "safe" && pvc === 0) { flagsPass = true; break; }
+              if (flag === "quarantined" && (!!pa.is_quarantined || st.quarantinedDeps.has(parentId))) { flagsPass = true; break; }
+              if (flag === "shared_cve" && st.sharedCveNodes.has(parentId)) { flagsPass = true; break; }
+              if (flag === "has_deps" && st.hasDepNodes.has(parentId)) { flagsPass = true; break; }
+            }
+            if (!flagsPass) {
+              res.hidden = true;
+              return res;
+            }
           }
           // Hide ring when format filter excludes parent
           if (st.formatFilter && graph.getNodeAttribute(parentId, "format") !== st.formatFilter) {
@@ -605,18 +613,29 @@ export default function GraphCanvas({
           return res;
         }
 
-        /* --- Filtering --- */
-        if (st.filter !== "all" && attrs.nodeType !== "repo") {
+        /* --- Filtering (severity AND status flags) --- */
+        if (attrs.nodeType !== "repo") {
           const vc = (attrs as any).vulnCount ?? 0;
           const sev = (attrs as any).severity ?? "None";
-          let show = true;
-          if (st.filter === "vulnerable") show = vc > 0;
-          else if (st.filter === "safe") show = vc === 0;
-          else if (st.filter === "quarantined") show = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
-          else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
-          else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
-          else show = sev === st.filter;
-          if (!show) {
+
+          // Severity filter (single-select: Critical/High/Medium/Low or "all")
+          const severityPass = st.filter === "all" || sev === st.filter;
+
+          // Status flags (multi-select OR logic)
+          let flagsPass = st.filterFlags.size === 0;
+          if (!flagsPass) {
+            for (const flag of st.filterFlags) {
+              let m = false;
+              if (flag === "vulnerable") m = vc > 0;
+              else if (flag === "safe") m = vc === 0;
+              else if (flag === "quarantined") m = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
+              else if (flag === "shared_cve") m = st.sharedCveNodes.has(node);
+              else if (flag === "has_deps") m = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
+              if (m) { flagsPass = true; break; }
+            }
+          }
+
+          if (!severityPass || !flagsPass) {
             res.hidden = true;
             return res;
           }
