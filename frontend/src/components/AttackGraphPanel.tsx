@@ -217,15 +217,14 @@ function AttackGraphCanvas({
   const [scale, setScale] = useState(1);
   const dragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
-  const initialized = useRef(false);
   const [animKey, setAnimKey] = useState(0);
 
-  /* Centre graph on first render and whenever layout changes */
-  useEffect(() => {
+  /* Compute and apply a scale+translate that fits the graph in the container. */
+  const fitToContainer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     const { width: cw, height: ch } = el.getBoundingClientRect();
-    if (cw === 0) return;
+    if (cw === 0 || ch === 0) return;
 
     const numCves = cveExpanded ? criticalCves.length : 1;
     const cveH = cveExpanded
@@ -237,20 +236,32 @@ function AttackGraphCanvas({
     const graphW = X_CVE + NW;
     const graphH = Math.max(clientBoxH, NH, cveH);
 
-    const padX = 80;
-    const padY = 60;
+    const padX = 48;
+    const padY = 32;
     const scaleX = (cw - padX * 2) / graphW;
-    const scaleY = (ch - padY * 2) / (graphH + 36);
-    const s = Math.min(scaleX, scaleY, 1.2);
-    const stx = (cw - graphW * s) / 2;
-    const sty = ch / 2;  // y=0 is the graph's vertical centre
+    const scaleY = (ch - padY * 2) / graphH;
+    const s = Math.min(scaleX, scaleY, 1.0);
 
     setScale(s);
-    setTx(stx);
-    setTy(sty);
-    if (!initialized.current) initialized.current = true;
+    setTx((cw - graphW * s) / 2);
+    setTy(ch / 2);
     setAnimKey((k) => k + 1);
-  }, [cveExpanded, criticalCves.length, displayRepos.length]);
+  }, [cveExpanded, criticalCves.length, displayRepos.length, packageNode.data.format]);
+
+  /* Re-fit whenever layout changes. Use ResizeObserver so the first fit fires
+     after the panel has actually been painted (getBoundingClientRect returns 0
+     on the synchronous first render tick). */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Try immediately — works when the effect re-runs after CVE toggle etc.
+    fitToContainer();
+    // Fall back to ResizeObserver for the initial mount, where the container
+    // may not have dimensions yet in the synchronous render cycle.
+    const ro = new ResizeObserver(() => fitToContainer());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitToContainer]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as Element).closest("[data-clickable]")) return;
