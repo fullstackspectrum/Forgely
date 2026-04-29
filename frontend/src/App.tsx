@@ -27,7 +27,6 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [selectedNodePos, setSelectedNodePos] = useState<{ x: number; y: number }>({ x: window.innerWidth - 440, y: 200 });
   const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -289,7 +288,7 @@ export default function App() {
               hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
-              onNodeScreenPos={(x, y) => { setSelectedNodePos({ x, y }); setPanelPos(null); }}
+
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
@@ -302,17 +301,13 @@ export default function App() {
           )}
 
           {selectedNode && data && !attackGraphOpen && (() => {
-            const PANEL_W = 400;
-            const GAP = 24;
-            const autoTop = Math.max(20, Math.min(selectedNodePos.y - 60, window.innerHeight - 480));
-            const rightX = selectedNodePos.x + GAP;
-            const leftX = selectedNodePos.x - GAP - PANEL_W;
-            const autoLeft = rightX + PANEL_W < window.innerWidth - 20 ? rightX : Math.max(20, leftX);
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
             const panelStyle = panelExpanded
               ? undefined
               : panelPos
                 ? { top: panelPos.y, left: panelPos.x, right: "auto" as const }
-                : { top: autoTop, left: autoLeft, right: "auto" as const };
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
 
             const onToolbarMouseDown = (e: React.MouseEvent) => {
               if (panelExpanded || (e.target as HTMLElement).closest("button")) return;
@@ -346,7 +341,7 @@ export default function App() {
                   <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
                     {panelExpanded ? "⇥" : "⇤"}
                   </button>
-                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
+                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); setPanelPos(null); }}>×</button>
                 </div>
                 <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
               </div>
