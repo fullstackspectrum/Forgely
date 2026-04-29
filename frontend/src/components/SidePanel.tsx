@@ -77,6 +77,7 @@ export default function SidePanel({
   const [cvePage, setCvePage] = useState(0);
   const [depsExpanded, setDepsExpanded] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const node = data.nodes.find((n) => n.id === nodeId);
 
@@ -183,9 +184,6 @@ export default function SidePanel({
     if (!canGenerateReport || reportLoading) return;
     setReportLoading(true);
     setReportError(null);
-    /* Open the new tab synchronously to avoid popup blockers,
-       then navigate it once the blob URL is ready. */
-    const win = window.open("", "_blank");
     try {
       const resp = await apiFetch(
         `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}`,
@@ -196,15 +194,18 @@ export default function SidePanel({
       }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-      if (win) {
-        win.location.href = url;
-      } else {
-        window.open(url, "_blank");
-      }
-      /* Revoke after the new tab has had a chance to load. */
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const filename = `vulnly-${safe(node.label)}${d.version ? `-${safe(d.version)}` : ""}.html`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setReportDone(true);
+      setTimeout(() => setReportDone(false), 2500);
     } catch (err) {
-      if (win) win.close();
       setReportError(err instanceof Error ? err.message : "Failed to generate report");
     } finally {
       setReportLoading(false);
@@ -268,22 +269,25 @@ export default function SidePanel({
             {canGenerateReport && (
               <button
                 type="button"
-                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}`}
+                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
                 onClick={handleGenerateReport}
-                disabled={reportLoading}
-                title={reportLoading ? "Generating report…" : "Generate Vulnly HTML report"}
+                disabled={reportLoading || reportDone}
+                title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
               >
                 {reportLoading ? (
                   <span className="vulnly-spinner" aria-hidden="true" />
+                ) : reportDone ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                 ) : (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="9" y1="13" x2="15" y2="13" />
-                    <line x1="9" y1="17" x2="15" y2="17" />
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 )}
-                <span>{reportLoading ? "Generating…" : "Vulnly Report"}</span>
+                <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
               </button>
             )}
             {cloudsmithUrl && (
