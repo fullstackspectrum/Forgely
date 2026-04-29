@@ -620,8 +620,8 @@ export default function GraphCanvas({
           return res;
         }
 
-        /* --- Filtering (severity AND status flags) --- */
-        if (attrs.nodeType !== "repo") {
+        /* --- Filtering (severity AND status flags — packages only) --- */
+        if (attrs.nodeType === "package") {
           const vc = (attrs as any).vulnCount ?? 0;
           const sev = (attrs as any).severity ?? "None";
 
