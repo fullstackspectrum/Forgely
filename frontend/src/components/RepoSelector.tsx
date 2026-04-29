@@ -160,9 +160,10 @@ export default function RepoSelector({
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setRepos(list);
-        /* Auto-select first repo if current isn't in the list */
+        /* Auto-select first repo alphabetically if current isn't in the list */
         if (list.length && !list.some((r: Repo) => r.slug === repo)) {
-          setRepo(list[0].slug);
+          const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name));
+          setRepo(sorted[0].slug);
         }
       })
       .catch(() => setRepos([]))
