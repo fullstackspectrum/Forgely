@@ -27,7 +27,7 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [selectedNodeY, setSelectedNodeY] = useState<number>(200);
+  const [selectedNodePos, setSelectedNodePos] = useState<{ x: number; y: number }>({ x: window.innerWidth - 440, y: 200 });
   const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -289,7 +289,7 @@ export default function App() {
               hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
-              onNodeScreenY={(y) => { setSelectedNodeY(y); setPanelPos(null); }}
+              onNodeScreenPos={(x, y) => { setSelectedNodePos({ x, y }); setPanelPos(null); }}
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
@@ -302,12 +302,17 @@ export default function App() {
           )}
 
           {selectedNode && data && !attackGraphOpen && (() => {
-            const autoTop = Math.max(20, Math.min(selectedNodeY - 60, window.innerHeight - 480));
+            const PANEL_W = 400;
+            const GAP = 24;
+            const autoTop = Math.max(20, Math.min(selectedNodePos.y - 60, window.innerHeight - 480));
+            const rightX = selectedNodePos.x + GAP;
+            const leftX = selectedNodePos.x - GAP - PANEL_W;
+            const autoLeft = rightX + PANEL_W < window.innerWidth - 20 ? rightX : Math.max(20, leftX);
             const panelStyle = panelExpanded
               ? undefined
               : panelPos
                 ? { top: panelPos.y, left: panelPos.x, right: "auto" as const }
-                : { top: autoTop };
+                : { top: autoTop, left: autoLeft, right: "auto" as const };
 
             const onToolbarMouseDown = (e: React.MouseEvent) => {
               if (panelExpanded || (e.target as HTMLElement).closest("button")) return;
