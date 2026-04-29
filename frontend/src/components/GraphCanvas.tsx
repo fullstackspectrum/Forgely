@@ -163,26 +163,60 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
-/** ForceAtlas2 with size-aware repulsion for a well-spaced organic layout. */
+/** ForceAtlas2 with radial initial placement so the repo stays centred. */
 function applyForceLayout(graph: Graph) {
-  // Spread nodes randomly across a wide area so FA2 starts untangled
-  const spread = Math.max(200, graph.order * 15);
+  let repoNode: string | null = null;
+  graph.forEachNode((id, attrs) => {
+    if (attrs.nodeType === "repo") repoNode = id;
+  });
+
+  // Radial scatter: repo at origin, everything else placed in a ring with
+  // random angle + distance variation so FA2 starts from a circular cloud
+  // rather than a square one (which it struggles to escape).
+  const total = graph.order;
+  const baseRadius = Math.max(250, total * 10);
+  let idx = 0;
   graph.forEachNode((id) => {
-    graph.setNodeAttribute(id, "x", (Math.random() - 0.5) * spread);
-    graph.setNodeAttribute(id, "y", (Math.random() - 0.5) * spread);
+    if (id === repoNode) {
+      graph.setNodeAttribute(id, "x", 0);
+      graph.setNodeAttribute(id, "y", 0);
+      return;
+    }
+    // Spread evenly around the circle with a random offset so no two nodes
+    // start at the same angle, plus a random radial distance band.
+    const angle = (idx / Math.max(1, total - 1)) * 2 * Math.PI + (Math.random() - 0.5) * 1.5;
+    const r = baseRadius * (0.4 + Math.random() * 0.9);
+    graph.setNodeAttribute(id, "x", Math.cos(angle) * r);
+    graph.setNodeAttribute(id, "y", Math.sin(angle) * r);
+    idx++;
   });
 
   forceAtlas2.assign(graph, {
-    iterations: 400,
+    // More iterations for larger graphs so the layout converges fully.
+    iterations: Math.min(800, 350 + total * 2),
     settings: {
-      gravity: 0.05,
-      scalingRatio: 12,
+      gravity: 0.15,
+      scalingRatio: 14,
       adjustSizes: true,
-      barnesHutOptimize: graph.order > 100,
-      strongGravityMode: false,
-      slowDown: 1 + Math.log(graph.order + 1),
+      barnesHutOptimize: total > 150,
+      // strongGravityMode applies a constant pull toward the origin on every
+      // node, which counteracts repulsion drift and keeps the cluster circular.
+      strongGravityMode: true,
+      slowDown: 1 + Math.log(total + 1),
     },
   });
+
+  // Translate all nodes so the repo lands exactly at (0, 0).
+  if (repoNode && graph.hasNode(repoNode)) {
+    const ox = graph.getNodeAttribute(repoNode, "x") as number;
+    const oy = graph.getNodeAttribute(repoNode, "y") as number;
+    if (ox !== 0 || oy !== 0) {
+      graph.forEachNode((id) => {
+        graph.setNodeAttribute(id, "x", (graph.getNodeAttribute(id, "x") as number) - ox);
+        graph.setNodeAttribute(id, "y", (graph.getNodeAttribute(id, "y") as number) - oy);
+      });
+    }
+  }
 }
 
 interface Props {
