@@ -180,23 +180,52 @@ export function drawNodeLabel(
 
 export { drawLockBadge };
 
-/** Draws a small amber circle-slash icon centred at (cx, cy) with radius r. */
+/** Draws a small amber lock badge centred at (cx, cy) with radius r. */
 function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.save();
 
-  ctx.strokeStyle = "#f59e0b";
-  ctx.lineWidth   = r * 0.28;
-  ctx.lineCap     = "round";
+  // Dark border ring for contrast against any node colour
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + r * 0.18, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fill();
 
+  // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#f59e0b";
+  ctx.fill();
+
+  // White lock — shackle (open-bottom arch)
+  const shackleR   = r * 0.36;
+  const shackleY   = cy - r * 0.12;
+  const shackleW   = r * 0.22;
+  ctx.beginPath();
+  ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth   = shackleW;
+  ctx.lineCap     = "round";
   ctx.stroke();
 
-  const d = r * 0.707;
+  // White lock — body (rounded rectangle)
+  const bW = r * 0.88;
+  const bH = r * 0.58;
+  const bX = cx - bW / 2;
+  const bY = cy + r * 0.08;
+  const br = r * 0.12;
   ctx.beginPath();
-  ctx.moveTo(cx + d, cy - d);
-  ctx.lineTo(cx - d, cy + d);
-  ctx.stroke();
+  ctx.moveTo(bX + br, bY);
+  ctx.lineTo(bX + bW - br, bY);
+  ctx.arcTo(bX + bW, bY, bX + bW, bY + br, br);
+  ctx.lineTo(bX + bW, bY + bH - br);
+  ctx.arcTo(bX + bW, bY + bH, bX + bW - br, bY + bH, br);
+  ctx.lineTo(bX + br, bY + bH);
+  ctx.arcTo(bX, bY + bH, bX, bY + bH - br, br);
+  ctx.lineTo(bX, bY + br);
+  ctx.arcTo(bX, bY, bX + br, bY, br);
+  ctx.closePath();
+  ctx.fillStyle = "#fff";
+  ctx.fill();
 
   ctx.restore();
 }
