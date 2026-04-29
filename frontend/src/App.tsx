@@ -32,6 +32,7 @@ export default function App() {
   const panelRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>("force");
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
@@ -186,6 +187,7 @@ export default function App() {
       {tab === "packages" && (
         <FilterBar
           filter={filter}
+          filterFlags={filterFlags}
           stats={data?.stats ?? null}
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
@@ -195,6 +197,7 @@ export default function App() {
           tab={tab}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
+          onFilterFlagsChange={setFilterFlags}
           onHideSharedCveEdgesChange={setHideSharedCveEdges}
           onHideDependenciesChange={setHideDependencies}
           onHideUnsupportedChange={setHideUnsupported}
@@ -278,6 +281,7 @@ export default function App() {
               selectedNode={selectedNode}
               hoveredNode={hoveredNode}
               filter={filter}
+              filterFlags={filterFlags}
               formatFilter={formatFilter}
               layout={layout}
               edgeStyle={edgeStyle}
