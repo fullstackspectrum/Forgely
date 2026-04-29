@@ -191,6 +191,7 @@ interface Props {
   hoveredNode: string | null;
   filter: FilterType;
   filterFlags?: Set<string>;
+  filterFlagsMode?: "and" | "or";
   formatFilter?: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
@@ -213,6 +214,7 @@ export default function GraphCanvas({
   hoveredNode,
   filter,
   filterFlags = new Set<string>(),
+  filterFlagsMode = "and",
   formatFilter = null,
   layout,
   edgeStyle,
@@ -240,6 +242,7 @@ export default function GraphCanvas({
     hoveredNode,
     filter,
     filterFlags,
+    filterFlagsMode,
     formatFilter,
     searchResults,
     hideSharedCveEdges,
@@ -315,6 +318,7 @@ export default function GraphCanvas({
       hoveredNode,
       filter,
       filterFlags,
+      filterFlagsMode,
       formatFilter,
       searchResults,
       hideSharedCveEdges,
@@ -329,7 +333,7 @@ export default function GraphCanvas({
       quarantinedDeps,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -538,18 +542,21 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
-          // Hide ring when status flags exclude parent (OR logic across flags)
+          // Hide ring when status flags exclude parent
           if (st.filterFlags.size > 0) {
             const pa = graph.getNodeAttributes(parentId);
             const pvc = (pa.vulnCount as number) ?? 0;
-            let flagsPass = false;
-            for (const flag of st.filterFlags) {
-              if (flag === "vulnerable" && pvc > 0) { flagsPass = true; break; }
-              if (flag === "safe" && pvc === 0) { flagsPass = true; break; }
-              if (flag === "quarantined" && (!!pa.is_quarantined || st.quarantinedDeps.has(parentId))) { flagsPass = true; break; }
-              if (flag === "shared_cve" && st.sharedCveNodes.has(parentId)) { flagsPass = true; break; }
-              if (flag === "has_deps" && st.hasDepNodes.has(parentId)) { flagsPass = true; break; }
-            }
+            const flagResults = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return pvc > 0;
+              if (flag === "safe") return pvc === 0;
+              if (flag === "quarantined") return !!pa.is_quarantined || st.quarantinedDeps.has(parentId);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(parentId);
+              if (flag === "has_deps") return st.hasDepNodes.has(parentId);
+              return false;
+            });
+            const flagsPass = st.filterFlagsMode === "and"
+              ? flagResults.every(Boolean)
+              : flagResults.some(Boolean);
             if (!flagsPass) {
               res.hidden = true;
               return res;
@@ -621,18 +628,20 @@ export default function GraphCanvas({
           // Severity filter (single-select: Critical/High/Medium/Low or "all")
           const severityPass = st.filter === "all" || sev === st.filter;
 
-          // Status flags (multi-select OR logic)
+          // Status flags (AND or OR logic depending on filterFlagsMode)
           let flagsPass = st.filterFlags.size === 0;
           if (!flagsPass) {
-            for (const flag of st.filterFlags) {
-              let m = false;
-              if (flag === "vulnerable") m = vc > 0;
-              else if (flag === "safe") m = vc === 0;
-              else if (flag === "quarantined") m = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
-              else if (flag === "shared_cve") m = st.sharedCveNodes.has(node);
-              else if (flag === "has_deps") m = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
-              if (m) { flagsPass = true; break; }
-            }
+            const flagResults = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return vc > 0;
+              if (flag === "safe") return vc === 0;
+              if (flag === "quarantined") return !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(node);
+              if (flag === "has_deps") return st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
+              return false;
+            });
+            flagsPass = st.filterFlagsMode === "and"
+              ? flagResults.every(Boolean)
+              : flagResults.some(Boolean);
           }
 
           if (!severityPass || !flagsPass) {

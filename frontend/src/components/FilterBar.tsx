@@ -6,6 +6,7 @@ type TabType = "packages" | "organisation";
 interface Props {
   filter: FilterType;
   filterFlags: Set<string>;
+  filterFlagsMode: "and" | "or";
   stats: GraphStats | null;
   hideSharedCveEdges: boolean;
   hideDependencies: boolean;
@@ -16,6 +17,7 @@ interface Props {
   onTabChange: (t: TabType) => void;
   onFilterChange: (f: FilterType) => void;
   onFilterFlagsChange: (flags: Set<string>) => void;
+  onFilterFlagsModeChange: (m: "and" | "or") => void;
   onHideSharedCveEdgesChange: (v: boolean) => void;
   onHideDependenciesChange: (v: boolean) => void;
   onHideUnsupportedChange: (v: boolean) => void;
@@ -42,6 +44,7 @@ const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
 export default function FilterBar({
   filter,
   filterFlags,
+  filterFlagsMode,
   stats,
   hideSharedCveEdges,
   hideDependencies,
@@ -52,6 +55,7 @@ export default function FilterBar({
   onTabChange,
   onFilterChange,
   onFilterFlagsChange,
+  onFilterFlagsModeChange,
   onHideSharedCveEdgesChange,
   onHideDependenciesChange,
   onHideUnsupportedChange,
@@ -133,6 +137,21 @@ export default function FilterBar({
       )}
 
       <CollapsibleSection title="Status" defaultOpen={true}>
+        {filterFlags.size >= 2 && (
+          <div className="filter-mode-row">
+            <span className="filter-mode-label">Match</span>
+            <div className="filter-mode-toggle">
+              <button
+                className={`filter-mode-btn${filterFlagsMode === "and" ? " active" : ""}`}
+                onClick={() => onFilterFlagsModeChange("and")}
+              >AND</button>
+              <button
+                className={`filter-mode-btn${filterFlagsMode === "or" ? " active" : ""}`}
+                onClick={() => onFilterFlagsModeChange("or")}
+              >OR</button>
+            </div>
+          </div>
+        )}
         <div className="left-panel-btn-group">
           {STATUS_FILTERS.map((f) => {
             const active = filterFlags.has(f.key);
