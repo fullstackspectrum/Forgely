@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+
+
 import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
@@ -414,7 +416,7 @@ export default function GraphCanvas({
       /* Resolve icon for this node */
       let nodeImage: string | null = null;
       if (node.type === "repo") {
-        nodeImage = "/cloudsmith.png";
+        nodeImage = "/forgely-icon.png";
       } else {
         nodeImage = getFormatIcon(node.data.format);
       }
@@ -424,7 +426,7 @@ export default function GraphCanvas({
         size,
         color:
           node.type === "repo"
-            ? "#000000"
+            ? "#0f0f1a"
             : node.type === "dependency"
               ? "#9b59b6"
               : sevColor,
