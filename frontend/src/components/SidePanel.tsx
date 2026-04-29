@@ -1,9 +1,37 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 
 const SEV_FILTERS = new Set<FilterType>(["Critical", "High", "Medium", "Low"]);
+
+function VersionString({ version, mono = false }: { version: string; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    navigator.clipboard.writeText(version).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [version]);
+  return (
+    <span className="version-string-wrap">
+      <span
+        className="version-string-text"
+        title={version}
+        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" } : undefined}
+      >
+        {version}
+      </span>
+      <button
+        type="button"
+        className="version-copy-btn"
+        onClick={copy}
+        title={copied ? "Copied!" : "Copy version"}
+      >
+        {copied ? "✓" : "⎘"}
+      </button>
+    </span>
+  );
+}
 
 function packageMatchesFilter(p: GraphNode, f: FilterType): boolean {
   if (f === "all") return true;
@@ -187,7 +215,7 @@ export default function SidePanel({
       <div className="panel-summary">
       <div className="panel-header">
         <h2 className="panel-title">{node.label}</h2>
-        <span className="panel-version">{d.version}</span>
+        {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
       </div>
 
       <div className="panel-status-row">
@@ -643,7 +671,7 @@ function DependencyDetail({
           {node.data.version && (
             <span className="panel-version">
               <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>requires </span>
-              <span style={{ fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" }}>{node.data.version}</span>
+              <VersionString version={node.data.version} mono />
             </span>
           )}
         </div>

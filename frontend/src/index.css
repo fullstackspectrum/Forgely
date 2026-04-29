@@ -1037,6 +1037,38 @@ body {
 .panel-version {
   color: var(--text-muted);
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.version-string-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.version-string-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.version-copy-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  line-height: 1;
+  transition: opacity 0.15s, color 0.15s;
+}
+.version-copy-btn:hover {
+  opacity: 1;
+  color: #a0c4f8;
 }
 
 .panel-status-row {
