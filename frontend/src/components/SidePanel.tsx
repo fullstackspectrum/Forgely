@@ -2,6 +2,17 @@ import { useMemo } from "react";
 import { useState } from "react";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
+
+const SEV_FILTERS = new Set<FilterType>(["Critical", "High", "Medium", "Low"]);
+
+function packageMatchesFilter(p: GraphNode, f: FilterType): boolean {
+  if (f === "all") return true;
+  if (SEV_FILTERS.has(f)) return p.data.cves.some((c) => c.severity === f);
+  if (f === "vulnerable") return p.data.vuln_count > 0;
+  if (f === "safe") return p.data.vuln_count === 0;
+  if (f === "quarantined") return p.data.is_quarantined === true;
+  return true;
+}
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
 
@@ -724,9 +735,13 @@ function RepoDetail({
 
     /* Format breakdown */
     const formatCounts: Record<string, number> = {};
+    const filteredFormatCounts: Record<string, number> = {};
     for (const p of packages) {
       const f = p.data.format || "unknown";
       formatCounts[f] = (formatCounts[f] || 0) + 1;
+      if (packageMatchesFilter(p, filter)) {
+        filteredFormatCounts[f] = (filteredFormatCounts[f] || 0) + 1;
+      }
     }
     const formats = Object.entries(formatCounts)
       .sort((a, b) => b[1] - a[1]);
@@ -751,8 +766,8 @@ function RepoDetail({
       .sort((a, b) => b.data.vuln_count - a.data.vuln_count)
       .slice(0, 5);
 
-    return { packages, deps, formats, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
-  }, [data]);
+    return { packages, deps, formats, filteredFormatCounts, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
+  }, [data, filter]);
 
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
 
@@ -821,15 +836,17 @@ function RepoDetail({
             const icon = getFormatIcon(fmt);
             const fmtKey = fmt.toLowerCase();
             const active = formatFilter === fmtKey;
-            const clickable = !!onFormatFilterChange && fmt !== "unknown";
+            const filteredCount = stats.filteredFormatCounts[fmt] ?? 0;
+            const dimmed = filter !== "all" && filteredCount === 0;
+            const clickable = !!onFormatFilterChange && fmt !== "unknown" && !dimmed;
             return (
               <button
                 key={fmt}
                 type="button"
-                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}`}
+                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}${dimmed ? " repo-format-card-dimmed" : ""}`}
                 onClick={clickable ? () => toggleFormat(fmtKey) : undefined}
                 disabled={!clickable}
-                title={active ? "Clear format filter" : `Filter graph by ${fmt}`}
+                title={dimmed ? `No ${filter} packages in ${fmt}` : active ? "Clear format filter" : `Filter graph by ${fmt}`}
               >
                 <div className="repo-format-card-icon">
                   {icon ? (
