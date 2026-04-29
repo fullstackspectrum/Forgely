@@ -1894,8 +1894,38 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: calc(100vh - 350px);
-  overflow-y: auto;
+}
+.cve-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.cve-page-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cve-page-btn:hover:not(:disabled) {
+  border-color: rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06);
+}
+.cve-page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.cve-page-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 40px;
+  text-align: center;
 }
 
 /* "No CVEs" positive state */
