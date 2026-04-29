@@ -52,6 +52,8 @@ export default function App() {
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
   const [orgPanelExpanded, setOrgPanelExpanded] = useState(false);
+  const [orgPanelPos, setOrgPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const orgPanelRef = useRef<HTMLDivElement>(null);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
@@ -404,17 +406,53 @@ export default function App() {
             </div>
           )}
 
-          {orgSelectedNode && orgData && (
-            <div className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`}>
-              <div className="panel-toolbar">
-                <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
-                  {orgPanelExpanded ? "⇥" : "⇤"}
-                </button>
-                <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); }}>×</button>
+          {orgSelectedNode && orgData && (() => {
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = orgPanelExpanded
+              ? undefined
+              : orgPanelPos
+                ? { top: orgPanelPos.y, left: orgPanelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (orgPanelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = orgPanelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => {
+                dx = me.clientX - startX;
+                dy = me.clientY - startY;
+                panel.style.transform = `translate(${dx}px,${dy}px)`;
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
+                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+                setOrgPanelPos({ x: finalX, y: finalY });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={orgPanelRef} className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
+                    {orgPanelExpanded ? "⇥" : "⇤"}
+                  </button>
+                  <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); setOrgPanelPos(null); }}>×</button>
+                </div>
+                <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
               </div>
-              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
-            </div>
-          )}
+            );
+          })()}
 
           <OrgLegend />
 
