@@ -74,6 +74,7 @@ export default function SidePanel({
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [showSharedOnly, setShowSharedOnly] = useState(false);
   const [cveQuery, setCveQuery] = useState<string>("");
+  const [cvePage, setCvePage] = useState(0);
   const [depsExpanded, setDepsExpanded] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -406,6 +407,11 @@ export default function SidePanel({
           (s) => s === "All" || sevCounts[s]
         );
 
+        const pageSize = expanded ? 15 : 5;
+        const totalPages = Math.ceil(filtered.length / pageSize);
+        const safePage = Math.min(cvePage, Math.max(0, totalPages - 1));
+        const paginated = filtered.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
         return (
           <div className="panel-section">
             <h3 className="section-title">
@@ -419,13 +425,13 @@ export default function SidePanel({
                 className="cve-search-input"
                 placeholder="Search CVEs (e.g. CVE-2024-1234)"
                 value={cveQuery}
-                onChange={(e) => setCveQuery(e.target.value)}
+                onChange={(e) => { setCveQuery(e.target.value); setCvePage(0); }}
               />
               {cveQuery && (
                 <button
                   type="button"
                   className="cve-search-clear"
-                  onClick={() => setCveQuery("")}
+                  onClick={() => { setCveQuery(""); setCvePage(0); }}
                   title="Clear"
                 >
                   ×
@@ -438,7 +444,7 @@ export default function SidePanel({
                   key={s}
                   className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
                   style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
-                  onClick={() => setSevFilter(s)}
+                  onClick={() => { setSevFilter(s); setCvePage(0); }}
                 >
                   {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
                 </button>
@@ -446,7 +452,7 @@ export default function SidePanel({
               {sharedCount > 0 && (
                 <button
                   className={`cve-filter-btn cve-filter-btn-shared${showSharedOnly ? " active" : ""}`}
-                  onClick={() => setShowSharedOnly((v) => !v)}
+                  onClick={() => { setShowSharedOnly((v) => !v); setCvePage(0); }}
                   title="Show only CVEs shared with other packages"
                 >
                   Shared ({sharedCount})
@@ -456,10 +462,31 @@ export default function SidePanel({
             <div className="cve-list">
               {filtered.length === 0 ? (
                 <div className="cve-empty">No CVEs match your search.</div>
-              ) : filtered.map((cve, i) => (
+              ) : paginated.map((cve, i) => (
                 <CveCard key={`${cve.id}-${i}`} cve={cve} />
               ))}
             </div>
+            {totalPages > 1 && (
+              <div className="cve-pagination">
+                <button
+                  className="cve-page-btn"
+                  onClick={() => setCvePage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                >
+                  ‹
+                </button>
+                <span className="cve-page-label">
+                  {safePage + 1} / {totalPages}
+                </span>
+                <button
+                  className="cve-page-btn"
+                  onClick={() => setCvePage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={safePage === totalPages - 1}
+                >
+                  ›
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}
