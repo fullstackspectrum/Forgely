@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    cors: true,
     proxy: {
       "/api": "http://localhost:8000",
     },
