@@ -200,7 +200,6 @@ interface Props {
   hideCriticalAnimation?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
-  onNodeScreenPos?: (x: number, y: number) => void;
   onRefresh?: () => void;
   onLayoutChange?: (l: LayoutType) => void;
   onEdgeStyleChange?: (e: EdgeStyle) => void;
@@ -222,7 +221,6 @@ export default function GraphCanvas({
   hideCriticalAnimation = false,
   onNodeSelect,
   onNodeHover,
-  onNodeScreenPos,
   onRefresh,
   onLayoutChange,
   onEdgeStyleChange,
@@ -780,12 +778,8 @@ export default function GraphCanvas({
     });
 
     /* Events */
-    sigma.on("clickNode", ({ node, event }) => {
+    sigma.on("clickNode", ({ node }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
-      if (onNodeScreenPos) {
-        const me = event.original as MouseEvent;
-        onNodeScreenPos(me.clientX, me.clientY);
-      }
       onNodeSelect(node);
       setContextMenu(null);
     });
