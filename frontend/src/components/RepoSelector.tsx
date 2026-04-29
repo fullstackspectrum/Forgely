@@ -34,25 +34,42 @@ function CustomDropdown({
   placeholder,
   disabled,
   onChange,
+  searchable,
 }: {
   options: DropdownOption[];
   value: string;
   placeholder: string;
   disabled?: boolean;
   onChange: (value: string) => void;
+  searchable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  useEffect(() => {
+    if (open && searchable) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+    if (!open) setQuery("");
+  }, [open, searchable]);
+
   const selected = options.find((o) => o.value === value);
+  const filtered = searchable && query
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
 
   return (
     <div className={`custom-dropdown${disabled ? " disabled" : ""}`} ref={ref}>
@@ -70,16 +87,30 @@ function CustomDropdown({
       </button>
       {open && (
         <div className="custom-dropdown-menu">
-          {options.length === 0 ? (
-            <div className="custom-dropdown-empty">No options available</div>
+          {searchable && (
+            <input
+              ref={inputRef}
+              className="custom-dropdown-search"
+              type="text"
+              placeholder="Search…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { setOpen(false); setQuery(""); }
+              }}
+            />
+          )}
+          {filtered.length === 0 ? (
+            <div className="custom-dropdown-empty">{query ? "No matches" : "No options available"}</div>
           ) : (
-            options.map((opt) => (
+            filtered.map((opt) => (
               <button
                 key={opt.value}
                 className={`custom-dropdown-item${opt.value === value ? " active" : ""}`}
                 onClick={() => {
                   onChange(opt.value);
                   setOpen(false);
+                  setQuery("");
                 }}
                 type="button"
               >
@@ -192,6 +223,7 @@ export default function RepoSelector({
           }
           disabled={!owner || loadingRepos}
           onChange={(v) => setRepo(v)}
+          searchable
         />
       </div>
 
