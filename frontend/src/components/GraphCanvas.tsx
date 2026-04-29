@@ -200,7 +200,7 @@ interface Props {
   hideCriticalAnimation?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
-  onNodeScreenY?: (y: number) => void;
+  onNodeScreenPos?: (x: number, y: number) => void;
   onRefresh?: () => void;
   onLayoutChange?: (l: LayoutType) => void;
   onEdgeStyleChange?: (e: EdgeStyle) => void;
@@ -222,7 +222,7 @@ export default function GraphCanvas({
   hideCriticalAnimation = false,
   onNodeSelect,
   onNodeHover,
-  onNodeScreenY,
+  onNodeScreenPos,
   onRefresh,
   onLayoutChange,
   onEdgeStyleChange,
@@ -242,7 +242,9 @@ export default function GraphCanvas({
     formatFilter,
     searchResults,
     hideSharedCveEdges,
+    hideDependencies,
     hideUnsupported,
+    hideCriticalAnimation,
     neighbors: new Set<string>(),
     hoverNeighbors: new Set<string>(),
     searchConnected: new Set<string>(),
@@ -778,12 +780,11 @@ export default function GraphCanvas({
     });
 
     /* Events */
-    sigma.on("clickNode", ({ node }) => {
+    sigma.on("clickNode", ({ node, event }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
-      const displayData = sigma.getNodeDisplayData(node);
-      if (displayData && onNodeScreenY) {
-        const vp = sigma.graphToViewport(displayData);
-        onNodeScreenY(vp.y);
+      if (onNodeScreenPos) {
+        const me = event.original as MouseEvent;
+        onNodeScreenPos(me.clientX, me.clientY);
       }
       onNodeSelect(node);
       setContextMenu(null);
