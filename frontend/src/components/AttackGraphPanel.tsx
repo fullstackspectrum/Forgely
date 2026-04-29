@@ -32,6 +32,15 @@ const STAGE_COLORS: Record<string, { accent: string; border: string; icon: strin
   cve:      { accent: "#ef4444", border: "rgba(239,68,68,0.45)",   icon: "#ef4444" },
 };
 
+/** Convert a severity label to a STAGE_COLORS-style colour object. */
+function sevColor(severity: string | undefined) {
+  const hex = SEVERITY_COLORS[severity ?? ""] ?? SEVERITY_COLORS.High;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { accent: hex, border: `rgba(${r},${g},${b},0.45)`, icon: hex };
+}
+
 /* ── Access method helpers ───────────────────────────────────── */
 
 interface AccessMethod {
@@ -483,10 +492,11 @@ function AttackGraphCanvas({
               const ex = X_CVE + NW / 2 - ICON_R;
               const ey = cveY;
               const cpx = (ox + ex) / 2;
+              const ec = sevColor(cve.severity);
               return (
                 <path key={cve.id}
                   d={`M ${ox} ${oy} C ${cpx} ${oy}, ${cpx} ${ey}, ${ex} ${ey}`}
-                  stroke="rgba(239,68,68,0.5)" strokeWidth="1.5" fill="none"
+                  stroke={ec.border} strokeWidth="1.5" fill="none"
                   markerEnd="url(#ag-arrow-cve)"
                   strokeDasharray="800" className="ag-edge-draw-cve"
                   style={{ animationDelay: `${0.05 * i}s` }}
@@ -496,7 +506,7 @@ function AttackGraphCanvas({
           ) : (
             <line
               x1={X_PKG + NW / 2 + ICON_R} y1={0} x2={X_CVE + NW / 2 - ICON_R} y2={0}
-              stroke="rgba(239,68,68,0.5)" strokeWidth="1.5"
+              stroke={sevColor(maxSev ?? undefined).border} strokeWidth="1.5"
               markerEnd="url(#ag-arrow-cve)"
               strokeDasharray="800" className="ag-edge-draw"
               style={{ animationDelay: "0.4s" }}
@@ -585,7 +595,7 @@ function AttackGraphCanvas({
                   id={`cve-${i}`}
                   x={X_CVE} y={cy}
                   w={NW} h={CVE_NH} r={NR}
-                  color={STAGE_COLORS.cve}
+                  color={sevColor(cve.severity)}
                   label={cve.id || "Unknown"}
                   sub={cve.affected
                     ? `${cve.affected}${cve.affected_version ? ` @ ${cve.affected_version}` : ""}`
@@ -614,12 +624,12 @@ function AttackGraphCanvas({
                 id="cve-summary"
                 x={X_CVE} y={-NH / 2}
                 w={NW} h={NH} r={NR}
-                color={STAGE_COLORS.cve}
+                color={sevColor(maxSev ?? undefined)}
                 label={`${criticalCves.length} CVE${criticalCves.length !== 1 ? "s" : ""}`}
                 sub={criticalCves.length > 10 ? "Too many to expand" : "Click to expand ▾"}
                 delay="0.45s"
                 icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.cve.icon}
+                  <svg viewBox="0 0 24 24" fill="none" stroke={sevColor(maxSev ?? undefined).icon}
                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                     <line x1="12" y1="9" x2="12" y2="13"/>
