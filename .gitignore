@@ -26,3 +26,8 @@ node_modules/
 *.swp
 *.swo
 .DS_Store
+
+# Claude Code — ignore generated settings, keep project commands
+.claude/*
+!.claude/commands/
+!.claude/commands/**
