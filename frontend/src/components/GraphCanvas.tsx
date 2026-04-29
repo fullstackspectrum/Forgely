@@ -614,6 +614,35 @@ export default function GraphCanvas({
           return res;
         }
 
+        /* --- Hide dependency nodes whose parent packages are all filtered out --- */
+        if (attrs.nodeType === "dependency" && (st.filter !== "all" || st.filterFlags.size > 0)) {
+          let anyParentVisible = false;
+          graph.forEachNeighbor(node, (nid) => {
+            if (anyParentVisible) return;
+            const na = graph.getNodeAttributes(nid);
+            if (na.nodeType !== "package") return;
+            const sev = (na.severity as string) ?? "None";
+            const vc = (na.vulnCount as number) ?? 0;
+            if (st.filter !== "all" && sev !== st.filter) return;
+            if (st.filterFlags.size === 0) { anyParentVisible = true; return; }
+            const results = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return vc > 0;
+              if (flag === "safe") return vc === 0;
+              if (flag === "quarantined") return !!na.is_quarantined || st.quarantinedDeps.has(nid);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
+              if (flag === "has_deps") return st.hasDepNodes.has(nid);
+              return false;
+            });
+            if (st.filterFlagsMode === "and" ? results.every(Boolean) : results.some(Boolean)) {
+              anyParentVisible = true;
+            }
+          });
+          if (!anyParentVisible) {
+            res.hidden = true;
+            return res;
+          }
+        }
+
         /* --- Hide packages with unsupported scans --- */
         if (st.hideUnsupported && attrs.nodeType === "package" && (attrs as any).severity === "Unknown") {
           res.hidden = true;
