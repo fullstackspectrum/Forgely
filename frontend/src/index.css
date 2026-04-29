@@ -844,6 +844,29 @@ body {
   border-radius: 3px;
 }
 
+.custom-dropdown-search {
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.custom-dropdown-search:focus {
+  border-color: var(--accent);
+}
+
+.custom-dropdown-search::placeholder {
+  color: var(--text-dim);
+}
+
 .custom-dropdown-empty {
   padding: 12px 10px;
   font-size: 12px;
