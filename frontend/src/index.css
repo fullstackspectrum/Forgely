@@ -1712,6 +1712,18 @@ body {
   background: var(--bg-card);
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+.repo-vuln-row-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.repo-vuln-row-clickable:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .repo-vuln-name {

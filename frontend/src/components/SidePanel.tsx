@@ -87,6 +87,7 @@ export default function SidePanel({
         formatFilter={formatFilter}
         onFilterChange={onFilterChange}
         onFormatFilterChange={onFormatFilterChange}
+        onNodeSelect={onNodeSelect}
       />
     );
   }
@@ -718,6 +719,7 @@ function RepoDetail({
   formatFilter = null,
   onFilterChange,
   onFormatFilterChange,
+  onNodeSelect,
 }: {
   data: GraphResponse;
   node: GraphNode;
@@ -728,6 +730,7 @@ function RepoDetail({
   formatFilter?: string | null;
   onFilterChange?: (f: FilterType) => void;
   onFormatFilterChange?: (f: string | null) => void;
+  onNodeSelect?: (id: string) => void;
 }) {
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
@@ -912,12 +915,19 @@ function RepoDetail({
             {stats.topVuln.map((p) => {
               const s = p.data.max_severity || "None";
               return (
-                <div key={p.id} className="repo-vuln-row">
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`repo-vuln-row${onNodeSelect ? " repo-vuln-row-clickable" : ""}`}
+                  onClick={onNodeSelect ? () => { onFilterChange?.("all"); onNodeSelect(p.id); } : undefined}
+                  disabled={!onNodeSelect}
+                  title={onNodeSelect ? `Select ${p.label}` : undefined}
+                >
                   <span className="repo-vuln-name">{p.label}</span>
                   <span className="repo-vuln-badge" style={{ background: SEVERITY_COLORS[s] }}>
                     {p.data.vuln_count}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
