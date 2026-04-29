@@ -104,17 +104,7 @@ git clone https://github.com/your-user/Forgely.git
 cd Forgely
 ```
 
-### 2. Configure
-
-Create a `.env` file in the project root:
-
-```bash
-CLOUDSMITH_API_KEY=your_api_key_here
-CLOUDSMITH_OWNER=your-org-slug       # optional default
-CLOUDSMITH_REPO=your-repo-name       # optional default
-```
-
-### 3. Run
+### 2. Run
 
 ```bash
 ./start.sh
