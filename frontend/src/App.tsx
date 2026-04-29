@@ -60,6 +60,8 @@ export default function App() {
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
+  const [topBarCollapsed, setTopBarCollapsed] = useState(false);
+  const [legendCollapsed, setLegendCollapsed] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -225,41 +227,55 @@ export default function App() {
 
       {/* Top bar: repo selector + search (packages tab only) */}
       {tab === "packages" && (
-        <div className="top-bar">
-          <RepoSelector
-            currentOwner={owner}
-            currentRepo={repo}
-            refreshKey={repoRefreshKey}
-            onSelect={handleRepoSelect}
-          />
-          {owner && repo && (
-            <SearchBar
-              owner={owner}
-              repo={repo}
-              graphNodeIds={graphNodeIds}
-              onHighlight={setSearchResults}
-              onNodeSelect={setSelectedNode}
-              cveIndex={cveIndex}
-            />
+        <div className={`top-bar${topBarCollapsed ? " top-bar-collapsed" : ""}`}>
+          {!topBarCollapsed && (
+            <>
+              <RepoSelector
+                currentOwner={owner}
+                currentRepo={repo}
+                refreshKey={repoRefreshKey}
+                onSelect={handleRepoSelect}
+              />
+              {owner && repo && (
+                <SearchBar
+                  owner={owner}
+                  repo={repo}
+                  graphNodeIds={graphNodeIds}
+                  onHighlight={setSearchResults}
+                  onNodeSelect={setSelectedNode}
+                  cveIndex={cveIndex}
+                />
+              )}
+            </>
           )}
+          <button className="collapse-toggle-btn" onClick={() => setTopBarCollapsed(c => !c)} title={topBarCollapsed ? "Show controls" : "Hide controls"}>
+            {topBarCollapsed ? "▼" : "▲"}
+          </button>
         </div>
       )}
 
       {/* Top bar: workspace selector (workspace tab) */}
       {tab === "organisation" && (
-        <div className="top-bar">
-          <WorkspaceSelector
-            currentOwner={owner}
-            refreshKey={repoRefreshKey}
-            onSelect={handleOrgOwnerChange}
-          />
-          {orgData && (
-            <OrgSearchBar
-              orgData={orgData}
-              onHighlight={setOrgSearchResults}
-              onNodeSelect={setOrgSelectedNode}
-            />
+        <div className={`top-bar${topBarCollapsed ? " top-bar-collapsed" : ""}`}>
+          {!topBarCollapsed && (
+            <>
+              <WorkspaceSelector
+                currentOwner={owner}
+                refreshKey={repoRefreshKey}
+                onSelect={handleOrgOwnerChange}
+              />
+              {orgData && (
+                <OrgSearchBar
+                  orgData={orgData}
+                  onHighlight={setOrgSearchResults}
+                  onNodeSelect={setOrgSelectedNode}
+                />
+              )}
+            </>
           )}
+          <button className="collapse-toggle-btn" onClick={() => setTopBarCollapsed(c => !c)} title={topBarCollapsed ? "Show controls" : "Hide controls"}>
+            {topBarCollapsed ? "▼" : "▲"}
+          </button>
         </div>
       )}
 
