@@ -63,6 +63,17 @@ def _api_get(session: requests.Session, url: str, params: dict | None = None) ->
     raise RuntimeError(f"Max retries exceeded for {url}")
 
 
+def _api_get_page(session: requests.Session, url: str, params: dict | None = None) -> list:
+    """Like _api_get but returns [] when the API 404s past the last page."""
+    try:
+        result = _api_get(session, url, params=params)
+        return result if isinstance(result, list) else []
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return []
+        raise
+
+
 def fetch_namespaces(session: requests.Session) -> list[dict]:
     """Fetch all namespaces (orgs) the authenticated user belongs to."""
     url = f"{BASE_URL}/namespaces/"
@@ -76,11 +87,11 @@ def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
     page = 1
     repos: list[dict] = []
     while True:
-        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
         if not data:
             break
-        repos.extend(data if isinstance(data, list) else [])
-        if not isinstance(data, list) or len(data) < 100:
+        repos.extend(data)
+        if len(data) < 100:
             break
         page += 1
     return repos
@@ -92,11 +103,11 @@ def fetch_org_members(session: requests.Session, owner: str) -> list[dict]:
     page = 1
     members: list[dict] = []
     while True:
-        data = _api_get(session, url, params={"page": page, "page_size": 100, "is_active": True})
+        data = _api_get_page(session, url, params={"page": page, "page_size": 100, "is_active": True})
         if not data:
             break
-        members.extend(data if isinstance(data, list) else [])
-        if not isinstance(data, list) or len(data) < 100:
+        members.extend(data)
+        if len(data) < 100:
             break
         page += 1
     return members
@@ -108,11 +119,11 @@ def fetch_org_services(session: requests.Session, owner: str) -> list[dict]:
     page = 1
     services: list[dict] = []
     while True:
-        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
         if not data:
             break
-        services.extend(data if isinstance(data, list) else [])
-        if not isinstance(data, list) or len(data) < 100:
+        services.extend(data)
+        if len(data) < 100:
             break
         page += 1
     return services
@@ -210,7 +221,7 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list
     all_packages: list[dict] = []
     while True:
         log.info("Fetching packages – page %d (%d so far)", page, len(all_packages))
-        data = _api_get(session, url, params={"page": page, "page_size": 100})
+        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
         if not data:
             break
         all_packages.extend(data)

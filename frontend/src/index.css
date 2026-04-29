@@ -1633,6 +1633,10 @@ body {
 .repo-format-card:disabled {
   cursor: default;
 }
+.repo-format-card-dimmed {
+  opacity: 0.35;
+  cursor: default;
+}
 .repo-format-card.active {
   border-color: rgba(74, 144, 217, 0.6);
   background: rgba(74, 144, 217, 0.12);
