@@ -615,7 +615,7 @@ function AttackGraphCanvas({
                 x={X_CVE} y={-NH / 2}
                 w={NW} h={NH} r={NR}
                 color={STAGE_COLORS.cve}
-                label={`${criticalCves.length} ${maxSev ?? "High"} CVE${criticalCves.length !== 1 ? "s" : ""}`}
+                label={`${criticalCves.length} CVE${criticalCves.length !== 1 ? "s" : ""}`}
                 sub={criticalCves.length > 10 ? "Too many to expand" : "Click to expand ▾"}
                 delay="0.45s"
                 icon={
