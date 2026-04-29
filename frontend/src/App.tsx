@@ -33,6 +33,7 @@ export default function App() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
+  const [filterFlagsMode, setFilterFlagsMode] = useState<"and" | "or">("and");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>("force");
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
@@ -188,6 +189,7 @@ export default function App() {
         <FilterBar
           filter={filter}
           filterFlags={filterFlags}
+          filterFlagsMode={filterFlagsMode}
           stats={data?.stats ?? null}
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
@@ -198,6 +200,7 @@ export default function App() {
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
           onFilterFlagsChange={setFilterFlags}
+          onFilterFlagsModeChange={setFilterFlagsMode}
           onHideSharedCveEdgesChange={setHideSharedCveEdges}
           onHideDependenciesChange={setHideDependencies}
           onHideUnsupportedChange={setHideUnsupported}
@@ -282,6 +285,7 @@ export default function App() {
               hoveredNode={hoveredNode}
               filter={filter}
               filterFlags={filterFlags}
+              filterFlagsMode={filterFlagsMode}
               formatFilter={formatFilter}
               layout={layout}
               edgeStyle={edgeStyle}

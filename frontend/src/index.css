@@ -1890,6 +1890,54 @@ body {
 }
 
 /* CVE list */
+.filter-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 6px;
+}
+
+.filter-mode-label {
+  font-size: 10px;
+  color: #666680;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.filter-mode-toggle {
+  display: flex;
+  border: 1px solid #2a2c44;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filter-mode-btn {
+  background: transparent;
+  border: none;
+  color: #666680;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.filter-mode-btn:first-child {
+  border-right: 1px solid #2a2c44;
+}
+
+.filter-mode-btn.active {
+  background: #3b4080;
+  color: #c0c8ff;
+}
+
+.filter-mode-btn:not(.active):hover {
+  background: #1e2035;
+  color: #9090b8;
+}
+
 .cve-list {
   display: flex;
   flex-direction: column;
