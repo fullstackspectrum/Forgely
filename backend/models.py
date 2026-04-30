@@ -62,3 +62,29 @@ class GraphResponse(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
     stats: GraphStats
+
+
+class WorkspaceCveSummary(BaseModel):
+    id: str
+    severity: str = "Unknown"
+    description: str = ""
+    packages: list[str] = []
+
+
+class WorkspaceRepoSummary(BaseModel):
+    slug: str
+    name: str
+    package_count: int = 0
+    vuln_count: int = 0
+    max_severity: str | None = None
+    critical: int = 0
+    high: int = 0
+    medium: int = 0
+    low: int = 0
+    safe: int = 0
+    cves: list[WorkspaceCveSummary] = []
+
+
+class WorkspaceOverviewResponse(BaseModel):
+    owner: str
+    repos: list[WorkspaceRepoSummary]

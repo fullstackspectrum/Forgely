@@ -42,6 +42,9 @@ from models import (
     GraphResponse,
     GraphStats,
     NodeData,
+    WorkspaceCveSummary,
+    WorkspaceOverviewResponse,
+    WorkspaceRepoSummary,
 )
 
 # Load .env from the project root (one level up)
@@ -470,6 +473,166 @@ def vulnly_report(owner: str, repo: str, slug: str, request: Request):
             html = f.read()
 
     return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+# ──────────────────────────────────────────────────────────────
+#  Workspace package overview
+# ──────────────────────────────────────────────────────────────
+
+def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse) -> WorkspaceRepoSummary:
+    """Build a WorkspaceRepoSummary from an already-cached GraphResponse."""
+    cve_map: dict[str, dict] = {}
+    for node in graph.nodes:
+        if node.type != "package":
+            continue
+        for cve in node.data.cves:
+            if not cve.id:
+                continue
+            if cve.id not in cve_map:
+                cve_map[cve.id] = {
+                    "id": cve.id,
+                    "severity": cve.severity,
+                    "description": cve.description,
+                    "packages": [],
+                }
+            if node.label not in cve_map[cve.id]["packages"]:
+                cve_map[cve.id]["packages"].append(node.label)
+
+    cves = [WorkspaceCveSummary(**v) for v in cve_map.values()]
+    s = graph.stats
+    max_sev: str | None = None
+    if s.critical > 0:
+        max_sev = "Critical"
+    elif s.high > 0:
+        max_sev = "High"
+    elif s.medium > 0:
+        max_sev = "Medium"
+    elif s.low > 0:
+        max_sev = "Low"
+    elif s.safe > 0:
+        max_sev = "None"
+
+    pkg_count = sum(1 for n in graph.nodes if n.type == "package")
+    return WorkspaceRepoSummary(
+        slug=slug,
+        name=name,
+        package_count=pkg_count,
+        vuln_count=s.total_cves,
+        max_severity=max_sev,
+        critical=s.critical,
+        high=s.high,
+        medium=s.medium,
+        low=s.low,
+        safe=s.safe,
+        cves=cves,
+    )
+
+
+def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> WorkspaceRepoSummary:
+    """Fetch packages + vulnerabilities for a single repo and return a summary."""
+    packages = fetch_all_packages(session, owner, slug)
+    if not packages:
+        return WorkspaceRepoSummary(slug=slug, name=name)
+
+    pkg_metas: list[dict] = []
+    seen_ids: set[str] = set()
+    for pkg in packages:
+        p_slug = pkg["slug_perm"]
+        p_name = pkg.get("name") or pkg.get("slug_perm") or ""
+        version = pkg.get("version") or ""
+        node_id = f"{p_name}@{version}" if version else (p_name or p_slug)
+        if node_id in seen_ids:
+            continue
+        seen_ids.add(node_id)
+        pkg_metas.append({"slug": p_slug, "name": p_name, "node_id": node_id})
+
+    MAX_WORKERS = 10
+
+    def _scan(meta: dict):
+        return (meta, *get_package_vulnerabilities(session, owner, slug, meta["slug"]))
+
+    stats: dict[str, int] = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Safe": 0}
+    total_cves = 0
+    cve_map: dict[str, dict] = {}
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(_scan, m): m for m in pkg_metas}
+        for fut in as_completed(futures):
+            meta, max_sev, vuln_count, vulns = fut.result()
+            if max_sev == "Unknown" and vuln_count == 0:
+                max_sev = "None"
+            if vuln_count == 0 and max_sev is not None and max_sev not in ("None", "Unknown"):
+                max_sev = "None"
+            if max_sev in stats:
+                stats[max_sev] += 1
+            else:
+                stats["Safe"] += 1
+            total_cves += vuln_count
+            for v in vulns:
+                cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
+                if not cve_id:
+                    continue
+                v_sev = v.get("severity", v.get("max_severity", "Unknown"))
+                desc = v.get("description") or v.get("title") or v.get("summary", "")
+                if cve_id not in cve_map:
+                    cve_map[cve_id] = {"id": cve_id, "severity": v_sev, "description": desc, "packages": []}
+                if meta["name"] not in cve_map[cve_id]["packages"]:
+                    cve_map[cve_id]["packages"].append(meta["name"])
+
+    cves = [WorkspaceCveSummary(**v) for v in cve_map.values()]
+    max_overall: str | None = None
+    for sev in ("Critical", "High", "Medium", "Low"):
+        if stats.get(sev, 0) > 0:
+            max_overall = sev
+            break
+    if max_overall is None and stats.get("Safe", 0) > 0:
+        max_overall = "None"
+
+    return WorkspaceRepoSummary(
+        slug=slug,
+        name=name,
+        package_count=len(pkg_metas),
+        vuln_count=total_cves,
+        max_severity=max_overall,
+        critical=stats.get("Critical", 0),
+        high=stats.get("High", 0),
+        medium=stats.get("Medium", 0),
+        low=stats.get("Low", 0),
+        safe=stats.get("Safe", 0),
+        cves=cves,
+    )
+
+
+@app.get("/api/workspace-overview", response_model=WorkspaceOverviewResponse)
+def workspace_overview(owner: str, request: Request):
+    """Build a package-vulnerability overview for every repo in a workspace."""
+    api_key = _get_api_key(request)
+    session = create_session(api_key)
+
+    raw_repos = fetch_repos(session, owner)
+    if not raw_repos:
+        return WorkspaceOverviewResponse(owner=owner, repos=[])
+
+    def _process_repo(r: dict) -> WorkspaceRepoSummary:
+        slug = r.get("slug", "")
+        name = r.get("name", slug)
+        cache_key = f"{owner}/{slug}"
+        if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+            return _extract_repo_summary_from_graph(slug, name, _cache[cache_key]["data"])
+        return _fetch_repo_vuln_summary(session, owner, slug, name)
+
+    summaries: list[WorkspaceRepoSummary] = []
+    # Process up to 4 repos in parallel to avoid overloading the API
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_process_repo, r): r for r in raw_repos}
+        for fut in as_completed(futures):
+            try:
+                summaries.append(fut.result())
+            except Exception as exc:
+                log.warning("Failed to process repo for workspace overview: %s", exc)
+
+    summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
+    return WorkspaceOverviewResponse(owner=owner, repos=summaries)
 
 
 # ──────────────────────────────────────────────────────────────
