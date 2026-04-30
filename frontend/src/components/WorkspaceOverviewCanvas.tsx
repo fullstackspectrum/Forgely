@@ -280,19 +280,28 @@ export default function WorkspaceOverviewCanvas({
     sigma.refresh();
   }, [edgeStyle]);
 
-  /* Refresh node reducer when selection changes without rebuilding */
+  /* Refresh node/edge reducers when selection changes without rebuilding */
   useEffect(() => {
     const sigma = sigmaRef.current;
-    if (!sigma) return;
+    const graph = graphRef.current;
+    if (!sigma || !graph) return;
     sigma.setSetting("nodeReducer", (node, attrs) => {
       const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
       const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
+      const hidden = !!selectedRepo && attrs.nodeType === "repo" && node !== selectedRepo;
       return {
         ...attrs,
         size: isSelected ? baseSize * 1.2 : baseSize,
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
+        hidden,
       };
+    });
+    sigma.setSetting("edgeReducer", (edge, attrs) => {
+      if (!selectedRepo) return attrs;
+      const src = graph.source(edge);
+      const tgt = graph.target(edge);
+      return { ...attrs, hidden: src !== selectedRepo && tgt !== selectedRepo };
     });
     sigma.refresh();
   }, [selectedRepo, workspaceSelected]);
