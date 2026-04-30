@@ -102,22 +102,28 @@ function CveRow({ cve, query }: { cve: WorkspaceCveSummary; query: string }) {
 
 export default function WorkspaceRepoPanel({ data, owner, expanded, onLoadFullGraph, onClose }: Props) {
   const [query, setQuery] = useState("");
+  const [sevFilter, setSevFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
   const pageSize = expanded ? 35 : 10;
 
-  /* Reset to first page when query or page size changes */
-  useEffect(() => { setPage(0); }, [query, pageSize]);
+  /* Reset to first page when any filter/size changes */
+  useEffect(() => { setPage(0); }, [query, sevFilter, pageSize]);
+
+  /* Which severities are present in the data */
+  const presentSevs = useMemo(() => {
+    const s = new Set(data.cves.map((c) => c.severity));
+    return SEV_ORDER.filter((sev) => s.has(sev));
+  }, [data.cves]);
 
   const filteredCves = useMemo(() => {
-    if (!query.trim()) return data.cves;
     const q = query.trim().toLowerCase();
     return data.cves.filter(
       (c) =>
-        c.id.toLowerCase().includes(q) ||
-        c.packages.some((p) => p.toLowerCase().includes(q)),
+        (!sevFilter || c.severity === sevFilter) &&
+        (!q || c.id.toLowerCase().includes(q) || c.packages.some((p) => p.toLowerCase().includes(q))),
     );
-  }, [data.cves, query]);
+  }, [data.cves, query, sevFilter]);
 
   /* Sort CVEs by severity rank */
   const sortedCves = useMemo(() => {
@@ -165,10 +171,28 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, onLoadFullGr
         <>
           <div className="wo-cve-section-label">
             CVEs
-            {query && filteredCves.length !== data.cves.length && (
+            {(query || sevFilter) && filteredCves.length !== data.cves.length && (
               <span className="wo-cve-count-badge">{filteredCves.length} / {data.cves.length}</span>
             )}
           </div>
+          {presentSevs.length > 0 && (
+            <div className="wo-sev-filters">
+              {presentSevs.map((sev) => {
+                const color = SEVERITY_COLORS[sev];
+                const active = sevFilter === sev;
+                return (
+                  <button
+                    key={sev}
+                    className={`wo-sev-filter-btn${active ? " active" : ""}`}
+                    style={{ "--sev-color": color } as React.CSSProperties}
+                    onClick={() => setSevFilter(active ? null : sev)}
+                  >
+                    {sev}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="wo-search-row">
             <input
               className="wo-search-input"
@@ -183,7 +207,7 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, onLoadFullGr
           </div>
           <div className="wo-cve-list">
             {sortedCves.length === 0 ? (
-              <div className="wo-cve-empty">No CVEs match "{query}"</div>
+              <div className="wo-cve-empty">No CVEs match{query ? ` "${query}"` : ""}{sevFilter ? ` (${sevFilter})` : ""}</div>
             ) : (
               pageCves.map((cve) => <CveRow key={cve.id} cve={cve} query={query} />)
             )}
