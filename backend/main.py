@@ -70,7 +70,8 @@ app.add_middleware(
 
 # Simple in-memory cache
 _cache: dict[str, dict] = {}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 300          # 5 minutes (per-repo graphs)
+WORKSPACE_CACHE_TTL = 600  # 10 minutes (workspace overview)
 
 
 def _get_api_key(request: Request | None = None) -> str:
@@ -633,7 +634,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
     api_key = _get_api_key(request)
     overview_key = f"workspace-overview:{owner}"
 
-    if not refresh and overview_key in _cache and time.time() - _cache[overview_key]["ts"] < CACHE_TTL:
+    if not refresh and overview_key in _cache and time.time() - _cache[overview_key]["ts"] < WORKSPACE_CACHE_TTL:
         log.info("Returning cached workspace overview for %s", owner)
         return _cache[overview_key]["data"]
 
@@ -654,7 +655,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
         return _fetch_repo_vuln_summary(session, owner, slug, name)
 
     summaries: list[WorkspaceRepoSummary] = []
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {pool.submit(_process_repo, r): r for r in raw_repos}
         for fut in as_completed(futures):
             try:
