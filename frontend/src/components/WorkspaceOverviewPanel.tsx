@@ -263,7 +263,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
         <>
           <div className="wo-cve-section-label">Repositories</div>
           <div className="wo-repo-list">
-            {data.repos.map((repo) => (
+            {[...data.repos].sort((a, b) => b.vuln_count - a.vuln_count).map((repo) => (
               <button key={repo.slug} className="wo-repo-row" onClick={() => onRepoSelect(repo.slug)}>
                 <span className="wo-repo-sev-dot" style={{ background: repo.max_severity ? SEVERITY_COLORS[repo.max_severity] ?? "#555577" : "#555577" }} />
                 <span className="wo-repo-row-name">{repo.name}</span>
