@@ -365,6 +365,17 @@ body {
   transition: transform 0.3s ease;
 }
 
+.left-panel-filters {
+  display: contents;
+}
+
+.left-panel-filters-disabled {
+  display: block;
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+}
+
 .panel-collapsed .left-panel {
   transform: translateX(-100%);
 }

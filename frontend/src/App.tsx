@@ -258,6 +258,7 @@ export default function App() {
           hideCriticalAnimation={hideCriticalAnimation}
           hasKey={hasKey}
           tab={tab}
+          disabled={viewMode === "workspace"}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
           onFilterFlagsChange={setFilterFlags}
