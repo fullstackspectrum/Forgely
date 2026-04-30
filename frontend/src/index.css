@@ -4552,3 +4552,45 @@ body {
   padding: 1px 5px;
   align-self: center;
 }
+
+/* ── CVE pagination ──────────────────────────────────── */
+
+.wo-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.wo-page-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #c8cadf;
+  font-size: 14px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wo-page-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+}
+
+.wo-page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.wo-page-info {
+  font-size: 11px;
+  color: #8b8fa8;
+  min-width: 40px;
+  text-align: center;
+}

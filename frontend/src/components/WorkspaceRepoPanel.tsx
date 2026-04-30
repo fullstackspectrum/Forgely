@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceRepoSummary, WorkspaceCveSummary } from "../types";
 
 interface Props {
   data: WorkspaceRepoSummary;
   owner: string;
+  expanded: boolean;
   onLoadFullGraph: () => void;
   onClose: () => void;
 }
@@ -99,8 +100,14 @@ function CveRow({ cve, query }: { cve: WorkspaceCveSummary; query: string }) {
   );
 }
 
-export default function WorkspaceRepoPanel({ data, owner, onLoadFullGraph, onClose }: Props) {
+export default function WorkspaceRepoPanel({ data, owner, expanded, onLoadFullGraph, onClose }: Props) {
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+
+  const pageSize = expanded ? 35 : 10;
+
+  /* Reset to first page when query or page size changes */
+  useEffect(() => { setPage(0); }, [query, pageSize]);
 
   const filteredCves = useMemo(() => {
     if (!query.trim()) return data.cves;
@@ -119,6 +126,9 @@ export default function WorkspaceRepoPanel({ data, owner, onLoadFullGraph, onClo
       (a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0),
     );
   }, [filteredCves]);
+
+  const totalPages = Math.ceil(sortedCves.length / pageSize);
+  const pageCves = sortedCves.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="side-panel wo-panel">
@@ -175,9 +185,16 @@ export default function WorkspaceRepoPanel({ data, owner, onLoadFullGraph, onClo
             {sortedCves.length === 0 ? (
               <div className="wo-cve-empty">No CVEs match "{query}"</div>
             ) : (
-              sortedCves.map((cve) => <CveRow key={cve.id} cve={cve} query={query} />)
+              pageCves.map((cve) => <CveRow key={cve.id} cve={cve} query={query} />)
             )}
           </div>
+          {totalPages > 1 && (
+            <div className="wo-pagination">
+              <button className="wo-page-btn" onClick={() => setPage((p) => p - 1)} disabled={page === 0}>‹</button>
+              <span className="wo-page-info">{page + 1} / {totalPages}</span>
+              <button className="wo-page-btn" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages - 1}>›</button>
+            </div>
+          )}
         </>
       )}
 

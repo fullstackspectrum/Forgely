@@ -548,6 +548,7 @@ export default function App() {
                 <WorkspaceRepoPanel
                   data={repoData}
                   owner={owner}
+                  expanded={woPanelExpanded}
                   onLoadFullGraph={() => handleRepoSelect(owner, selectedWorkspaceRepo)}
                   onClose={() => setSelectedWorkspaceRepo(null)}
                 />
