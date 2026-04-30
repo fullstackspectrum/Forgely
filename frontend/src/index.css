@@ -983,6 +983,21 @@ body {
   text-align: left;
 }
 
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.btn-secondary:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 /* ===== Package search ===== */
 
 .package-search {
@@ -4124,4 +4139,288 @@ body {
   .ag-node-sub {
     font-size: 10px;
   }
+}
+
+/* ================================================================
+   Workspace package overview
+   ================================================================ */
+
+.workspace-overview-wrapper {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-overview-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.workspace-overview-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: rgba(18, 20, 38, 0.82);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-wrap: wrap;
+  z-index: 10;
+}
+
+.wo-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wo-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------------------
+   Workspace repo panel (reuses .side-panel container via App.tsx)
+   ---------------------------------------------------------------- */
+
+.wo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wo-stats-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.wo-stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 4px 6px;
+  gap: 2px;
+}
+
+.wo-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.wo-stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wo-sev-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 1px;
+  margin: 2px 0;
+}
+
+.wo-sev-bar-seg {
+  height: 100%;
+  min-width: 3px;
+  border-radius: 2px;
+  transition: flex 0.3s ease;
+}
+
+.wo-sev-bar-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px;
+}
+
+.wo-sev-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.wo-sev-stat {
+  font-weight: 600;
+}
+
+.wo-cve-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.wo-cve-count-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 1px 6px;
+  text-transform: none;
+}
+
+.wo-search-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wo-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.wo-search-input:focus {
+  border-color: rgba(74, 144, 217, 0.6);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.wo-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.wo-search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.wo-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.wo-search-highlight {
+  background: rgba(255, 211, 26, 0.3);
+  border-radius: 2px;
+  padding: 0 1px;
+  font-style: normal;
+  color: inherit;
+}
+
+.wo-cve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 340px;
+  padding-right: 2px;
+}
+
+.wo-cve-list::-webkit-scrollbar {
+  width: 4px;
+}
+.wo-cve-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wo-cve-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.wo-cve-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wo-cve-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.wo-cve-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.wo-cve-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.wo-cve-packages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.wo-pkg-tag {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(74, 144, 217, 0.12);
+  color: #79b8ff;
+  border: 1px solid rgba(74, 144, 217, 0.25);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+}
+
+.wo-cve-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px;
+}
+
+.wo-no-cves {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.wo-load-btn {
+  margin-top: 4px;
+  text-align: center;
+  padding: 8px 12px;
+  font-weight: 600;
 }
