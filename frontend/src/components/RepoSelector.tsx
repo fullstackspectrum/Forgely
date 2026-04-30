@@ -33,6 +33,7 @@ function CustomDropdown({
   value,
   placeholder,
   disabled,
+  loading,
   onChange,
   searchable,
 }: {
@@ -40,6 +41,7 @@ function CustomDropdown({
   value: string;
   placeholder: string;
   disabled?: boolean;
+  loading?: boolean;
   onChange: (value: string) => void;
   searchable?: boolean;
 }) {
@@ -81,9 +83,13 @@ function CustomDropdown({
         <span className={`custom-dropdown-value${!selected ? " placeholder" : ""}`}>
           {selected ? selected.label : placeholder}
         </span>
-        <svg className="custom-dropdown-chevron" width="10" height="6" viewBox="0 0 10 6">
-          <path d="M0 0l5 6 5-6z" fill="currentColor" />
-        </svg>
+        {loading ? (
+          <span className="custom-dropdown-spinner" aria-label="Loading" />
+        ) : (
+          <svg className="custom-dropdown-chevron" width="10" height="6" viewBox="0 0 10 6">
+            <path d="M0 0l5 6 5-6z" fill="currentColor" />
+          </svg>
+        )}
       </button>
       {open && (
         <div className="custom-dropdown-menu">
@@ -223,6 +229,7 @@ export default function RepoSelector({
                 : "Select repository"
           }
           disabled={!owner || loadingRepos}
+          loading={loadingRepos}
           onChange={(v) => setRepo(v)}
           searchable
         />
