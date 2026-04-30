@@ -60,10 +60,10 @@ export default function OrgLeftPanel({
 
       <div className="left-panel-tabs">
         <button className="left-panel-tab" onClick={() => onTabChange("packages")}>
-          📦 Artifacts
+          📦 SCA
         </button>
         <button className="left-panel-tab active">
-          🏢 Workspace
+          🔐 CIEM
         </button>
       </div>
 
