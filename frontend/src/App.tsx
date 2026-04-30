@@ -60,6 +60,7 @@ export default function App() {
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
+  const [apiToast, setApiToast] = useState<string | null>(null);
   const [topBarCollapsed, setTopBarCollapsed] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
 
@@ -123,7 +124,9 @@ export default function App() {
       const resp = await apiFetch(`/api/org-graph?owner=${encodeURIComponent(orgOwner)}`);
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
-        throw new Error(body.detail || `HTTP ${resp.status}`);
+        throw new Error(resp.status === 401
+          ? `401: ${body.detail || "Authentication required"}`
+          : body.detail || `HTTP ${resp.status}`);
       }
       const json: OrgGraphResponse = await resp.json();
       setOrgData(json);
@@ -155,6 +158,10 @@ export default function App() {
       fetchOrgGraph(owner);
     }
   }, [owner, fetchOrgGraph]);
+
+  /* Surface API errors as a toast, regardless of whether data is already loaded */
+  useEffect(() => { if (error) setApiToast(error); }, [error]);
+  useEffect(() => { if (orgError) setApiToast(orgError); }, [orgError]);
 
   /* Build CVE → package ID reverse index for search */
   const cveIndex = useMemo(() => {
@@ -473,6 +480,66 @@ export default function App() {
 
         </>
       )}
+
+      {apiToast && (
+        <ApiErrorToast
+          message={apiToast}
+          onDismiss={() => setApiToast(null)}
+          onReconnect={() => { setApiToast(null); setConnectOpen(true); }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ApiErrorToastProps {
+  message: string;
+  onDismiss: () => void;
+  onReconnect: () => void;
+}
+
+function ApiErrorToast({ message, onDismiss, onReconnect }: ApiErrorToastProps) {
+  const isAuth = message.startsWith("401:");
+  const body = isAuth ? message.slice(5).trim() : message;
+
+  useEffect(() => {
+    if (isAuth) return;
+    const t = setTimeout(onDismiss, 8000);
+    return () => clearTimeout(t);
+  }, [isAuth, onDismiss]);
+
+  return (
+    <div className={`api-error-toast${isAuth ? " api-error-toast-auth" : ""}`} role="alert">
+      <div className="api-error-toast-icon" aria-hidden="true">
+        {isAuth ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        )}
+      </div>
+      <div className="api-error-toast-body">
+        <div className="api-error-toast-title">{isAuth ? "Not authenticated" : "Request failed"}</div>
+        <div className="api-error-toast-msg">
+          {isAuth ? "Your API key is missing or has been revoked." : body}
+        </div>
+        {isAuth && body && body !== "Authentication required" && (
+          <div className="api-error-toast-detail">{body}</div>
+        )}
+      </div>
+      <div className="api-error-toast-actions">
+        {isAuth && (
+          <button className="api-error-toast-btn api-error-toast-reconnect" onClick={onReconnect}>
+            Reconnect
+          </button>
+        )}
+        <button className="api-error-toast-btn api-error-toast-close" onClick={onDismiss} title="Dismiss">
+          ×
+        </button>
+      </div>
     </div>
   );
 }
