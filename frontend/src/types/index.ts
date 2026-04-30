@@ -148,6 +148,7 @@ export interface WorkspaceRepoSummary {
   low: number;
   safe: number;
   cves: WorkspaceCveSummary[];
+  formats: Record<string, number>;
 }
 
 export interface WorkspaceOverviewResponse {
