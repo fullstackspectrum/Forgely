@@ -6,7 +6,7 @@
 
 > **Disclaimer:** Forgely is a personal, community-driven project. It is **not** an official Cloudsmith product and is not endorsed, supported, or maintained by Cloudsmith.
 
-**Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, vulnerabilities, and organisation access structure into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii, transitive risks, and access exposure at a glance.
+**Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It covers two core cloud-native security disciplines — **SCA** and **CIEM** — surfacing them as interactive, colour-coded graphs so DevOps and Security teams can identify blast radii, transitive risks, and access exposure at a glance.
 
 ![Example – Artifacts Overview](assets/readme/example1.jpg)
 
@@ -19,6 +19,39 @@
 ![Example – Workspace Overview](assets/readme/example5.jpg)
 
 ![Example – User Inspect](assets/readme/example6.jpg)
+
+---
+
+## Security Domains
+
+### SCA — Software Composition Analysis
+
+SCA is the practice of scanning open-source and third-party package dependencies for known vulnerabilities (CVEs). It is a foundational pillar of software supply chain security.
+
+Forgely's SCA view answers:
+- Which packages across my repositories contain known CVEs?
+- What is the blast radius of a specific vulnerability — which dependent packages are transitively exposed?
+- Which packages are quarantined, and why?
+- What does the full attack path look like from a client tool to a CVE?
+
+### CIEM — Cloud Infrastructure Entitlement Management
+
+CIEM focuses on governing *who has access to what* in cloud and SaaS environments. Excessive or misconfigured entitlements are a leading cause of cloud security incidents.
+
+Forgely's CIEM view answers:
+- Which members, service accounts, and teams have access to which repositories?
+- What entitlements and upstream proxies are in use?
+- Are there unexpected or over-privileged access paths between identities and resources?
+- How are teams structured, and what do their combined access rights look like?
+
+### Together
+
+| Domain | What it protects | Key question |
+|--------|-----------------|--------------|
+| **SCA** | Software supply chain | What vulnerable components am I running? |
+| **CIEM** | Identity & access surface | Who can reach those components — and should they? |
+
+Combining SCA and CIEM in a single tool means you can cross-reference a vulnerable package with the identities that have write or download access to the repository that hosts it — a critical step in assessing actual exploitability and impact.
 
 ---
 
@@ -51,32 +84,34 @@
 
 ## Key Features
 
-### Artifact Graph (Packages tab)
+### SCA — Software Composition Analysis
 
 - **WebGL rendering** via Sigma.js — smooth 60fps pan/zoom, GPU-accelerated, handles thousands of nodes
 - **Severity-coded nodes** — Critical / High / Medium / Low / Safe / Unscanned, each with a distinct colour
 - **Pulsing critical nodes** — animated ring effect on Critical packages to draw immediate attention (toggleable)
 - **Hover effects** — node glow + size boost; un-hovered edges dim out; connected nodes stay highlighted
 - **Quarantine indicators** — quarantined packages rendered with a distinct ring node program
-- **Floating details panel** — click any node to open a draggable, repositionable panel anchored near the selected node; expand to full screen for deep inspection
-- **CVE detail cards** — per-CVE severity badge, affected/fixed versions, NVD and GitHub Advisory links; paginated (5 collapsed / 15 expanded), with search and severity filter
-- **Format cards** — repo overview panel shows package formats with total counts; when a severity filter is active, format cards dim out for formats with no matching packages and show a filtered match count badge
-- **Most vulnerable** — top-5 most vulnerable packages listed in the repo panel, clickable to select and navigate directly to that node
-- **Dependency graph** — expandable dependencies list within the package panel; click to refocus the graph on a dependency node
-- **Attack path panel** — for any package, visualises the full attack chain: Client Tools → Internet → Registry → Repository → Package → CVE, with format-specific client tool examples (docker pull, pip install, npm install, etc.)
+- **Floating details panel** — click any node to open a draggable, repositionable panel; expand to full screen for deep inspection
+- **CVE detail cards** — per-CVE severity badge, affected/fixed versions, NVD and GitHub Advisory links; paginated with search and severity filter
+- **Format cards** — repo overview panel shows package formats with total counts; format cards dim when a severity filter is active
+- **Most vulnerable** — top-5 most vulnerable packages listed in the repo panel, clickable to navigate directly to that node
+- **Dependency graph** — expandable dependencies list within the package panel; click to refocus on a dependency node
+- **Attack path panel** — visualises the full attack chain: Client Tools → Internet → Registry → Repository → Package → CVE, with format-specific client tool examples
 - **CVE search** — search by CVE ID or package name; matching nodes are highlighted in the graph
 - **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low / Quarantined / Shared CVEs / Has Dependencies
 - **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation
 - **Format filter** — click a format card in the repo panel to isolate packages of that format in the graph
-- **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree (top-down), Horizontal (left-to-right); edge style auto-switches between curved and straight to match the layout
+- **Workspace overview** — cross-repository SCA view: all repos in an organisation rendered as a single graph, with aggregate vulnerability stats, package format heatmap, severity breakdown, and cross-repo CVE search
+- **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree, Horizontal; edge style auto-switches to match layout
 - **Refresh** — force re-fetch bypasses the cache and pulls fresh data from Cloudsmith
 
-### Organisation Graph (Workspace tab)
+### CIEM — Cloud Infrastructure Entitlement Management
 
-- **Org-level access graph** — maps repositories, members, service accounts, teams, entitlements, and upstream proxies as an interconnected graph
+- **Identity graph** — maps repositories, members, service accounts, teams, entitlements, and upstream proxies as an interconnected graph
 - **Node type filtering** — filter by Repositories, Members, Services, Teams, Entitlements, or Upstreams with live counts
 - **Prefixed search** — search with type prefixes (`repo:`, `user:`, `service:`, `team:`, `entitlement:`, `upstream:`) or free text
 - **Node detail panel** — click any node to see role, email, permissions, status, team memberships, and all connected relationships grouped by edge type
+- **Access path visibility** — entitlement and access edges are rendered as dashed curves to distinguish them from structural relationships
 
 ### General
 
@@ -156,10 +191,11 @@ npm run dev
 | `/api/config` | GET | Returns configured owner, repo, and key status |
 | `/api/namespaces` | GET | List Cloudsmith workspaces the key has access to |
 | `/api/repos/{owner}` | GET | List repositories for a workspace |
-| `/api/graph` | GET | Artifact graph data for `?owner=&repo=` (5 min cache) |
+| `/api/graph` | GET | SCA artifact graph for `?owner=&repo=` (5 min cache) |
 | `/api/graph/refresh` | POST | Force re-fetch, bypassing cache |
 | `/api/search` | GET | Search packages by name/version/format |
-| `/api/org-graph` | GET | Organisation access graph for `?owner=` |
+| `/api/workspace-overview` | GET | Cross-repo SCA overview for `?owner=` (10 min cache) |
+| `/api/org-graph` | GET | CIEM identity graph for `?owner=` |
 | `/api/auth/validate` | POST | Validate a Cloudsmith API key |
 | `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate HTML vulnerability report via [vulnly](https://pypi.org/project/vulnly/) |
 
@@ -185,8 +221,8 @@ npm run dev
 |--------|-------------|
 | 💥 Force | ForceAtlas2 — organic clustering by connection gravity |
 | ◎ Circular | All nodes arranged in a circle |
-| 🎯 Radial | Repository pinned to centre, packages orbit outward |
-| 🌳 Tree | Hierarchical top-down — repo → packages → dependencies |
+| 🎯 Radial | Repository / workspace pinned to centre, nodes orbit outward |
+| 🌳 Tree | Hierarchical top-down |
 | ↔ Horizontal | Left-to-right tree layout |
 
 ---
@@ -204,23 +240,27 @@ Forgely/
 │   ├── public/               # Static assets (icons, logos)
 │   └── src/
 │       ├── components/
-│       │   ├── GraphCanvas.tsx        # Artifact graph (Sigma.js WebGL)
-│       │   ├── OrgGraphCanvas.tsx     # Organisation graph (Sigma.js WebGL)
-│       │   ├── SidePanel.tsx          # Package / repo / dependency detail panel
-│       │   ├── OrgSidePanel.tsx       # Organisation node detail panel
-│       │   ├── AttackGraphPanel.tsx   # Attack path visualisation
-│       │   ├── FilterBar.tsx          # Left control panel (artifacts tab)
-│       │   ├── OrgLeftPanel.tsx       # Left control panel (workspace tab)
-│       │   ├── SearchBar.tsx          # Package / CVE search
-│       │   ├── OrgSearchBar.tsx       # Organisation node search
-│       │   ├── RepoSelector.tsx       # Workspace + repository selector
-│       │   ├── WorkspaceSelector.tsx  # Organisation selector
-│       │   ├── Legend.tsx             # Artifact graph legend
-│       │   ├── OrgLegend.tsx          # Organisation graph legend
-│       │   ├── ConnectModal.tsx       # API key connect/disconnect modal
-│       │   └── LoadingIndicator.tsx   # Animated multi-stage loading screen
+│       │   ├── GraphCanvas.tsx              # SCA artifact graph (Sigma.js WebGL)
+│       │   ├── OrgGraphCanvas.tsx           # CIEM identity graph (Sigma.js WebGL)
+│       │   ├── WorkspaceOverviewCanvas.tsx  # Cross-repo SCA overview graph
+│       │   ├── SidePanel.tsx                # Package / repo / dependency detail panel
+│       │   ├── OrgSidePanel.tsx             # CIEM node detail panel
+│       │   ├── WorkspaceOverviewPanel.tsx   # Workspace-level SCA summary panel
+│       │   ├── WorkspaceRepoPanel.tsx       # Per-repo SCA detail panel (overview mode)
+│       │   ├── AttackGraphPanel.tsx         # Attack path visualisation
+│       │   ├── FilterBar.tsx                # Left control panel (SCA tab)
+│       │   ├── OrgLeftPanel.tsx             # Left control panel (CIEM tab)
+│       │   ├── LayoutPopout.tsx             # Shared layout/edge style control
+│       │   ├── SearchBar.tsx                # Package / CVE search
+│       │   ├── OrgSearchBar.tsx             # CIEM node search
+│       │   ├── RepoSelector.tsx             # Workspace + repository selector
+│       │   ├── WorkspaceSelector.tsx        # Organisation selector
+│       │   ├── Legend.tsx                   # SCA graph legend
+│       │   ├── OrgLegend.tsx                # CIEM graph legend
+│       │   ├── ConnectModal.tsx             # API key connect/disconnect modal
+│       │   └── LoadingIndicator.tsx         # Animated multi-stage loading screen
 │       ├── hooks/
-│       │   └── useGraphData.ts        # Data fetching and state for artifact graph
+│       │   └── useGraphData.ts        # Data fetching and state for SCA graph
 │       ├── lib/
 │       │   ├── auth.ts                # API key storage and fetch wrapper
 │       │   └── formatIcons.ts         # Package format → Devicon icon URL map
