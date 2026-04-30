@@ -15,6 +15,27 @@ const WORKSPACE_STAGES = [
   { label: "Building workspace graph", icon: "📊" },
 ];
 
+const PATIENCE_MESSAGES = [
+  "Untangling the dependency spaghetti…",
+  "Consulting the ghost of Log4Shell…",
+  "Mapping the blast radius of questionable npm installs…",
+  "Negotiating with circular dependencies…",
+  "Your supply chain is… extensive.",
+  "Still running. This is fine. 🔥",
+  "Counting transitive vulnerabilities. There are a lot.",
+  "Have you tried turning your dependencies off and on again?",
+  "Teaching nodes to behave themselves…",
+  "Asking your packages nicely to form a circle…",
+  "Making it look like we're doing science…",
+  "Your graph is impressively large. We'll give you that.",
+  "Querying the void for package metadata…",
+  "Maybe fewer dependencies next time? Just a thought.",
+  "Calculating exactly how many CVEs you should probably care about…",
+  "Finding out which commit started all this…",
+  "The graph is big. The graph is bold. The graph is almost ready.",
+  "We've seen worse. (We haven't.)",
+];
+
 interface Props {
   variant?: "packages" | "workspace";
 }
@@ -23,6 +44,7 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
   const STAGES = variant === "workspace" ? WORKSPACE_STAGES : PACKAGE_STAGES;
   const [stage, setStage] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const [funnyIdx, setFunnyIdx] = useState(-1);
 
   /* Advance stages on a timer to show progress */
   useEffect(() => {
@@ -30,13 +52,29 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
     if (stage >= STAGES.length - 1) return;
     const t = setTimeout(() => setStage((s) => s + 1), delays[stage] ?? 2000);
     return () => clearTimeout(t);
-  }, [stage]);
+  }, [stage, STAGES.length]);
 
   /* Elapsed timer */
   useEffect(() => {
     const t = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(t);
   }, []);
+
+  /* Start cycling patience messages after 4 s on the final stage */
+  useEffect(() => {
+    if (stage < STAGES.length - 1) return;
+    const t = setTimeout(() => setFunnyIdx(0), 4000);
+    return () => clearTimeout(t);
+  }, [stage, STAGES.length]);
+
+  useEffect(() => {
+    if (funnyIdx < 0) return;
+    const t = setTimeout(
+      () => setFunnyIdx((i) => (i + 1) % PATIENCE_MESSAGES.length),
+      3500,
+    );
+    return () => clearTimeout(t);
+  }, [funnyIdx]);
 
   return (
     <div className="loading-indicator">
@@ -59,9 +97,13 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
         ))}
       </div>
 
-      <div className="loading-elapsed">
-        {elapsed}s elapsed
-      </div>
+      <div className="loading-elapsed">{elapsed}s elapsed</div>
+
+      {funnyIdx >= 0 && (
+        <div key={funnyIdx} className="loading-funny">
+          {PATIENCE_MESSAGES[funnyIdx]}
+        </div>
+      )}
     </div>
   );
 }
