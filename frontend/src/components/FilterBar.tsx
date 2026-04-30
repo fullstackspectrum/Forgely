@@ -91,7 +91,7 @@ export default function FilterBar({
           className={`left-panel-tab${tab === "packages" ? " active" : ""}`}
           onClick={() => onTabChange("packages")}
         >
-          📦 Artifacts
+          📦 SCA
         </button>
         <button
           className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}
