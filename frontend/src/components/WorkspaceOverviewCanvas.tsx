@@ -9,6 +9,7 @@ interface Props {
   selectedRepo: string | null;
   onRepoSelect: (slug: string | null) => void;
   onLoadFullGraph: (slug: string) => void;
+  onRefresh?: () => void;
 }
 
 const SEV_BORDER: Record<string, string> = {
@@ -34,6 +35,7 @@ export default function WorkspaceOverviewCanvas({
   selectedRepo,
   onRepoSelect,
   onLoadFullGraph,
+  onRefresh,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -209,6 +211,15 @@ export default function WorkspaceOverviewCanvas({
           <span className="wo-legend-dot" style={{ background: "#555577" }} />
           Unscanned
         </span>
+        {onRefresh && (
+          <button className="wo-refresh-btn btn btn-muted" onClick={onRefresh} title="Refresh workspace overview">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Refresh
+          </button>
+        )}
       </div>
       <div className="workspace-overview-canvas" ref={containerRef} />
     </div>

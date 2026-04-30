@@ -534,8 +534,12 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
     if not packages:
         return WorkspaceRepoSummary(slug=slug, name=name)
 
-    pkg_metas: list[dict] = []
+    # Partition packages: skip the scan API call for those that clearly won't
+    # return results (unsupported format or scan not yet run).
+    pkg_metas: list[dict] = []  # needs vuln API call
     seen_ids: set[str] = set()
+    stats: dict[str, int] = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Safe": 0}
+
     for pkg in packages:
         p_slug = pkg["slug_perm"]
         p_name = pkg.get("name") or pkg.get("slug_perm") or ""
@@ -544,6 +548,17 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
         if node_id in seen_ids:
             continue
         seen_ids.add(node_id)
+
+        raw_status = (pkg.get("security_scan_status") or "").lower()
+        if "not supported" in raw_status:
+            # Scanning not available for this format — count as safe, no API call needed.
+            stats["Safe"] += 1
+            continue
+        if "awaiting" in raw_status:
+            # Scan hasn't run yet — nothing to fetch, treat as unscanned safe.
+            stats["Safe"] += 1
+            continue
+
         pkg_metas.append({"slug": p_slug, "name": p_name, "node_id": node_id})
 
     MAX_WORKERS = 10
@@ -551,33 +566,33 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
     def _scan(meta: dict):
         return (meta, *get_package_vulnerabilities(session, owner, slug, meta["slug"]))
 
-    stats: dict[str, int] = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Safe": 0}
     total_cves = 0
     cve_map: dict[str, dict] = {}
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(_scan, m): m for m in pkg_metas}
-        for fut in as_completed(futures):
-            meta, max_sev, vuln_count, vulns = fut.result()
-            if max_sev == "Unknown" and vuln_count == 0:
-                max_sev = "None"
-            if vuln_count == 0 and max_sev is not None and max_sev not in ("None", "Unknown"):
-                max_sev = "None"
-            if max_sev in stats:
-                stats[max_sev] += 1
-            else:
-                stats["Safe"] += 1
-            total_cves += vuln_count
-            for v in vulns:
-                cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
-                if not cve_id:
-                    continue
-                v_sev = v.get("severity", v.get("max_severity", "Unknown"))
-                desc = v.get("description") or v.get("title") or v.get("summary", "")
-                if cve_id not in cve_map:
-                    cve_map[cve_id] = {"id": cve_id, "severity": v_sev, "description": desc, "packages": []}
-                if meta["name"] not in cve_map[cve_id]["packages"]:
-                    cve_map[cve_id]["packages"].append(meta["name"])
+    if pkg_metas:
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            futures = {pool.submit(_scan, m): m for m in pkg_metas}
+            for fut in as_completed(futures):
+                meta, max_sev, vuln_count, vulns = fut.result()
+                if max_sev == "Unknown" and vuln_count == 0:
+                    max_sev = "None"
+                if vuln_count == 0 and max_sev is not None and max_sev not in ("None", "Unknown"):
+                    max_sev = "None"
+                if max_sev in stats:
+                    stats[max_sev] += 1
+                else:
+                    stats["Safe"] += 1
+                total_cves += vuln_count
+                for v in vulns:
+                    cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
+                    if not cve_id:
+                        continue
+                    v_sev = v.get("severity", v.get("max_severity", "Unknown"))
+                    desc = v.get("description") or v.get("title") or v.get("summary", "")
+                    if cve_id not in cve_map:
+                        cve_map[cve_id] = {"id": cve_id, "severity": v_sev, "description": desc, "packages": []}
+                    if meta["name"] not in cve_map[cve_id]["packages"]:
+                        cve_map[cve_id]["packages"].append(meta["name"])
 
     cves = [WorkspaceCveSummary(**v) for v in cve_map.values()]
     max_overall: str | None = None
@@ -591,7 +606,7 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
     return WorkspaceRepoSummary(
         slug=slug,
         name=name,
-        package_count=len(pkg_metas),
+        package_count=len(seen_ids),
         vuln_count=total_cves,
         max_severity=max_overall,
         critical=stats.get("Critical", 0),
@@ -604,25 +619,32 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
 
 
 @app.get("/api/workspace-overview", response_model=WorkspaceOverviewResponse)
-def workspace_overview(owner: str, request: Request):
+def workspace_overview(owner: str, request: Request, refresh: bool = False):
     """Build a package-vulnerability overview for every repo in a workspace."""
     api_key = _get_api_key(request)
-    session = create_session(api_key)
+    overview_key = f"workspace-overview:{owner}"
 
+    if not refresh and overview_key in _cache and time.time() - _cache[overview_key]["ts"] < CACHE_TTL:
+        log.info("Returning cached workspace overview for %s", owner)
+        return _cache[overview_key]["data"]
+
+    session = create_session(api_key)
     raw_repos = fetch_repos(session, owner)
     if not raw_repos:
-        return WorkspaceOverviewResponse(owner=owner, repos=[])
+        result = WorkspaceOverviewResponse(owner=owner, repos=[])
+        _cache[overview_key] = {"data": result, "ts": time.time()}
+        return result
 
     def _process_repo(r: dict) -> WorkspaceRepoSummary:
         slug = r.get("slug", "")
         name = r.get("name", slug)
-        cache_key = f"{owner}/{slug}"
-        if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
-            return _extract_repo_summary_from_graph(slug, name, _cache[cache_key]["data"])
+        # Re-use any full graph already cached for this repo
+        repo_cache_key = f"{owner}/{slug}"
+        if repo_cache_key in _cache and time.time() - _cache[repo_cache_key]["ts"] < CACHE_TTL:
+            return _extract_repo_summary_from_graph(slug, name, _cache[repo_cache_key]["data"])
         return _fetch_repo_vuln_summary(session, owner, slug, name)
 
     summaries: list[WorkspaceRepoSummary] = []
-    # Process up to 4 repos in parallel to avoid overloading the API
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {pool.submit(_process_repo, r): r for r in raw_repos}
         for fut in as_completed(futures):
@@ -632,7 +654,9 @@ def workspace_overview(owner: str, request: Request):
                 log.warning("Failed to process repo for workspace overview: %s", exc)
 
     summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
-    return WorkspaceOverviewResponse(owner=owner, repos=summaries)
+    result = WorkspaceOverviewResponse(owner=owner, repos=summaries)
+    _cache[overview_key] = {"data": result, "ts": time.time()}
+    return result
 
 
 # ──────────────────────────────────────────────────────────────
