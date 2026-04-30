@@ -343,6 +343,14 @@ export default function App() {
               <p>{error || workspaceOverviewError}</p>
               <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
             </div>
+          ) : workspaceOverviewData ? (
+            <WorkspaceOverviewCanvas
+              data={workspaceOverviewData}
+              selectedRepo={selectedWorkspaceRepo}
+              onRepoSelect={setSelectedWorkspaceRepo}
+              onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
+              onRefresh={() => handleLoadWorkspaceOverview(owner, true)}
+            />
           ) : data ? (
             <GraphCanvas
               data={data}
@@ -366,14 +374,6 @@ export default function App() {
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
               onOpenAttackGraph={(nodeId) => { setSelectedNode(nodeId); setAttackGraphOpen(true); }}
-            />
-          ) : workspaceOverviewData ? (
-            <WorkspaceOverviewCanvas
-              data={workspaceOverviewData}
-              selectedRepo={selectedWorkspaceRepo}
-              onRepoSelect={setSelectedWorkspaceRepo}
-              onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
-              onRefresh={() => handleLoadWorkspaceOverview(owner, true)}
             />
           ) : (
             <div className="empty-state">
