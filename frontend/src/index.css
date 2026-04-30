@@ -4300,20 +4300,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow-y: auto;
-  max-height: 340px;
-  padding-right: 2px;
 }
 
-.wo-cve-list::-webkit-scrollbar {
-  width: 4px;
+/* Expanded panel: CVE cards become a responsive grid */
+.panel-overlay-expanded .wo-cve-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+  align-items: start;
 }
-.wo-cve-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.wo-cve-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
+
+.panel-overlay-expanded .wo-panel {
+  padding: 28px 32px 32px;
 }
 
 .wo-cve-row {
