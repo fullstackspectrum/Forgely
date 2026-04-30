@@ -1,10 +1,13 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
+import forceAtlas2 from "graphology-layout-forceatlas2";
+import { circular } from "graphology-layout";
 import { NodeImageProgram } from "@sigma/node-image";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
+import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
-import type { WorkspaceOverviewResponse } from "../types";
+import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -32,6 +35,57 @@ function getSevBorder(sev: string | null): string {
   return SEV_BORDER[sev] ?? "#888899";
 }
 
+function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
+  const n = graph.order;
+
+  if (layout === "force") {
+    graph.forEachNode((id) => {
+      if (id === wsId) { graph.setNodeAttribute(id, "x", 0); graph.setNodeAttribute(id, "y", 0); return; }
+      const angle = Math.random() * 2 * Math.PI;
+      const r = Math.max(200, n * 8) * (0.5 + Math.random() * 0.8);
+      graph.setNodeAttribute(id, "x", Math.cos(angle) * r);
+      graph.setNodeAttribute(id, "y", Math.sin(angle) * r);
+    });
+    forceAtlas2.assign(graph, {
+      iterations: Math.min(600, 250 + n * 3),
+      settings: { gravity: 0.2, scalingRatio: 12, adjustSizes: true, strongGravityMode: true, slowDown: 1 + Math.log(n + 1) },
+    });
+    // Re-anchor workspace node to origin
+    const ox = graph.getNodeAttribute(wsId, "x") as number;
+    const oy = graph.getNodeAttribute(wsId, "y") as number;
+    graph.forEachNode((id) => {
+      graph.setNodeAttribute(id, "x", (graph.getNodeAttribute(id, "x") as number) - ox);
+      graph.setNodeAttribute(id, "y", (graph.getNodeAttribute(id, "y") as number) - oy);
+    });
+  } else if (layout === "circular") {
+    circular.assign(graph);
+  } else if (layout === "radial") {
+    // Workspace at centre, repos evenly around it
+    const repos = graph.nodes().filter((id) => id !== wsId);
+    graph.setNodeAttribute(wsId, "x", 0);
+    graph.setNodeAttribute(wsId, "y", 0);
+    const radius = Math.max(4, repos.length * 0.55);
+    repos.forEach((id, i) => {
+      const angle = (2 * Math.PI * i) / repos.length - Math.PI / 2;
+      graph.setNodeAttribute(id, "x", radius * Math.cos(angle));
+      graph.setNodeAttribute(id, "y", radius * Math.sin(angle));
+    });
+  } else if (layout === "tree" || layout === "horizontal") {
+    // Workspace as root, repos spread below / to the right
+    const repos = graph.nodes().filter((id) => id !== wsId);
+    const horizontal = layout === "horizontal";
+    const spread = Math.max(repos.length * 2.5, 10);
+    const step = spread / Math.max(repos.length - 1, 1);
+    graph.setNodeAttribute(wsId, "x", 0);
+    graph.setNodeAttribute(wsId, "y", 0);
+    repos.forEach((id, i) => {
+      const offset = -spread / 2 + i * step;
+      graph.setNodeAttribute(id, "x", horizontal ? 5 : offset);
+      graph.setNodeAttribute(id, "y", horizontal ? offset : 5);
+    });
+  }
+}
+
 export default function WorkspaceOverviewCanvas({
   data,
   selectedRepo,
@@ -43,6 +97,8 @@ export default function WorkspaceOverviewCanvas({
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [layout, setLayout] = useState<LayoutType>("radial");
+  const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
 
   /* Remove any existing context menu */
   const removeContextMenu = useCallback(() => {
@@ -199,6 +255,27 @@ export default function WorkspaceOverviewCanvas({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  /* Re-apply layout when user switches */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+    applyOverviewLayout(graph, layout, `ws:${data.owner}`);
+    sigma.refresh();
+    sigma.getCamera().animatedReset({ duration: 400 });
+  }, [layout, data.owner]);
+
+  /* Switch edge type when style changes */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+    const newType = edgeStyle === "curved" ? "curvedArrow" : "arrow";
+    graph.forEachEdge((edge) => graph.setEdgeAttribute(edge, "type", newType));
+    sigma.setSetting("defaultEdgeType", newType);
+    sigma.refresh();
+  }, [edgeStyle]);
+
   /* Refresh node reducer when selection changes without rebuilding */
   useEffect(() => {
     const sigma = sigmaRef.current;
@@ -224,6 +301,16 @@ export default function WorkspaceOverviewCanvas({
       <div ref={containerRef} className="graph-container" />
 
       <div className="graph-controls">
+        <LayoutPopout
+          layout={layout}
+          edgeStyle={edgeStyle}
+          onLayoutChange={(l) => {
+            setLayout(l);
+            if (l === "tree" || l === "horizontal") setEdgeStyle("straight");
+            else setEdgeStyle("curved");
+          }}
+          onEdgeStyleChange={setEdgeStyle}
+        />
         {/* Pan cluster */}
         <div className="graph-nav-cluster">
           <button className="graph-nav-btn" title="Pan Up"    onClick={() => { const c = cam(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
