@@ -19,7 +19,9 @@ export function useGraphData() {
         const resp = await apiFetch(url, opts);
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
-          throw new Error(body.detail || `HTTP ${resp.status}`);
+          throw new Error(resp.status === 401
+            ? `401: ${body.detail || "Authentication required"}`
+            : body.detail || `HTTP ${resp.status}`);
         }
         const json: GraphResponse = await resp.json();
         setData(json);
