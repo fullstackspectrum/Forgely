@@ -128,15 +128,16 @@ export default function App() {
     }
   }, [owner, repo, fetchGraph]);
 
-  const handleLoadWorkspaceOverview = useCallback(async (wsOwner: string) => {
+  const handleLoadWorkspaceOverview = useCallback(async (wsOwner: string, refresh = false) => {
     setOwner(wsOwner);
     setWorkspaceOverviewLoading(true);
     setWorkspaceOverviewError(null);
-    setWorkspaceOverviewData(null);
+    if (!refresh) setWorkspaceOverviewData(null);
     setSelectedWorkspaceRepo(null);
     setSelectedNode(null);
     try {
-      const resp = await apiFetch(`/api/workspace-overview?owner=${encodeURIComponent(wsOwner)}`);
+      const url = `/api/workspace-overview?owner=${encodeURIComponent(wsOwner)}${refresh ? "&refresh=true" : ""}`;
+      const resp = await apiFetch(url);
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
         throw new Error(resp.status === 401
@@ -372,6 +373,7 @@ export default function App() {
               selectedRepo={selectedWorkspaceRepo}
               onRepoSelect={setSelectedWorkspaceRepo}
               onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
+              onRefresh={() => handleLoadWorkspaceOverview(owner, true)}
             />
           ) : (
             <div className="empty-state">

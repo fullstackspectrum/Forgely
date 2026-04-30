@@ -4178,6 +4178,16 @@ body {
   color: var(--text-muted);
 }
 
+.wo-refresh-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 .wo-legend-dot {
   width: 10px;
   height: 10px;
