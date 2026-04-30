@@ -498,7 +498,7 @@ export default function App() {
             );
           })()}
 
-          <Legend />
+          {!workspaceOverviewData && <Legend />}
 
         </>
       )}

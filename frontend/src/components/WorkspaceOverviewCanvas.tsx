@@ -198,30 +198,60 @@ export default function WorkspaceOverviewCanvas({
     sigma.refresh();
   }, [selectedRepo]);
 
+  const cam = () => sigmaRef.current?.getCamera();
+  const wsId = `ws:${data.owner}`;
+
   return (
-    <div className="workspace-overview-wrapper">
-      <div className="workspace-overview-legend">
-        {(["Critical", "High", "Medium", "Low", "None"] as const).map((sev) => (
-          <span key={sev} className="wo-legend-item">
-            <span className="wo-legend-dot" style={{ background: getSevColor(sev) }} />
-            {sev === "None" ? "Safe" : sev}
-          </span>
-        ))}
-        <span className="wo-legend-item">
-          <span className="wo-legend-dot" style={{ background: "#555577" }} />
-          Unscanned
-        </span>
-        {onRefresh && (
-          <button className="wo-refresh-btn btn btn-muted" onClick={onRefresh} title="Refresh workspace overview">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-            Refresh
+    <div className="graph-wrapper">
+      <div ref={containerRef} className="graph-container" />
+
+      <div className="graph-controls">
+        {/* Pan cluster */}
+        <div className="graph-nav-cluster">
+          <button className="graph-nav-btn" title="Pan Up"    onClick={() => { const c = cam(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
           </button>
+          <div className="graph-nav-row">
+            <button className="graph-nav-btn" title="Pan Left"  onClick={() => { const c = cam(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button className="graph-nav-btn" title="Pan Right" onClick={() => { const c = cam(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <button className="graph-nav-btn" title="Pan Down"  onClick={() => { const c = cam(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+
+        {/* Zoom cluster */}
+        <div className="graph-zoom-cluster">
+          <button className="graph-nav-btn" title="Zoom In"  onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button className="graph-nav-btn" title="Zoom Out" onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        {/* Recenter on workspace node */}
+        <button
+          className="graph-recenter-btn"
+          title="Recenter"
+          onClick={() => {
+            const sigma = sigmaRef.current;
+            if (!sigma) return;
+            const pos = sigma.getNodeDisplayData(wsId);
+            if (pos) sigma.getCamera().animate({ x: pos.x, y: pos.y, ratio: 0.8 }, { duration: 400 });
+          }}
+        >
+          ⊙
+        </button>
+
+        {onRefresh && (
+          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">↻</button>
         )}
       </div>
-      <div className="workspace-overview-canvas" ref={containerRef} />
     </div>
   );
 }
