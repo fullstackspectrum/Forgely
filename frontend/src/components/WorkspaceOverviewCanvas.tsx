@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
 import { NodeImageProgram } from "@sigma/node-image";
+import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse } from "../types";
 
@@ -101,8 +102,10 @@ export default function WorkspaceOverviewCanvas({
         max_severity: sev,
       });
       graph.addEdge(wsId, repo.slug, {
-        size: 1.5,
-        color: "rgba(120,130,180,0.3)",
+        size: 2,
+        color: "rgba(70,130,210,0.5)",
+        type: "curvedArrow",
+        curvature: 0.15,
       });
     });
 
@@ -116,7 +119,9 @@ export default function WorkspaceOverviewCanvas({
       renderEdgeLabels: false,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
+      defaultEdgeType: "curvedArrow",
       nodeProgramClasses: { image: NodeImageProgram },
+      edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo;
         const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);

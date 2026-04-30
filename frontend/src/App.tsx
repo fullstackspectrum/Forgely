@@ -336,7 +336,7 @@ export default function App() {
       {tab === "packages" && (
         <>
           {(loading || workspaceOverviewLoading) ? (
-            <LoadingIndicator />
+            <LoadingIndicator variant={workspaceOverviewLoading ? "workspace-overview" : "packages"} />
           ) : error && !data && !workspaceOverviewData ? (
             <div className="graph-loading">
               <h2>Connection Error</h2>
