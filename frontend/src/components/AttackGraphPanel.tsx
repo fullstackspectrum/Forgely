@@ -32,6 +32,15 @@ const STAGE_COLORS: Record<string, { accent: string; border: string; icon: strin
   cve:      { accent: "#ef4444", border: "rgba(239,68,68,0.45)",   icon: "#ef4444" },
 };
 
+/** Convert a severity label to a STAGE_COLORS-style colour object. */
+function sevColor(severity: string | undefined) {
+  const hex = SEVERITY_COLORS[severity ?? ""] ?? SEVERITY_COLORS.High;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { accent: hex, border: `rgba(${r},${g},${b},0.45)`, icon: hex };
+}
+
 /* ── Access method helpers ───────────────────────────────────── */
 
 interface AccessMethod {
@@ -91,7 +100,6 @@ function getAccessMethods(format: string): AccessMethod[] {
   return [
     ...native,
     cs("cloudsmith download", "Cloudsmith CLI", "cloudsmith"),
-    cs("REST API",       "API Client",     "api"),
     cs("Web UI",         "Browser",        "browser"),
   ];
 }
@@ -208,15 +216,14 @@ function AttackGraphCanvas({
   const [scale, setScale] = useState(1);
   const dragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
-  const initialized = useRef(false);
   const [animKey, setAnimKey] = useState(0);
 
-  /* Centre graph on first render and whenever layout changes */
-  useEffect(() => {
+  /* Compute and apply a scale+translate that fits the graph in the container. */
+  const fitToContainer = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     const { width: cw, height: ch } = el.getBoundingClientRect();
-    if (cw === 0) return;
+    if (cw === 0 || ch === 0) return;
 
     const numCves = cveExpanded ? criticalCves.length : 1;
     const cveH = cveExpanded
@@ -228,20 +235,32 @@ function AttackGraphCanvas({
     const graphW = X_CVE + NW;
     const graphH = Math.max(clientBoxH, NH, cveH);
 
-    const padX = 80;
-    const padY = 60;
+    const padX = 48;
+    const padY = 32;
     const scaleX = (cw - padX * 2) / graphW;
-    const scaleY = (ch - padY * 2) / (graphH + 36);
-    const s = Math.min(scaleX, scaleY, 1.2);
-    const stx = (cw - graphW * s) / 2;
-    const sty = ch / 2;  // y=0 is the graph's vertical centre
+    const scaleY = (ch - padY * 2) / graphH;
+    const s = Math.min(scaleX, scaleY, 1.0);
 
     setScale(s);
-    setTx(stx);
-    setTy(sty);
-    if (!initialized.current) initialized.current = true;
+    setTx((cw - graphW * s) / 2);
+    setTy(ch / 2);
     setAnimKey((k) => k + 1);
-  }, [cveExpanded, criticalCves.length, displayRepos.length]);
+  }, [cveExpanded, criticalCves.length, displayRepos.length, packageNode.data.format]);
+
+  /* Re-fit whenever layout changes. Use ResizeObserver so the first fit fires
+     after the panel has actually been painted (getBoundingClientRect returns 0
+     on the synchronous first render tick). */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    // Try immediately — works when the effect re-runs after CVE toggle etc.
+    fitToContainer();
+    // Fall back to ResizeObserver for the initial mount, where the container
+    // may not have dimensions yet in the synchronous render cycle.
+    const ro = new ResizeObserver(() => fitToContainer());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitToContainer]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as Element).closest("[data-clickable]")) return;
@@ -483,10 +502,11 @@ function AttackGraphCanvas({
               const ex = X_CVE + NW / 2 - ICON_R;
               const ey = cveY;
               const cpx = (ox + ex) / 2;
+              const ec = sevColor(cve.severity);
               return (
                 <path key={cve.id}
                   d={`M ${ox} ${oy} C ${cpx} ${oy}, ${cpx} ${ey}, ${ex} ${ey}`}
-                  stroke="rgba(239,68,68,0.5)" strokeWidth="1.5" fill="none"
+                  stroke={ec.border} strokeWidth="1.5" fill="none"
                   markerEnd="url(#ag-arrow-cve)"
                   strokeDasharray="800" className="ag-edge-draw-cve"
                   style={{ animationDelay: `${0.05 * i}s` }}
@@ -496,7 +516,7 @@ function AttackGraphCanvas({
           ) : (
             <line
               x1={X_PKG + NW / 2 + ICON_R} y1={0} x2={X_CVE + NW / 2 - ICON_R} y2={0}
-              stroke="rgba(239,68,68,0.5)" strokeWidth="1.5"
+              stroke={sevColor(maxSev ?? undefined).border} strokeWidth="1.5"
               markerEnd="url(#ag-arrow-cve)"
               strokeDasharray="800" className="ag-edge-draw"
               style={{ animationDelay: "0.4s" }}
@@ -585,7 +605,7 @@ function AttackGraphCanvas({
                   id={`cve-${i}`}
                   x={X_CVE} y={cy}
                   w={NW} h={CVE_NH} r={NR}
-                  color={STAGE_COLORS.cve}
+                  color={sevColor(cve.severity)}
                   label={cve.id || "Unknown"}
                   sub={cve.affected
                     ? `${cve.affected}${cve.affected_version ? ` @ ${cve.affected_version}` : ""}`
@@ -614,12 +634,12 @@ function AttackGraphCanvas({
                 id="cve-summary"
                 x={X_CVE} y={-NH / 2}
                 w={NW} h={NH} r={NR}
-                color={STAGE_COLORS.cve}
-                label={`${criticalCves.length} ${maxSev ?? "High"} CVE${criticalCves.length !== 1 ? "s" : ""}`}
+                color={sevColor(maxSev ?? undefined)}
+                label={`${criticalCves.length} CVE${criticalCves.length !== 1 ? "s" : ""}`}
                 sub={criticalCves.length > 10 ? "Too many to expand" : "Click to expand ▾"}
                 delay="0.45s"
                 icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke={STAGE_COLORS.cve.icon}
+                  <svg viewBox="0 0 24 24" fill="none" stroke={sevColor(maxSev ?? undefined).icon}
                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                     <line x1="12" y1="9" x2="12" y2="13"/>
@@ -791,7 +811,7 @@ function getClientIcon(iconType: string, color: string) {
     case "api":
       return <svg {...props}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="12" y1="4" x2="12" y2="20" strokeWidth="1.2"/></svg>;
     case "cloudsmith":
-      return <image href="/cloudsmith.png" x="0" y="0" width="18" height="18" />;
+      return <svg {...props}><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="6 9 10 13 6 17"/><line x1="12" y1="17" x2="18" y2="17"/></svg>;
     default: // terminal
       return <svg {...props}><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>;
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGraphData } from "./hooks/useGraphData";
 import GraphCanvas from "./components/GraphCanvas";
 import OrgGraphCanvas from "./components/OrgGraphCanvas";
@@ -27,9 +27,13 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
+  const [filterFlagsMode, setFilterFlagsMode] = useState<"and" | "or">("and");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>("force");
   const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
@@ -48,12 +52,17 @@ export default function App() {
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
   const [orgPanelExpanded, setOrgPanelExpanded] = useState(false);
+  const [orgPanelPos, setOrgPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const orgPanelRef = useRef<HTMLDivElement>(null);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
+  const [apiToast, setApiToast] = useState<string | null>(null);
+  const [topBarCollapsed, setTopBarCollapsed] = useState(false);
+  const [legendCollapsed, setLegendCollapsed] = useState(false);
 
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
@@ -115,7 +124,9 @@ export default function App() {
       const resp = await apiFetch(`/api/org-graph?owner=${encodeURIComponent(orgOwner)}`);
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
-        throw new Error(body.detail || `HTTP ${resp.status}`);
+        throw new Error(resp.status === 401
+          ? `401: ${body.detail || "Authentication required"}`
+          : body.detail || `HTTP ${resp.status}`);
       }
       const json: OrgGraphResponse = await resp.json();
       setOrgData(json);
@@ -147,6 +158,10 @@ export default function App() {
       fetchOrgGraph(owner);
     }
   }, [owner, fetchOrgGraph]);
+
+  /* Surface API errors as a toast, regardless of whether data is already loaded */
+  useEffect(() => { if (error) setApiToast(error); }, [error]);
+  useEffect(() => { if (orgError) setApiToast(orgError); }, [orgError]);
 
   /* Build CVE → package ID reverse index for search */
   const cveIndex = useMemo(() => {
@@ -184,7 +199,8 @@ export default function App() {
       {tab === "packages" && (
         <FilterBar
           filter={filter}
-          stats={data?.stats ?? null}
+          filterFlags={filterFlags}
+          filterFlagsMode={filterFlagsMode}
           hideSharedCveEdges={hideSharedCveEdges}
           hideDependencies={hideDependencies}
           hideUnsupported={hideUnsupported}
@@ -193,6 +209,8 @@ export default function App() {
           tab={tab}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
+          onFilterFlagsChange={setFilterFlags}
+          onFilterFlagsModeChange={setFilterFlagsMode}
           onHideSharedCveEdgesChange={setHideSharedCveEdges}
           onHideDependenciesChange={setHideDependencies}
           onHideUnsupportedChange={setHideUnsupported}
@@ -215,41 +233,55 @@ export default function App() {
 
       {/* Top bar: repo selector + search (packages tab only) */}
       {tab === "packages" && (
-        <div className="top-bar">
-          <RepoSelector
-            currentOwner={owner}
-            currentRepo={repo}
-            refreshKey={repoRefreshKey}
-            onSelect={handleRepoSelect}
-          />
-          {owner && repo && (
-            <SearchBar
-              owner={owner}
-              repo={repo}
-              graphNodeIds={graphNodeIds}
-              onHighlight={setSearchResults}
-              onNodeSelect={setSelectedNode}
-              cveIndex={cveIndex}
-            />
+        <div className={`top-bar${topBarCollapsed ? " top-bar-collapsed" : ""}`}>
+          {!topBarCollapsed && (
+            <>
+              <RepoSelector
+                currentOwner={owner}
+                currentRepo={repo}
+                refreshKey={repoRefreshKey}
+                onSelect={handleRepoSelect}
+              />
+              {owner && repo && (
+                <SearchBar
+                  owner={owner}
+                  repo={repo}
+                  graphNodeIds={graphNodeIds}
+                  onHighlight={setSearchResults}
+                  onNodeSelect={setSelectedNode}
+                  cveIndex={cveIndex}
+                />
+              )}
+            </>
           )}
+          <button className="collapse-toggle-btn" onClick={() => setTopBarCollapsed(c => !c)} title={topBarCollapsed ? "Show controls" : "Hide controls"}>
+            {topBarCollapsed ? "▼" : "▲"}
+          </button>
         </div>
       )}
 
       {/* Top bar: workspace selector (workspace tab) */}
       {tab === "organisation" && (
-        <div className="top-bar">
-          <WorkspaceSelector
-            currentOwner={owner}
-            refreshKey={repoRefreshKey}
-            onSelect={handleOrgOwnerChange}
-          />
-          {orgData && (
-            <OrgSearchBar
-              orgData={orgData}
-              onHighlight={setOrgSearchResults}
-              onNodeSelect={setOrgSelectedNode}
-            />
+        <div className={`top-bar${topBarCollapsed ? " top-bar-collapsed" : ""}`}>
+          {!topBarCollapsed && (
+            <>
+              <WorkspaceSelector
+                currentOwner={owner}
+                refreshKey={repoRefreshKey}
+                onSelect={handleOrgOwnerChange}
+              />
+              {orgData && (
+                <OrgSearchBar
+                  orgData={orgData}
+                  onHighlight={setOrgSearchResults}
+                  onNodeSelect={setOrgSelectedNode}
+                />
+              )}
+            </>
           )}
+          <button className="collapse-toggle-btn" onClick={() => setTopBarCollapsed(c => !c)} title={topBarCollapsed ? "Show controls" : "Hide controls"}>
+            {topBarCollapsed ? "▼" : "▲"}
+          </button>
         </div>
       )}
 
@@ -276,6 +308,8 @@ export default function App() {
               selectedNode={selectedNode}
               hoveredNode={hoveredNode}
               filter={filter}
+              filterFlags={filterFlags}
+              filterFlagsMode={filterFlagsMode}
               formatFilter={formatFilter}
               layout={layout}
               edgeStyle={edgeStyle}
@@ -286,6 +320,7 @@ export default function App() {
               hideCriticalAnimation={hideCriticalAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
+
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
               onEdgeStyleChange={setEdgeStyle}
@@ -297,17 +332,53 @@ export default function App() {
             </div>
           )}
 
-          {selectedNode && data && !attackGraphOpen && (
-            <div className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}>
-              <div className="panel-toolbar">
-                <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
-                  {panelExpanded ? "⇥" : "⇤"}
-                </button>
-                <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
+          {selectedNode && data && !attackGraphOpen && (() => {
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = panelExpanded
+              ? undefined
+              : panelPos
+                ? { top: panelPos.y, left: panelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (panelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = panelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => {
+                dx = me.clientX - startX;
+                dy = me.clientY - startY;
+                panel.style.transform = `translate(${dx}px,${dy}px)`;
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
+                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+                setPanelPos({ x: finalX, y: finalY });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={panelRef} className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
+                    {panelExpanded ? "⇥" : "⇤"}
+                  </button>
+                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); setPanelPos(null); }}>×</button>
+                </div>
+                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
               </div>
-              <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
-            </div>
-          )}
+            );
+          })()}
 
           {attackGraphOpen && selectedNode && data && (
             <div className="attack-graph-backdrop" onClick={() => setAttackGraphOpen(false)}>
@@ -324,11 +395,6 @@ export default function App() {
 
           <Legend />
 
-          {data && (
-            <div className="repo-badge">
-              {data.owner}/{data.repo}
-            </div>
-          )}
         </>
       )}
 
@@ -362,27 +428,118 @@ export default function App() {
             </div>
           )}
 
-          {orgSelectedNode && orgData && (
-            <div className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`}>
-              <div className="panel-toolbar">
-                <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
-                  {orgPanelExpanded ? "⇥" : "⇤"}
-                </button>
-                <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); }}>×</button>
+          {orgSelectedNode && orgData && (() => {
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = orgPanelExpanded
+              ? undefined
+              : orgPanelPos
+                ? { top: orgPanelPos.y, left: orgPanelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (orgPanelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = orgPanelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => {
+                dx = me.clientX - startX;
+                dy = me.clientY - startY;
+                panel.style.transform = `translate(${dx}px,${dy}px)`;
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
+                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+                setOrgPanelPos({ x: finalX, y: finalY });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={orgPanelRef} className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
+                    {orgPanelExpanded ? "⇥" : "⇤"}
+                  </button>
+                  <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); setOrgPanelPos(null); }}>×</button>
+                </div>
+                <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
               </div>
-              <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
-            </div>
-          )}
+            );
+          })()}
 
           <OrgLegend />
 
-          {orgData && (
-            <div className="repo-badge">
-              🏢 {orgData.owner}
-            </div>
-          )}
         </>
       )}
+
+      {apiToast && (
+        <ApiErrorToast
+          message={apiToast}
+          onDismiss={() => setApiToast(null)}
+          onReconnect={() => { setApiToast(null); setConnectOpen(true); }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface ApiErrorToastProps {
+  message: string;
+  onDismiss: () => void;
+  onReconnect: () => void;
+}
+
+function ApiErrorToast({ message, onDismiss, onReconnect }: ApiErrorToastProps) {
+  const isAuth = message.startsWith("401:");
+  const body = isAuth ? message.slice(5).trim() : message;
+
+  useEffect(() => {
+    if (isAuth) return;
+    const t = setTimeout(onDismiss, 8000);
+    return () => clearTimeout(t);
+  }, [isAuth, onDismiss]);
+
+  return (
+    <div className={`api-error-toast${isAuth ? " api-error-toast-auth" : ""}`} role="alert">
+      <div className="api-error-toast-icon" aria-hidden="true">
+        {isAuth ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        )}
+      </div>
+      <div className="api-error-toast-body">
+        <div className="api-error-toast-title">{isAuth ? "Not authenticated" : "Request failed"}</div>
+        <div className="api-error-toast-msg">
+          {isAuth ? "Your API key is missing or has been revoked." : body}
+        </div>
+        {isAuth && body && body !== "Authentication required" && (
+          <div className="api-error-toast-detail">{body}</div>
+        )}
+      </div>
+      <div className="api-error-toast-actions">
+        {isAuth && (
+          <button className="api-error-toast-btn api-error-toast-reconnect" onClick={onReconnect}>
+            Reconnect
+          </button>
+        )}
+        <button className="api-error-toast-btn api-error-toast-close" onClick={onDismiss} title="Dismiss">
+          ×
+        </button>
+      </div>
     </div>
   );
 }
