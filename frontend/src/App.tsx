@@ -129,6 +129,7 @@ export default function App() {
   }, [owner, repo, fetchGraph]);
 
   const handleLoadWorkspaceOverview = useCallback(async (wsOwner: string) => {
+    setOwner(wsOwner);
     setWorkspaceOverviewLoading(true);
     setWorkspaceOverviewError(null);
     setWorkspaceOverviewData(null);
