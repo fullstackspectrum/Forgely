@@ -73,7 +73,17 @@ export default function WorkspaceOverviewCanvas({
 
     /* Repo nodes arranged in a circle */
     const repos = data.repos;
-    const radius = Math.max(4, repos.length * 0.45);
+    const radius = Math.max(5, repos.length * 0.55);
+
+    const MIN_NODE_SIZE = 8;
+    const MAX_NODE_SIZE = 56;
+    const counts = repos.map((r) => r.package_count);
+    const maxCount = Math.max(...counts, 1);
+    const logMax = Math.log1p(maxCount);
+
+    const repoNodeSize = (count: number) =>
+      MIN_NODE_SIZE + (Math.log1p(count) / logMax) * (MAX_NODE_SIZE - MIN_NODE_SIZE);
+
     repos.forEach((repo, i) => {
       const angle = (2 * Math.PI * i) / repos.length - Math.PI / 2;
       const x = radius * Math.cos(angle);
@@ -82,7 +92,7 @@ export default function WorkspaceOverviewCanvas({
       graph.addNode(repo.slug, {
         x,
         y,
-        size: 14,
+        size: repoNodeSize(repo.package_count),
         label: repo.name,
         color: getSevColor(sev),
         borderColor: getSevBorder(sev),
@@ -109,10 +119,10 @@ export default function WorkspaceOverviewCanvas({
       nodeProgramClasses: { image: NodeImageProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo;
-        const size = attrs.nodeType === "workspace" ? 48 : 14;
+        const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
         return {
           ...attrs,
-          size: isSelected ? size * 1.2 : size,
+          size: isSelected ? baseSize * 1.2 : baseSize,
           zIndex: isSelected ? 2 : 1,
           highlighted: isSelected,
         };
@@ -190,10 +200,10 @@ export default function WorkspaceOverviewCanvas({
     if (!sigma) return;
     sigma.setSetting("nodeReducer", (node, attrs) => {
       const isSelected = node === selectedRepo;
-      const size = attrs.nodeType === "workspace" ? 48 : 14;
+      const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
       return {
         ...attrs,
-        size: isSelected ? size * 1.2 : size,
+        size: isSelected ? baseSize * 1.2 : baseSize,
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
       };
