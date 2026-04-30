@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
+import { NodeImageProgram } from "@sigma/node-image";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse } from "../types";
 
@@ -57,21 +58,22 @@ export default function WorkspaceOverviewCanvas({
     const graph = new Graph({ multi: false });
     graphRef.current = graph;
 
-    /* Workspace centre node */
+    /* Workspace centre node — styled like the repo node in GraphCanvas */
     const wsId = `ws:${data.owner}`;
     graph.addNode(wsId, {
       x: 0,
       y: 0,
-      size: 22,
-      label: data.owner,
-      color: "#4a90d9",
-      borderColor: "#6ab4ff",
+      size: 48,
+      label: "",
+      color: "#0f0f1a",
       nodeType: "workspace",
+      type: "image",
+      image: "/forgely-icon.png",
     });
 
     /* Repo nodes arranged in a circle */
     const repos = data.repos;
-    const radius = Math.max(3, repos.length * 0.45);
+    const radius = Math.max(4, repos.length * 0.45);
     repos.forEach((repo, i) => {
       const angle = (2 * Math.PI * i) / repos.length - Math.PI / 2;
       const x = radius * Math.cos(angle);
@@ -104,12 +106,13 @@ export default function WorkspaceOverviewCanvas({
       renderEdgeLabels: false,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
+      nodeProgramClasses: { image: NodeImageProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo;
-        const size = attrs.nodeType === "workspace" ? 22 : 14;
+        const size = attrs.nodeType === "workspace" ? 48 : 14;
         return {
           ...attrs,
-          size: isSelected ? size * 1.35 : size,
+          size: isSelected ? size * 1.2 : size,
           zIndex: isSelected ? 2 : 1,
           highlighted: isSelected,
         };
@@ -187,10 +190,10 @@ export default function WorkspaceOverviewCanvas({
     if (!sigma) return;
     sigma.setSetting("nodeReducer", (node, attrs) => {
       const isSelected = node === selectedRepo;
-      const size = attrs.nodeType === "workspace" ? 22 : 14;
+      const size = attrs.nodeType === "workspace" ? 48 : 14;
       return {
         ...attrs,
-        size: isSelected ? size * 1.35 : size,
+        size: isSelected ? size * 1.2 : size,
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
       };
