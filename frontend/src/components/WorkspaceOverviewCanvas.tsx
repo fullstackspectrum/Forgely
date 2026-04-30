@@ -12,7 +12,9 @@ import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types"
 interface Props {
   data: WorkspaceOverviewResponse;
   selectedRepo: string | null;
+  workspaceSelected: boolean;
   onRepoSelect: (slug: string | null) => void;
+  onWorkspaceSelect: () => void;
   onLoadFullGraph: (slug: string) => void;
   onRefresh?: () => void;
 }
@@ -89,7 +91,9 @@ function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
 export default function WorkspaceOverviewCanvas({
   data,
   selectedRepo,
+  workspaceSelected,
   onRepoSelect,
+  onWorkspaceSelect,
   onLoadFullGraph,
   onRefresh,
 }: Props) {
@@ -179,7 +183,7 @@ export default function WorkspaceOverviewCanvas({
       nodeProgramClasses: { image: NodeImageProgram },
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
       nodeReducer: (node, attrs) => {
-        const isSelected = node === selectedRepo;
+        const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
         const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
         return {
           ...attrs,
@@ -199,7 +203,7 @@ export default function WorkspaceOverviewCanvas({
     sigma.on("clickNode", ({ node }) => {
       removeContextMenu();
       if (node === wsId) {
-        onRepoSelect(null);
+        onWorkspaceSelect();
         return;
       }
       onRepoSelect(node);
@@ -281,7 +285,7 @@ export default function WorkspaceOverviewCanvas({
     const sigma = sigmaRef.current;
     if (!sigma) return;
     sigma.setSetting("nodeReducer", (node, attrs) => {
-      const isSelected = node === selectedRepo;
+      const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
       const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
       return {
         ...attrs,
@@ -291,7 +295,7 @@ export default function WorkspaceOverviewCanvas({
       };
     });
     sigma.refresh();
-  }, [selectedRepo]);
+  }, [selectedRepo, workspaceSelected]);
 
   const cam = () => sigmaRef.current?.getCamera();
   const wsId = `ws:${data.owner}`;

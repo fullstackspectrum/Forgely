@@ -482,9 +482,14 @@ def vulnly_report(owner: str, repo: str, slug: str, request: Request):
 def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse) -> WorkspaceRepoSummary:
     """Build a WorkspaceRepoSummary from an already-cached GraphResponse."""
     cve_map: dict[str, dict] = {}
+    formats: dict[str, int] = {}
     for node in graph.nodes:
         if node.type != "package":
             continue
+        fmt = (node.data.format or "unknown").lower().strip()
+        if not fmt or fmt == "n/a":
+            fmt = "unknown"
+        formats[fmt] = formats.get(fmt, 0) + 1
         for cve in node.data.cves:
             if not cve.id:
                 continue
@@ -525,6 +530,7 @@ def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse)
         low=s.low,
         safe=s.safe,
         cves=cves,
+        formats=formats,
     )
 
 
@@ -539,6 +545,7 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
     pkg_metas: list[dict] = []  # needs vuln API call
     seen_ids: set[str] = set()
     stats: dict[str, int] = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Safe": 0}
+    formats: dict[str, int] = {}
 
     for pkg in packages:
         p_slug = pkg["slug_perm"]
@@ -549,13 +556,14 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
             continue
         seen_ids.add(node_id)
 
+        fmt = (pkg.get("format", "") or "").lower().strip() or "unknown"
+        formats[fmt] = formats.get(fmt, 0) + 1
+
         raw_status = (pkg.get("security_scan_status") or "").lower()
         if "not supported" in raw_status:
-            # Scanning not available for this format — count as safe, no API call needed.
             stats["Safe"] += 1
             continue
         if "awaiting" in raw_status:
-            # Scan hasn't run yet — nothing to fetch, treat as unscanned safe.
             stats["Safe"] += 1
             continue
 
@@ -615,6 +623,7 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
         low=stats.get("Low", 0),
         safe=stats.get("Safe", 0),
         cves=cves,
+        formats=formats,
     )
 
 

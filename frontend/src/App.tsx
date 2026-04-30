@@ -13,6 +13,7 @@ import RepoSelector from "./components/RepoSelector";
 import WorkspaceSelector from "./components/WorkspaceSelector";
 import WorkspaceOverviewCanvas from "./components/WorkspaceOverviewCanvas";
 import WorkspaceRepoPanel from "./components/WorkspaceRepoPanel";
+import WorkspaceOverviewPanel from "./components/WorkspaceOverviewPanel";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
@@ -71,6 +72,7 @@ export default function App() {
   const [workspaceOverviewLoading, setWorkspaceOverviewLoading] = useState(false);
   const [workspaceOverviewError, setWorkspaceOverviewError] = useState<string | null>(null);
   const [selectedWorkspaceRepo, setSelectedWorkspaceRepo] = useState<string | null>(null);
+  const [workspaceNodeSelected, setWorkspaceNodeSelected] = useState(false);
   const woPanelRef = useRef<HTMLDivElement>(null);
   const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [woPanelExpanded, setWoPanelExpanded] = useState(false);
@@ -134,6 +136,7 @@ export default function App() {
     setWorkspaceOverviewError(null);
     if (!refresh) setWorkspaceOverviewData(null);
     setSelectedWorkspaceRepo(null);
+    setWorkspaceNodeSelected(false);
     setSelectedNode(null);
     try {
       const url = `/api/workspace-overview?owner=${encodeURIComponent(wsOwner)}${refresh ? "&refresh=true" : ""}`;
@@ -347,7 +350,9 @@ export default function App() {
             <WorkspaceOverviewCanvas
               data={workspaceOverviewData}
               selectedRepo={selectedWorkspaceRepo}
-              onRepoSelect={setSelectedWorkspaceRepo}
+              workspaceSelected={workspaceNodeSelected}
+              onRepoSelect={(slug) => { setSelectedWorkspaceRepo(slug); setWorkspaceNodeSelected(false); }}
+              onWorkspaceSelect={() => { setWorkspaceNodeSelected(true); setSelectedWorkspaceRepo(null); }}
               onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
               onRefresh={() => handleLoadWorkspaceOverview(owner, true)}
             />
@@ -441,6 +446,50 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Workspace node panel (whole-workspace summary) */}
+          {workspaceOverviewData && workspaceNodeSelected && (() => {
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = woPanelExpanded
+              ? undefined
+              : woPanelPos
+                ? { top: woPanelPos.y, left: woPanelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (woPanelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = woPanelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => { dx = me.clientX - startX; dy = me.clientY - startY; panel.style.transform = `translate(${dx}px,${dy}px)`; };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                setWoPanelPos({ x: Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width)), y: Math.max(0, Math.min(startTop + dy, window.innerHeight - 60)) });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={woPanelRef} className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>{woPanelExpanded ? "⇥" : "⇤"}</button>
+                  <button className="panel-close" onClick={() => { setWorkspaceNodeSelected(false); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                </div>
+                <WorkspaceOverviewPanel
+                  data={workspaceOverviewData}
+                  onRepoSelect={(slug) => { setWorkspaceNodeSelected(false); setSelectedWorkspaceRepo(slug); }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Workspace overview repo panel */}
           {workspaceOverviewData && selectedWorkspaceRepo && (() => {

@@ -83,6 +83,7 @@ class WorkspaceRepoSummary(BaseModel):
     low: int = 0
     safe: int = 0
     cves: list[WorkspaceCveSummary] = []
+    formats: dict[str, int] = {}
 
 
 class WorkspaceOverviewResponse(BaseModel):

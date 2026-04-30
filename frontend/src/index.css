@@ -4385,3 +4385,122 @@ body {
   padding: 8px 12px;
   font-weight: 600;
 }
+
+/* ── Format heatmap ──────────────────────────────────── */
+
+.wo-format-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.wo-format-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  gap: 2px;
+  cursor: default;
+  transition: transform 0.1s;
+}
+
+.wo-format-tile:hover {
+  transform: scale(1.06);
+}
+
+.wo-format-tile-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+
+.wo-format-tile-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ── Repo list ───────────────────────────────────────── */
+
+.wo-repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wo-repo-list::-webkit-scrollbar { width: 4px; }
+.wo-repo-list::-webkit-scrollbar-track { background: transparent; }
+.wo-repo-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+.wo-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.wo-repo-row:hover {
+  background: rgba(74,144,217,0.1);
+  border-color: rgba(74,144,217,0.3);
+}
+
+.wo-repo-sev-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wo-repo-row-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-repo-row-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.wo-repo-row-vulns {
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Cross-repo tag ──────────────────────────────────── */
+
+.wo-repo-tag {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+}
