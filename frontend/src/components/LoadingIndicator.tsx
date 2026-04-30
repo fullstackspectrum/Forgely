@@ -15,6 +15,26 @@ const WORKSPACE_STAGES = [
   { label: "Building workspace graph", icon: "📊" },
 ];
 
+const WORKSPACE_OVERVIEW_STAGES = [
+  { label: "Fetching repositories", icon: "📂" },
+  { label: "Scanning packages", icon: "📦" },
+  { label: "Analysing vulnerabilities", icon: "🛡" },
+  { label: "Building overview", icon: "📊" },
+];
+
+const WORKSPACE_OVERVIEW_PATIENCE = [
+  "Counting packages across your entire workspace…",
+  "Some of these repos have a lot to answer for.",
+  "Scanning for CVEs. Finding some. Finding more.",
+  "Your workspace is extensive. Respect.",
+  "Still going. There are a lot of packages.",
+  "Correlating vulnerabilities across repos…",
+  "Building a picture of your supply chain health…",
+  "The more repos, the more interesting this gets.",
+  "Cross-referencing CVEs. This takes a moment.",
+  "Almost there. Probably.",
+];
+
 const PATIENCE_MESSAGES = [
   "Untangling the dependency spaghetti…",
   "Consulting the ghost of Log4Shell…",
@@ -37,11 +57,17 @@ const PATIENCE_MESSAGES = [
 ];
 
 interface Props {
-  variant?: "packages" | "workspace";
+  variant?: "packages" | "workspace" | "workspace-overview";
 }
 
 export default function LoadingIndicator({ variant = "packages" }: Props) {
-  const STAGES = variant === "workspace" ? WORKSPACE_STAGES : PACKAGE_STAGES;
+  const STAGES =
+    variant === "workspace" ? WORKSPACE_STAGES :
+    variant === "workspace-overview" ? WORKSPACE_OVERVIEW_STAGES :
+    PACKAGE_STAGES;
+
+  const MESSAGES =
+    variant === "workspace-overview" ? WORKSPACE_OVERVIEW_PATIENCE : PATIENCE_MESSAGES;
   const [stage, setStage] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [funnyIdx, setFunnyIdx] = useState(-1);
@@ -70,7 +96,7 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
   useEffect(() => {
     if (funnyIdx < 0) return;
     const t = setTimeout(
-      () => setFunnyIdx((i) => (i + 1) % PATIENCE_MESSAGES.length),
+      () => setFunnyIdx((i) => (i + 1) % MESSAGES.length),
       3500,
     );
     return () => clearTimeout(t);
@@ -101,7 +127,7 @@ export default function LoadingIndicator({ variant = "packages" }: Props) {
 
       {funnyIdx >= 0 && (
         <div key={funnyIdx} className="loading-funny">
-          {PATIENCE_MESSAGES[funnyIdx]}
+          {MESSAGES[funnyIdx]}
         </div>
       )}
     </div>
