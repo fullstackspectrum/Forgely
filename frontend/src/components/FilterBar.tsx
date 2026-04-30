@@ -97,7 +97,7 @@ export default function FilterBar({
           className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}
           onClick={() => onTabChange("organisation")}
         >
-          🏢 Workspace
+          🔐 CIEM
         </button>
       </div>
 
