@@ -1,7 +1,46 @@
-import { useMemo } from "react";
-import { useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
+
+const SEV_FILTERS = new Set<FilterType>(["Critical", "High", "Medium", "Low"]);
+
+function VersionString({ version, mono = false }: { version: string; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    navigator.clipboard.writeText(version).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [version]);
+  return (
+    <span className="version-string-wrap">
+      <span
+        className="version-string-text"
+        title={version}
+        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" } : undefined}
+      >
+        {version}
+      </span>
+      <button
+        type="button"
+        className="version-copy-btn"
+        onClick={copy}
+        title={copied ? "Copied!" : "Copy version"}
+      >
+        {copied ? "✓" : "⎘"}
+      </button>
+    </span>
+  );
+}
+
+function packageMatchesFilter(p: GraphNode, f: FilterType): boolean {
+  if (f === "all") return true;
+  if (SEV_FILTERS.has(f)) return p.data.cves.some((c) => c.severity === f);
+  if (f === "vulnerable") return p.data.vuln_count > 0;
+  if (f === "safe") return p.data.vuln_count === 0;
+  if (f === "quarantined") return p.data.is_quarantined === true;
+  return true;
+}
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
 
@@ -35,8 +74,10 @@ export default function SidePanel({
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [showSharedOnly, setShowSharedOnly] = useState(false);
   const [cveQuery, setCveQuery] = useState<string>("");
+  const [cvePage, setCvePage] = useState(0);
   const [depsExpanded, setDepsExpanded] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const node = data.nodes.find((n) => n.id === nodeId);
 
@@ -76,6 +117,7 @@ export default function SidePanel({
         formatFilter={formatFilter}
         onFilterChange={onFilterChange}
         onFormatFilterChange={onFormatFilterChange}
+        onNodeSelect={onNodeSelect}
       />
     );
   }
@@ -142,9 +184,6 @@ export default function SidePanel({
     if (!canGenerateReport || reportLoading) return;
     setReportLoading(true);
     setReportError(null);
-    /* Open the new tab synchronously to avoid popup blockers,
-       then navigate it once the blob URL is ready. */
-    const win = window.open("", "_blank");
     try {
       const resp = await apiFetch(
         `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}`,
@@ -155,15 +194,18 @@ export default function SidePanel({
       }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-      if (win) {
-        win.location.href = url;
-      } else {
-        window.open(url, "_blank");
-      }
-      /* Revoke after the new tab has had a chance to load. */
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const filename = `vulnly-${safe(node.label)}${d.version ? `-${safe(d.version)}` : ""}.html`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setReportDone(true);
+      setTimeout(() => setReportDone(false), 2500);
     } catch (err) {
-      if (win) win.close();
       setReportError(err instanceof Error ? err.message : "Failed to generate report");
     } finally {
       setReportLoading(false);
@@ -175,7 +217,7 @@ export default function SidePanel({
       <div className="panel-summary">
       <div className="panel-header">
         <h2 className="panel-title">{node.label}</h2>
-        <span className="panel-version">{d.version}</span>
+        {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
       </div>
 
       <div className="panel-status-row">
@@ -227,22 +269,25 @@ export default function SidePanel({
             {canGenerateReport && (
               <button
                 type="button"
-                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}`}
+                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
                 onClick={handleGenerateReport}
-                disabled={reportLoading}
-                title={reportLoading ? "Generating report…" : "Generate Vulnly HTML report"}
+                disabled={reportLoading || reportDone}
+                title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
               >
                 {reportLoading ? (
                   <span className="vulnly-spinner" aria-hidden="true" />
+                ) : reportDone ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                 ) : (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="9" y1="13" x2="15" y2="13" />
-                    <line x1="9" y1="17" x2="15" y2="17" />
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 )}
-                <span>{reportLoading ? "Generating…" : "Vulnly Report"}</span>
+                <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
               </button>
             )}
             {cloudsmithUrl && (
@@ -366,6 +411,11 @@ export default function SidePanel({
           (s) => s === "All" || sevCounts[s]
         );
 
+        const pageSize = expanded ? 15 : 5;
+        const totalPages = Math.ceil(filtered.length / pageSize);
+        const safePage = Math.min(cvePage, Math.max(0, totalPages - 1));
+        const paginated = filtered.slice(safePage * pageSize, (safePage + 1) * pageSize);
+
         return (
           <div className="panel-section">
             <h3 className="section-title">
@@ -379,13 +429,13 @@ export default function SidePanel({
                 className="cve-search-input"
                 placeholder="Search CVEs (e.g. CVE-2024-1234)"
                 value={cveQuery}
-                onChange={(e) => setCveQuery(e.target.value)}
+                onChange={(e) => { setCveQuery(e.target.value); setCvePage(0); }}
               />
               {cveQuery && (
                 <button
                   type="button"
                   className="cve-search-clear"
-                  onClick={() => setCveQuery("")}
+                  onClick={() => { setCveQuery(""); setCvePage(0); }}
                   title="Clear"
                 >
                   ×
@@ -398,7 +448,7 @@ export default function SidePanel({
                   key={s}
                   className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
                   style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
-                  onClick={() => setSevFilter(s)}
+                  onClick={() => { setSevFilter(s); setCvePage(0); }}
                 >
                   {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
                 </button>
@@ -406,7 +456,7 @@ export default function SidePanel({
               {sharedCount > 0 && (
                 <button
                   className={`cve-filter-btn cve-filter-btn-shared${showSharedOnly ? " active" : ""}`}
-                  onClick={() => setShowSharedOnly((v) => !v)}
+                  onClick={() => { setShowSharedOnly((v) => !v); setCvePage(0); }}
                   title="Show only CVEs shared with other packages"
                 >
                   Shared ({sharedCount})
@@ -416,16 +466,31 @@ export default function SidePanel({
             <div className="cve-list">
               {filtered.length === 0 ? (
                 <div className="cve-empty">No CVEs match your search.</div>
-              ) : filtered.map((cve, i) => (
-                <CveCard
-                  key={`${cve.id}-${i}`}
-                  cve={cve}
-                  otherPackages={(cveIndex[cve.id] || []).filter(
-                    (id) => id !== nodeId,
-                  )}
-                />
+              ) : paginated.map((cve, i) => (
+                <CveCard key={`${cve.id}-${i}`} cve={cve} />
               ))}
             </div>
+            {totalPages > 1 && (
+              <div className="cve-pagination">
+                <button
+                  className="cve-page-btn"
+                  onClick={() => setCvePage((p) => Math.max(0, p - 1))}
+                  disabled={safePage === 0}
+                >
+                  ‹
+                </button>
+                <span className="cve-page-label">
+                  {safePage + 1} / {totalPages}
+                </span>
+                <button
+                  className="cve-page-btn"
+                  onClick={() => setCvePage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={safePage === totalPages - 1}
+                >
+                  ›
+                </button>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -517,13 +582,7 @@ function MetaRow({
   );
 }
 
-function CveCard({
-  cve,
-  otherPackages,
-}: {
-  cve: CVERecord;
-  otherPackages: string[];
-}) {
+function CveCard({ cve }: { cve: CVERecord }) {
   const color = SEVERITY_COLORS[cve.severity] || "#666";
   return (
     <div className="cve-card" style={{ borderLeftColor: color }}>
@@ -571,11 +630,6 @@ function CveCard({
           </a>
         )}
       </div>
-      {otherPackages.length > 0 && (
-        <div className="cve-shared">
-          ⚠ Also affects: {otherPackages.join(", ")}
-        </div>
-      )}
     </div>
   );
 }
@@ -631,7 +685,7 @@ function DependencyDetail({
           {node.data.version && (
             <span className="panel-version">
               <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>requires </span>
-              <span style={{ fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" }}>{node.data.version}</span>
+              <VersionString version={node.data.version} mono />
             </span>
           )}
         </div>
@@ -707,6 +761,7 @@ function RepoDetail({
   formatFilter = null,
   onFilterChange,
   onFormatFilterChange,
+  onNodeSelect,
 }: {
   data: GraphResponse;
   node: GraphNode;
@@ -717,6 +772,7 @@ function RepoDetail({
   formatFilter?: string | null;
   onFilterChange?: (f: FilterType) => void;
   onFormatFilterChange?: (f: string | null) => void;
+  onNodeSelect?: (id: string) => void;
 }) {
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
@@ -724,9 +780,13 @@ function RepoDetail({
 
     /* Format breakdown */
     const formatCounts: Record<string, number> = {};
+    const filteredFormatCounts: Record<string, number> = {};
     for (const p of packages) {
       const f = p.data.format || "unknown";
       formatCounts[f] = (formatCounts[f] || 0) + 1;
+      if (packageMatchesFilter(p, filter)) {
+        filteredFormatCounts[f] = (filteredFormatCounts[f] || 0) + 1;
+      }
     }
     const formats = Object.entries(formatCounts)
       .sort((a, b) => b[1] - a[1]);
@@ -751,8 +811,8 @@ function RepoDetail({
       .sort((a, b) => b.data.vuln_count - a.data.vuln_count)
       .slice(0, 5);
 
-    return { packages, deps, formats, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
-  }, [data]);
+    return { packages, deps, formats, filteredFormatCounts, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
+  }, [data, filter]);
 
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
 
@@ -821,16 +881,21 @@ function RepoDetail({
             const icon = getFormatIcon(fmt);
             const fmtKey = fmt.toLowerCase();
             const active = formatFilter === fmtKey;
-            const clickable = !!onFormatFilterChange && fmt !== "unknown";
+            const filteredCount = stats.filteredFormatCounts[fmt] ?? 0;
+            const dimmed = filter !== "all" && filteredCount === 0;
+            const clickable = !!onFormatFilterChange && fmt !== "unknown" && !dimmed;
             return (
               <button
                 key={fmt}
                 type="button"
-                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}`}
+                className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}${dimmed ? " repo-format-card-dimmed" : ""}`}
                 onClick={clickable ? () => toggleFormat(fmtKey) : undefined}
                 disabled={!clickable}
-                title={active ? "Clear format filter" : `Filter graph by ${fmt}`}
+                title={dimmed ? `No ${filter} packages in ${fmt}` : active ? "Clear format filter" : `Filter graph by ${fmt}`}
               >
+                {filter !== "all" && filteredCount > 0 && (
+                  <span className="repo-format-card-filter-badge">{filteredCount}</span>
+                )}
                 <div className="repo-format-card-icon">
                   {icon ? (
                     <img src={icon} alt={fmt} />
@@ -892,12 +957,19 @@ function RepoDetail({
             {stats.topVuln.map((p) => {
               const s = p.data.max_severity || "None";
               return (
-                <div key={p.id} className="repo-vuln-row">
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`repo-vuln-row${onNodeSelect ? " repo-vuln-row-clickable" : ""}`}
+                  onClick={onNodeSelect ? () => { onFilterChange?.("all"); onNodeSelect(p.id); } : undefined}
+                  disabled={!onNodeSelect}
+                  title={onNodeSelect ? `Select ${p.label}` : undefined}
+                >
                   <span className="repo-vuln-name">{p.label}</span>
                   <span className="repo-vuln-badge" style={{ background: SEVERITY_COLORS[s] }}>
                     {p.data.vuln_count}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>

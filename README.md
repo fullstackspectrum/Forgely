@@ -6,7 +6,7 @@
 
 > **Disclaimer:** Forgely is a personal, community-driven project. It is **not** an official Cloudsmith product and is not endorsed, supported, or maintained by Cloudsmith.
 
-**Forgely** is a visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, and vulnerabilities into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii and transitive risks at a glance.
+**Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It maps packages, dependencies, vulnerabilities, and organisation access structure into interactive, color-coded graphs — helping DevOps and Security teams identify blast radii, transitive risks, and access exposure at a glance.
 
 ![Example – Artifacts Overview](assets/readme/example1.jpg)
 
@@ -20,68 +20,105 @@
 
 ![Example – User Inspect](assets/readme/example6.jpg)
 
+---
 
 ## Architecture
 
-- **Backend** (`backend/`) — FastAPI server that fetches Cloudsmith data and serves it as a JSON API (`/api/graph`, `/api/config`, `/api/health`), with in-memory caching (5 min TTL)
-- **Frontend** (`frontend/`) — React + Vite app using [Sigma.js](https://www.sigmajs.org/) (WebGL) for graph rendering via [graphology](https://graphology.github.io/)
+```
+┌─────────────────────────────────────────────────────────┐
+│  Browser                                                │
+│  React + Vite  ──  Sigma.js (WebGL)  ──  graphology     │
+└────────────────────────┬────────────────────────────────┘
+                         │ /api/*
+┌────────────────────────▼────────────────────────────────┐
+│  FastAPI  (localhost:8000)                              │
+│  In-memory cache · ThreadPoolExecutor (20 workers)      │
+└────────────────────────┬────────────────────────────────┘
+                         │ HTTPS
+┌────────────────────────▼────────────────────────────────┐
+│  Cloudsmith API  (api.cloudsmith.io/v1)                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+| Layer | Stack |
+|-------|-------|
+| **Frontend** | React 18, TypeScript, Vite, Sigma.js v3 (WebGL), graphology, ForceAtlas2 |
+| **Backend** | Python 3.10+, FastAPI, uvicorn, requests, vulnly |
+| **Graph rendering** | Sigma.js with custom node programs: images, squares, hexagons, rings |
+| **Data source** | Cloudsmith REST API v1 |
+
+---
 
 ## Key Features
 
+### Artifact Graph (Packages tab)
+
 - **WebGL rendering** via Sigma.js — smooth 60fps pan/zoom, GPU-accelerated, handles thousands of nodes
-- **Edge bundling** — curved edges via `@sigma/edge-curve`, with varying curvature for shared-CVE vs dependency edges
-- **Hover glow effects** — node highlighting + size boost on hover via Sigma reducers; un-hovered edges dim out
-- **Side panel** — click any node to get a polished detail panel (animated slide-in) with metadata grid, CVE cards with severity badges, advisory links, and shared-CVE cross-references
-- **CVE search** — search bar with exact and substring matching, highlights affected nodes
-- **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low
-- **Layout switcher** — Force-directed, Circular, Radial, Tree (top-down), Horizontal (left-to-right)
-- **Refresh button** — force re-fetch from Cloudsmith API
-- **Vulnly reports** — generate self-contained HTML vulnerability reports for any scanned package via [vulnly](https://pypi.org/project/vulnly/), opened directly in a new tab
-- **Dependencies panel** — expandable list of a package’s direct dependencies with severity badges; click to refocus the graph on that node
+- **Severity-coded nodes** — Critical / High / Medium / Low / Safe / Unscanned, each with a distinct colour
+- **Pulsing critical nodes** — animated ring effect on Critical packages to draw immediate attention (toggleable)
+- **Hover effects** — node glow + size boost; un-hovered edges dim out; connected nodes stay highlighted
+- **Quarantine indicators** — quarantined packages rendered with a distinct ring node program
+- **Floating details panel** — click any node to open a draggable, repositionable panel anchored near the selected node; expand to full screen for deep inspection
+- **CVE detail cards** — per-CVE severity badge, affected/fixed versions, NVD and GitHub Advisory links; paginated (5 collapsed / 15 expanded), with search and severity filter
+- **Format cards** — repo overview panel shows package formats with total counts; when a severity filter is active, format cards dim out for formats with no matching packages and show a filtered match count badge
+- **Most vulnerable** — top-5 most vulnerable packages listed in the repo panel, clickable to select and navigate directly to that node
+- **Dependency graph** — expandable dependencies list within the package panel; click to refocus the graph on a dependency node
+- **Attack path panel** — for any package, visualises the full attack chain: Client Tools → Internet → Registry → Repository → Package → CVE, with format-specific client tool examples (docker pull, pip install, npm install, etc.)
+- **CVE search** — search by CVE ID or package name; matching nodes are highlighted in the graph
+- **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low / Quarantined / Shared CVEs / Has Dependencies
+- **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation
+- **Format filter** — click a format card in the repo panel to isolate packages of that format in the graph
+- **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree (top-down), Horizontal (left-to-right); edge style auto-switches between curved and straight to match the layout
+- **Refresh** — force re-fetch bypasses the cache and pulls fresh data from Cloudsmith
+
+### Organisation Graph (Workspace tab)
+
+- **Org-level access graph** — maps repositories, members, service accounts, teams, entitlements, and upstream proxies as an interconnected graph
+- **Node type filtering** — filter by Repositories, Members, Services, Teams, Entitlements, or Upstreams with live counts
+- **Prefixed search** — search with type prefixes (`repo:`, `user:`, `service:`, `team:`, `entitlement:`, `upstream:`) or free text
+- **Node detail panel** — click any node to see role, email, permissions, status, team memberships, and all connected relationships grouped by edge type
+
+### General
+
+- **Vulnly reports** — generate self-contained HTML vulnerability reports for any scanned package via [vulnly](https://pypi.org/project/vulnly/), opened in a new tab
+- **Workspace selector** — switch between Cloudsmith organisations; repository selector with per-namespace package counts
+- **API key management** — connect/disconnect via in-app modal; key validated against the Cloudsmith API before saving
+- **Panel collapse** — left control panel can be fully collapsed for more graph space
+- **Version string** — panel header shows truncated version with full tooltip and one-click copy to clipboard
 - **Dark security-product theme** — graph-paper grid background, glassmorphism toolbars, custom scrollbars
+
+---
 
 ## 🚀 Quick Start
 
-### 1. Prerequisites
+### Prerequisites
 
 - **Python 3.10+** — [python.org](https://www.python.org/downloads/)
 - **Node.js 18+** and **npm** — [nodejs.org](https://nodejs.org/)
 - A **Cloudsmith API key** — [Generate one here](https://app.cloudsmith.com/user/settings/api/)
 
-### 2. Clone
+### 1. Clone
 
 ```bash
 git clone https://github.com/your-user/Forgely.git
 cd Forgely
 ```
 
-### 3. Configure credentials
-
-Copy the example env file and fill in your API key:
-
-```bash
-cp .env.example .env
-# Edit .env with your Cloudsmith API key
-```
-
-### 4. Run
-
-The start script handles virtual environment creation, dependency installation, and launches both servers:
+### 2. Run
 
 ```bash
 ./start.sh
 ```
 
-This will:
-- Create a Python virtual environment and install backend dependencies
-- Install frontend npm packages (if not already installed)
-- Start the backend on **http://localhost:8000**
-- Start the frontend on **http://localhost:3000**
+The start script creates the Python virtual environment, installs all dependencies, and launches both servers:
 
-Open **http://localhost:3000** in your browser. Press `Ctrl+C` to stop both servers.
+- Backend → **http://localhost:8000**
+- Frontend → **http://localhost:3000**
+
+Press `Ctrl+C` to stop both servers.
 
 <details>
-<summary>Manual start (without script)</summary>
+<summary>Manual start</summary>
 
 ```bash
 # Terminal 1 — Backend
@@ -98,80 +135,115 @@ npm run dev
 
 </details>
 
-## 🎨 Severity Color Key
+---
 
-| Color | Severity | Description |
-|-------|----------|-------------|
-| 🔴 `#ff4d4d` | Critical | Critical vulnerabilities |
-| 🟠 `#ff8c1a` | High | High severity |
-| 🟡 `#ffd11a` | Medium | Medium severity |
-| 🔵 `#79b8ff` | Low | Low severity |
-| 🟢 `#28a745` | Safe | No vulnerabilities detected |
-| ⚫ `#666666` | Unscanned | External / unscanned dependency |
-| 🟣 `#9b59b6` | Grouped | Clustered package (multiple versions) |
+## ⚙️ Configuration
 
-## 🗺️ Layout Modes
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CLOUDSMITH_API_KEY` | Yes* | Cloudsmith API key (*can also be set via the in-app Connect modal) |
+| `CLOUDSMITH_OWNER` | No | Default organisation slug (pre-populates the workspace selector) |
+| `CLOUDSMITH_REPO` | No | Default repository slug (pre-populates the repo selector) |
+| `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`) |
 
-| Layout | Description |
-|--------|-------------|
-| 💥 Force | Force-directed (ForceAtlas2) — organic clustering by gravity |
-| ◎ Circular | Nodes arranged in a circle |
-| 🎯 Radial | Repo pinned to center, packages orbit around it |
-| 🌳 Tree | Hierarchical top-down — repo at top, packages below, deps at bottom |
-| ↔ Horizontal | Left-to-right tree layout |
-
-## 📂 Project Structure
-
-```
-Forgely/
-├── backend/
-│   ├── main.py               # FastAPI application
-│   ├── cloudsmith.py          # Cloudsmith API client
-│   ├── models.py              # Pydantic response models
-│   └── requirements.txt       # Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── components/        # React components (GraphCanvas, SidePanel, FilterBar, etc.)
-│   │   ├── hooks/             # Custom hooks (useGraphData)
-│   │   ├── types/             # TypeScript type definitions
-│   │   ├── App.tsx            # Root component
-│   │   ├── main.tsx           # Entry point
-│   │   └── index.css          # Global styles
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-├── start.sh                   # Start script (backend + frontend)
-├── .env                       # Credentials (not committed)
-├── .env.example               # Environment variable template
-├── assets/
-│   └── readme/                # README images
-├── CHANGELOG.md
-├── LICENSE
-└── README.md
-```
+---
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
-| `/api/config` | GET | Returns configured owner and repo |
-| `/api/namespaces` | GET | List available Cloudsmith workspaces |
+| `/api/config` | GET | Returns configured owner, repo, and key status |
+| `/api/namespaces` | GET | List Cloudsmith workspaces the key has access to |
 | `/api/repos/{owner}` | GET | List repositories for a workspace |
-| `/api/graph` | GET | Fetch graph data (cached for 5 min) |
-| `/api/graph/refresh` | POST | Force re-fetch from Cloudsmith |
-| `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate an HTML vulnerability report for a package using [vulnly](https://pypi.org/project/vulnly/) |
+| `/api/graph` | GET | Artifact graph data for `?owner=&repo=` (5 min cache) |
+| `/api/graph/refresh` | POST | Force re-fetch, bypassing cache |
+| `/api/search` | GET | Search packages by name/version/format |
+| `/api/org-graph` | GET | Organisation access graph for `?owner=` |
+| `/api/auth/validate` | POST | Validate a Cloudsmith API key |
+| `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate HTML vulnerability report via [vulnly](https://pypi.org/project/vulnly/) |
 
-## ⚙️ Configuration
+---
 
-Set the following in your `.env` file:
+## 🎨 Severity Colour Key
 
-| Variable | Description |
-|----------|-------------|
-| `CLOUDSMITH_API_KEY` | Cloudsmith API key |
-| `CLOUDSMITH_OWNER` | Cloudsmith organisation / owner |
-| `CLOUDSMITH_REPO` | Repository name |
+| Colour | Severity |
+|--------|----------|
+| 🔴 `#ff4d4d` | Critical |
+| 🟠 `#ff8c1a` | High |
+| 🟡 `#ffd11a` | Medium |
+| 🔵 `#79b8ff` | Low |
+| 🟢 `#28a745` | Safe — no vulnerabilities detected |
+| ⚫ `#666666` | Unscanned — external or unscanned dependency |
+| 🟣 `#9b59b6` | Dependency — grouped dependency node |
 
+---
+
+## 🗺️ Layout Modes
+
+| Layout | Description |
+|--------|-------------|
+| 💥 Force | ForceAtlas2 — organic clustering by connection gravity |
+| ◎ Circular | All nodes arranged in a circle |
+| 🎯 Radial | Repository pinned to centre, packages orbit outward |
+| 🌳 Tree | Hierarchical top-down — repo → packages → dependencies |
+| ↔ Horizontal | Left-to-right tree layout |
+
+---
+
+## 📂 Project Structure
+
+```
+Forgely/
+├── backend/
+│   ├── main.py               # FastAPI app, graph construction, caching
+│   ├── cloudsmith.py         # Cloudsmith API client (packages, vulns, deps, org)
+│   ├── models.py             # Pydantic response models
+│   └── requirements.txt      # Python dependencies
+├── frontend/
+│   ├── public/               # Static assets (icons, logos)
+│   └── src/
+│       ├── components/
+│       │   ├── GraphCanvas.tsx        # Artifact graph (Sigma.js WebGL)
+│       │   ├── OrgGraphCanvas.tsx     # Organisation graph (Sigma.js WebGL)
+│       │   ├── SidePanel.tsx          # Package / repo / dependency detail panel
+│       │   ├── OrgSidePanel.tsx       # Organisation node detail panel
+│       │   ├── AttackGraphPanel.tsx   # Attack path visualisation
+│       │   ├── FilterBar.tsx          # Left control panel (artifacts tab)
+│       │   ├── OrgLeftPanel.tsx       # Left control panel (workspace tab)
+│       │   ├── SearchBar.tsx          # Package / CVE search
+│       │   ├── OrgSearchBar.tsx       # Organisation node search
+│       │   ├── RepoSelector.tsx       # Workspace + repository selector
+│       │   ├── WorkspaceSelector.tsx  # Organisation selector
+│       │   ├── Legend.tsx             # Artifact graph legend
+│       │   ├── OrgLegend.tsx          # Organisation graph legend
+│       │   ├── ConnectModal.tsx       # API key connect/disconnect modal
+│       │   └── LoadingIndicator.tsx   # Animated multi-stage loading screen
+│       ├── hooks/
+│       │   └── useGraphData.ts        # Data fetching and state for artifact graph
+│       ├── lib/
+│       │   ├── auth.ts                # API key storage and fetch wrapper
+│       │   └── formatIcons.ts         # Package format → Devicon icon URL map
+│       ├── types/
+│       │   └── index.ts               # TypeScript types and constants
+│       ├── App.tsx                    # Root component, tab routing, panel state
+│       ├── main.tsx                   # Entry point
+│       └── index.css                  # Global styles
+│   ├── package.json
+│   └── vite.config.ts
+├── .claude/
+│   └── commands/
+│       └── commit-msg.md             # /commit-msg Claude Code skill
+├── start.sh                          # Start script (backend + frontend)
+├── .env                              # Credentials (not committed)
+├── assets/
+│   └── readme/                       # README screenshots
+├── CHANGELOG.md
+├── LICENSE
+└── README.md
+```
+
+---
 
 ## License
 

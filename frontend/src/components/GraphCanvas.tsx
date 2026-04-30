@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+
+
 import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
@@ -161,26 +163,60 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
-/** ForceAtlas2 with size-aware repulsion for a well-spaced organic layout. */
+/** ForceAtlas2 with radial initial placement so the repo stays centred. */
 function applyForceLayout(graph: Graph) {
-  // Spread nodes randomly across a wide area so FA2 starts untangled
-  const spread = Math.max(200, graph.order * 15);
+  let repoNode: string | null = null;
+  graph.forEachNode((id, attrs) => {
+    if (attrs.nodeType === "repo") repoNode = id;
+  });
+
+  // Radial scatter: repo at origin, everything else placed in a ring with
+  // random angle + distance variation so FA2 starts from a circular cloud
+  // rather than a square one (which it struggles to escape).
+  const total = graph.order;
+  const baseRadius = Math.max(250, total * 10);
+  let idx = 0;
   graph.forEachNode((id) => {
-    graph.setNodeAttribute(id, "x", (Math.random() - 0.5) * spread);
-    graph.setNodeAttribute(id, "y", (Math.random() - 0.5) * spread);
+    if (id === repoNode) {
+      graph.setNodeAttribute(id, "x", 0);
+      graph.setNodeAttribute(id, "y", 0);
+      return;
+    }
+    // Spread evenly around the circle with a random offset so no two nodes
+    // start at the same angle, plus a random radial distance band.
+    const angle = (idx / Math.max(1, total - 1)) * 2 * Math.PI + (Math.random() - 0.5) * 1.5;
+    const r = baseRadius * (0.4 + Math.random() * 0.9);
+    graph.setNodeAttribute(id, "x", Math.cos(angle) * r);
+    graph.setNodeAttribute(id, "y", Math.sin(angle) * r);
+    idx++;
   });
 
   forceAtlas2.assign(graph, {
-    iterations: 400,
+    // More iterations for larger graphs so the layout converges fully.
+    iterations: Math.min(800, 350 + total * 2),
     settings: {
-      gravity: 0.05,
-      scalingRatio: 12,
+      gravity: 0.15,
+      scalingRatio: 14,
       adjustSizes: true,
-      barnesHutOptimize: graph.order > 100,
-      strongGravityMode: false,
-      slowDown: 1 + Math.log(graph.order + 1),
+      barnesHutOptimize: total > 150,
+      // strongGravityMode applies a constant pull toward the origin on every
+      // node, which counteracts repulsion drift and keeps the cluster circular.
+      strongGravityMode: true,
+      slowDown: 1 + Math.log(total + 1),
     },
   });
+
+  // Translate all nodes so the repo lands exactly at (0, 0).
+  if (repoNode && graph.hasNode(repoNode)) {
+    const ox = graph.getNodeAttribute(repoNode, "x") as number;
+    const oy = graph.getNodeAttribute(repoNode, "y") as number;
+    if (ox !== 0 || oy !== 0) {
+      graph.forEachNode((id) => {
+        graph.setNodeAttribute(id, "x", (graph.getNodeAttribute(id, "x") as number) - ox);
+        graph.setNodeAttribute(id, "y", (graph.getNodeAttribute(id, "y") as number) - oy);
+      });
+    }
+  }
 }
 
 interface Props {
@@ -188,6 +224,8 @@ interface Props {
   selectedNode: string | null;
   hoveredNode: string | null;
   filter: FilterType;
+  filterFlags?: Set<string>;
+  filterFlagsMode?: "and" | "or";
   formatFilter?: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
@@ -209,6 +247,8 @@ export default function GraphCanvas({
   selectedNode,
   hoveredNode,
   filter,
+  filterFlags = new Set<string>(),
+  filterFlagsMode = "and",
   formatFilter = null,
   layout,
   edgeStyle,
@@ -235,10 +275,14 @@ export default function GraphCanvas({
     selectedNode,
     hoveredNode,
     filter,
+    filterFlags,
+    filterFlagsMode,
     formatFilter,
     searchResults,
     hideSharedCveEdges,
+    hideDependencies,
     hideUnsupported,
+    hideCriticalAnimation,
     neighbors: new Set<string>(),
     hoverNeighbors: new Set<string>(),
     searchConnected: new Set<string>(),
@@ -307,6 +351,8 @@ export default function GraphCanvas({
       selectedNode,
       hoveredNode,
       filter,
+      filterFlags,
+      filterFlagsMode,
       formatFilter,
       searchResults,
       hideSharedCveEdges,
@@ -321,7 +367,7 @@ export default function GraphCanvas({
       quarantinedDeps,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -412,7 +458,7 @@ export default function GraphCanvas({
       /* Resolve icon for this node */
       let nodeImage: string | null = null;
       if (node.type === "repo") {
-        nodeImage = "/cloudsmith.png";
+        nodeImage = "/forgely-icon.png";
       } else {
         nodeImage = getFormatIcon(node.data.format);
       }
@@ -422,7 +468,7 @@ export default function GraphCanvas({
         size,
         color:
           node.type === "repo"
-            ? "#000000"
+            ? "#0f0f1a"
             : node.type === "dependency"
               ? "#9b59b6"
               : sevColor,
@@ -525,23 +571,30 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
-          // Hide ring when filtering excludes Critical nodes
-          if (st.filter !== "all" && st.filter !== "vulnerable" && st.filter !== "Critical" && st.filter !== "shared_cve" && st.filter !== "has_deps" && st.filter !== "quarantined") {
+          // Hide ring when severity filter excludes Critical nodes
+          if (st.filter !== "all" && st.filter !== "Critical") {
             res.hidden = true;
             return res;
           }
-          if (st.filter === "shared_cve" && !st.sharedCveNodes.has(parentId)) {
-            res.hidden = true;
-            return res;
-          }
-          if (st.filter === "has_deps" && !st.hasDepNodes.has(parentId)) {
-            res.hidden = true;
-            return res;
-          }
-          // Hide ring when quarantined filter excludes parent
-          if (st.filter === "quarantined" && !graph.getNodeAttribute(parentId, "is_quarantined") && !st.quarantinedDeps.has(parentId)) {
-            res.hidden = true;
-            return res;
+          // Hide ring when status flags exclude parent
+          if (st.filterFlags.size > 0) {
+            const pa = graph.getNodeAttributes(parentId);
+            const pvc = (pa.vulnCount as number) ?? 0;
+            const flagResults = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return pvc > 0;
+              if (flag === "safe") return pvc === 0;
+              if (flag === "quarantined") return !!pa.is_quarantined || st.quarantinedDeps.has(parentId);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(parentId);
+              if (flag === "has_deps") return st.hasDepNodes.has(parentId);
+              return false;
+            });
+            const flagsPass = st.filterFlagsMode === "and"
+              ? flagResults.every(Boolean)
+              : flagResults.some(Boolean);
+            if (!flagsPass) {
+              res.hidden = true;
+              return res;
+            }
           }
           // Hide ring when format filter excludes parent
           if (st.formatFilter && graph.getNodeAttribute(parentId, "format") !== st.formatFilter) {
@@ -595,24 +648,66 @@ export default function GraphCanvas({
           return res;
         }
 
+        /* --- Hide dependency nodes whose parent packages are all filtered out --- */
+        if (attrs.nodeType === "dependency" && (st.filter !== "all" || st.filterFlags.size > 0)) {
+          let anyParentVisible = false;
+          graph.forEachNeighbor(node, (nid) => {
+            if (anyParentVisible) return;
+            const na = graph.getNodeAttributes(nid);
+            if (na.nodeType !== "package") return;
+            const sev = (na.severity as string) ?? "None";
+            const vc = (na.vulnCount as number) ?? 0;
+            if (st.filter !== "all" && sev !== st.filter) return;
+            if (st.filterFlags.size === 0) { anyParentVisible = true; return; }
+            const results = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return vc > 0;
+              if (flag === "safe") return vc === 0;
+              if (flag === "quarantined") return !!na.is_quarantined || st.quarantinedDeps.has(nid);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
+              if (flag === "has_deps") return st.hasDepNodes.has(nid);
+              return false;
+            });
+            if (st.filterFlagsMode === "and" ? results.every(Boolean) : results.some(Boolean)) {
+              anyParentVisible = true;
+            }
+          });
+          if (!anyParentVisible) {
+            res.hidden = true;
+            return res;
+          }
+        }
+
         /* --- Hide packages with unsupported scans --- */
         if (st.hideUnsupported && attrs.nodeType === "package" && (attrs as any).severity === "Unknown") {
           res.hidden = true;
           return res;
         }
 
-        /* --- Filtering --- */
-        if (st.filter !== "all" && attrs.nodeType !== "repo") {
+        /* --- Filtering (severity AND status flags — packages only) --- */
+        if (attrs.nodeType === "package") {
           const vc = (attrs as any).vulnCount ?? 0;
           const sev = (attrs as any).severity ?? "None";
-          let show = true;
-          if (st.filter === "vulnerable") show = vc > 0;
-          else if (st.filter === "safe") show = vc === 0;
-          else if (st.filter === "quarantined") show = !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
-          else if (st.filter === "shared_cve") show = st.sharedCveNodes.has(node);
-          else if (st.filter === "has_deps") show = st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
-          else show = sev === st.filter;
-          if (!show) {
+
+          // Severity filter (single-select: Critical/High/Medium/Low or "all")
+          const severityPass = st.filter === "all" || sev === st.filter;
+
+          // Status flags (AND or OR logic depending on filterFlagsMode)
+          let flagsPass = st.filterFlags.size === 0;
+          if (!flagsPass) {
+            const flagResults = Array.from(st.filterFlags).map((flag) => {
+              if (flag === "vulnerable") return vc > 0;
+              if (flag === "safe") return vc === 0;
+              if (flag === "quarantined") return !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
+              if (flag === "shared_cve") return st.sharedCveNodes.has(node);
+              if (flag === "has_deps") return st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
+              return false;
+            });
+            flagsPass = st.filterFlagsMode === "and"
+              ? flagResults.every(Boolean)
+              : flagResults.some(Boolean);
+          }
+
+          if (!severityPass || !flagsPass) {
             res.hidden = true;
             return res;
           }
@@ -779,15 +874,20 @@ export default function GraphCanvas({
       onNodeSelect(node);
       setContextMenu(null);
     });
+    const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
+    const setCursor = (c: string) => { if (mouseCanvas) mouseCanvas.style.cursor = c; };
+
     sigma.on("enterNode", ({ node }) => {
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeHover(node);
-      containerRef.current!.style.cursor = "pointer";
+      setCursor("grab");
     });
     sigma.on("leaveNode", () => {
       onNodeHover(null);
-      containerRef.current!.style.cursor = "default";
+      setCursor("default");
     });
+    sigma.on("downNode", () => { setCursor("grabbing"); });
+    sigma.on("clickNode", ({ node }) => { if (graph.getNodeAttribute(node, "nodeType") !== "echo") setCursor("grab"); });
     sigma.on("clickStage", () => { onNodeSelect(null); setContextMenu(null); });
 
     /* Right-click context menu for package nodes */
@@ -915,6 +1015,30 @@ export default function GraphCanvas({
             onEdgeStyleChange={onEdgeStyleChange}
           />
         )}
+        <div className="graph-nav-cluster">
+          <button className="graph-nav-btn" title="Pan Up" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <div className="graph-nav-row">
+            <button className="graph-nav-btn" title="Pan Left" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button className="graph-nav-btn" title="Pan Right" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          <button className="graph-nav-btn" title="Pan Down" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <div className="graph-zoom-cluster">
+          <button className="graph-nav-btn" title="Zoom In" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button className="graph-nav-btn" title="Zoom Out" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
         <button
           className="graph-recenter-btn"
           onClick={() => {
