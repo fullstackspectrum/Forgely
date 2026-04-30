@@ -4504,3 +4504,51 @@ body {
   font-weight: 500;
   padding: 1px 7px;
 }
+
+/* ── Repo-centric search results ─────────────────────── */
+
+.wo-search-result-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.wo-search-result-row:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.wo-search-result-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.wo-search-result-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c8cadf;
+}
+
+.wo-search-result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 1px;
+}
+
+.wo-tag-overflow {
+  font-size: 10px;
+  color: #6b7280;
+  padding: 1px 5px;
+  align-self: center;
+}

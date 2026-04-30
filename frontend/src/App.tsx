@@ -68,6 +68,7 @@ export default function App() {
   const [legendCollapsed, setLegendCollapsed] = useState(false);
 
   /* Workspace package overview state */
+  const [viewMode, setViewMode] = useState<"graph" | "workspace">("graph");
   const [workspaceOverviewData, setWorkspaceOverviewData] = useState<WorkspaceOverviewResponse | null>(null);
   const [workspaceOverviewLoading, setWorkspaceOverviewLoading] = useState(false);
   const [workspaceOverviewError, setWorkspaceOverviewError] = useState<string | null>(null);
@@ -117,8 +118,8 @@ export default function App() {
       setRepo(newRepo);
       setSelectedNode(null);
       setSearchResults([]);
-      setWorkspaceOverviewData(null);
       setSelectedWorkspaceRepo(null);
+      setViewMode("graph");
       fetchGraph(newOwner, newRepo);
     },
     [fetchGraph],
@@ -132,12 +133,18 @@ export default function App() {
 
   const handleLoadWorkspaceOverview = useCallback(async (wsOwner: string, refresh = false) => {
     setOwner(wsOwner);
-    setWorkspaceOverviewLoading(true);
-    setWorkspaceOverviewError(null);
-    if (!refresh) setWorkspaceOverviewData(null);
     setSelectedWorkspaceRepo(null);
     setWorkspaceNodeSelected(false);
     setSelectedNode(null);
+
+    // If we already have fresh data for this owner and it's not a forced refresh, just switch view
+    if (!refresh && workspaceOverviewData?.owner === wsOwner) {
+      setViewMode("workspace");
+      return;
+    }
+
+    setWorkspaceOverviewLoading(true);
+    setWorkspaceOverviewError(null);
     try {
       const url = `/api/workspace-overview?owner=${encodeURIComponent(wsOwner)}${refresh ? "&refresh=true" : ""}`;
       const resp = await apiFetch(url);
@@ -149,6 +156,7 @@ export default function App() {
       }
       const json: WorkspaceOverviewResponse = await resp.json();
       setWorkspaceOverviewData(json);
+      setViewMode("workspace");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load workspace overview";
       setWorkspaceOverviewError(msg);
@@ -156,7 +164,7 @@ export default function App() {
     } finally {
       setWorkspaceOverviewLoading(false);
     }
-  }, []);
+  }, [workspaceOverviewData]);
 
   /* Fetch org graph when switching to org tab */
   const fetchOrgGraph = useCallback(async (orgOwner: string) => {
@@ -346,7 +354,7 @@ export default function App() {
               <p>{error || workspaceOverviewError}</p>
               <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
             </div>
-          ) : workspaceOverviewData ? (
+          ) : viewMode === "workspace" && workspaceOverviewData ? (
             <WorkspaceOverviewCanvas
               data={workspaceOverviewData}
               selectedRepo={selectedWorkspaceRepo}
@@ -448,7 +456,7 @@ export default function App() {
           )}
 
           {/* Workspace node panel (whole-workspace summary) */}
-          {workspaceOverviewData && workspaceNodeSelected && (() => {
+          {viewMode === "workspace" && workspaceOverviewData && workspaceNodeSelected && (() => {
             const defaultTop = 84;
             const defaultLeft = panelCollapsed ? 48 : 280;
             const panelStyle = woPanelExpanded
@@ -492,7 +500,7 @@ export default function App() {
           })()}
 
           {/* Workspace overview repo panel */}
-          {workspaceOverviewData && selectedWorkspaceRepo && (() => {
+          {viewMode === "workspace" && workspaceOverviewData && selectedWorkspaceRepo && (() => {
             const repoData = workspaceOverviewData.repos.find((r) => r.slug === selectedWorkspaceRepo);
             if (!repoData) return null;
             const defaultTop = 84;
@@ -547,7 +555,7 @@ export default function App() {
             );
           })()}
 
-          {!workspaceOverviewData && <Legend />}
+          {viewMode !== "workspace" && <Legend />}
 
         </>
       )}

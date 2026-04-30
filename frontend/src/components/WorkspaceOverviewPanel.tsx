@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { SEVERITY_COLORS } from "../types";
-import type { WorkspaceOverviewResponse, WorkspaceCveSummary } from "../types";
+import type { WorkspaceOverviewResponse } from "../types";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -84,30 +84,12 @@ function FormatHeatmap({ formats }: { formats: Record<string, number> }) {
   );
 }
 
-/* ── CVE row ────────────────────────────────────────────────── */
-function CveRow({ cve, query, repoMap }: { cve: WorkspaceCveSummary & { repos: string[] }; query: string; repoMap: Record<string, string> }) {
-  const color = SEVERITY_COLORS[cve.severity] ?? "#888";
-  const hl = (text: string) => {
-    if (!query) return <>{text}</>;
-    const i = text.toLowerCase().indexOf(query.toLowerCase());
-    if (i < 0) return <>{text}</>;
-    return <>{text.slice(0, i)}<mark className="wo-search-highlight">{text.slice(i, i + query.length)}</mark>{text.slice(i + query.length)}</>;
-  };
-  return (
-    <div className="wo-cve-row">
-      <div className="wo-cve-header">
-        <span className="cve-severity-badge" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>{cve.severity}</span>
-        <span className="wo-cve-id">{hl(cve.id)}</span>
-      </div>
-      {cve.description && <div className="wo-cve-desc">{cve.description.slice(0, 120)}{cve.description.length > 120 ? "…" : ""}</div>}
-      <div className="wo-cve-packages">
-        {cve.packages.map((p) => <span key={p} className="wo-pkg-tag">{hl(p)}</span>)}
-      </div>
-      <div className="wo-cve-repos">
-        {cve.repos.map((r) => <span key={r} className="wo-repo-tag">{hl(repoMap[r] ?? r)}</span>)}
-      </div>
-    </div>
-  );
+/* ── Highlight helper ───────────────────────────────────────── */
+function Hl({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const i = text.toLowerCase().indexOf(query.toLowerCase());
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<mark className="wo-search-highlight">{text.slice(i, i + query.length)}</mark>{text.slice(i + query.length)}</>;
 }
 
 export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
@@ -132,42 +114,46 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
     return { packages, vulns, critical, high, medium, low, safe, formats };
   }, [data]);
 
-  /* Aggregate CVEs across repos, recording which repos each appears in */
-  const repoMap = useMemo(() =>
-    Object.fromEntries(data.repos.map((r) => [r.slug, r.name])), [data]);
+  /* Cheap unique CVE count — just set of IDs, no merging */
+  const uniqueCveCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of data.repos) for (const c of r.cves) ids.add(c.id);
+    return ids.size;
+  }, [data.repos]);
 
-  const allCves = useMemo(() => {
-    const map: Record<string, WorkspaceCveSummary & { repos: string[] }> = {};
-    for (const repo of data.repos) {
-      for (const cve of repo.cves) {
-        if (!map[cve.id]) {
-          map[cve.id] = { ...cve, repos: [] };
-        } else {
-          // Merge packages from other repos
-          for (const pkg of cve.packages) {
-            if (!map[cve.id].packages.includes(pkg)) map[cve.id].packages.push(pkg);
-          }
-        }
-        if (!map[cve.id].repos.includes(repo.slug)) {
-          map[cve.id].repos.push(repo.slug);
-        }
-      }
-    }
-    const rank: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-    return Object.values(map).sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0));
-  }, [data]);
+  /* Per-repo search index — built once, O(repos × CVEs × pkgs) but stored */
+  const repoSearchIndex = useMemo(() =>
+    data.repos.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      nameLower: r.name.toLowerCase(),
+      maxSev: r.max_severity,
+      packageCount: r.package_count,
+      vulnCount: r.vuln_count,
+      cveIds: r.cves.map((c) => c.id),
+      packages: [...new Set(r.cves.flatMap((c) => c.packages))],
+    })),
+    [data.repos]
+  );
 
-  const filteredCves = useMemo(() => {
-    if (!query.trim()) return allCves;
+  /* Search results — repos where something matches */
+  const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return allCves.filter((c) =>
-      c.id.toLowerCase().includes(q) ||
-      c.packages.some((p) => p.toLowerCase().includes(q)) ||
-      c.repos.some((r) => (repoMap[r] ?? r).toLowerCase().includes(q))
-    );
-  }, [allCves, query, repoMap]);
-
-  const uniqueCves = allCves.length;
+    if (!q) return null;
+    return repoSearchIndex
+      .filter((r) =>
+        r.nameLower.includes(q) ||
+        r.cveIds.some((id) => id.toLowerCase().includes(q)) ||
+        r.packages.some((p) => p.toLowerCase().includes(q))
+      )
+      .map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        maxSev: r.maxSev,
+        matchedCves: r.cveIds.filter((id) => id.toLowerCase().includes(q)),
+        matchedPkgs: r.packages.filter((p) => p.toLowerCase().includes(q)),
+      }));
+  }, [repoSearchIndex, query]);
 
   return (
     <div className="side-panel wo-panel">
@@ -194,7 +180,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
           <span className="wo-stat-label">Vulns</span>
         </div>
         <div className="wo-stat-item">
-          <span className="wo-stat-value">{uniqueCves}</span>
+          <span className="wo-stat-value">{uniqueCveCount}</span>
           <span className="wo-stat-label">CVEs</span>
         </div>
       </div>
@@ -219,46 +205,76 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
         </>
       )}
 
-      {/* Repo list */}
-      <div className="wo-cve-section-label">Repositories</div>
-      <div className="wo-repo-list">
-        {data.repos.map((repo) => (
-          <button key={repo.slug} className="wo-repo-row" onClick={() => onRepoSelect(repo.slug)}>
-            <span className="wo-repo-sev-dot" style={{ background: repo.max_severity ? SEVERITY_COLORS[repo.max_severity] ?? "#555577" : "#555577" }} />
-            <span className="wo-repo-row-name">{repo.name}</span>
-            <span className="wo-repo-row-count">{repo.package_count} pkg{repo.package_count !== 1 ? "s" : ""}</span>
-            {(repo.critical + repo.high + repo.medium + repo.low) > 0 && (
-              <span className="wo-repo-row-vulns" style={{ color: SEVERITY_COLORS[repo.max_severity ?? ""] ?? "#ff4d4d" }}>
-                {repo.vuln_count} vuln{repo.vuln_count !== 1 ? "s" : ""}
-              </span>
-            )}
-          </button>
-        ))}
+      {/* Search bar */}
+      <div className="wo-cve-section-label">
+        Search
+        {searchResults !== null && (
+          <span className="wo-cve-count-badge">{searchResults.length} repo{searchResults.length !== 1 ? "s" : ""}</span>
+        )}
+      </div>
+      <div className="wo-search-row">
+        <input
+          className="wo-search-input"
+          type="text"
+          placeholder="CVE ID, package or repo name…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && <button className="wo-search-clear" onClick={() => setQuery("")}>×</button>}
       </div>
 
-      {/* CVE search */}
-      {allCves.length > 0 && (
+      {/* Search results (repo-centric) */}
+      {searchResults !== null ? (
+        <div className="wo-cve-list">
+          {searchResults.length === 0 ? (
+            <div className="wo-cve-empty">No repos match "{query}"</div>
+          ) : (
+            searchResults.map((r) => {
+              const color = r.maxSev ? SEVERITY_COLORS[r.maxSev] ?? "#555577" : "#555577";
+              return (
+                <button key={r.slug} className="wo-search-result-row" onClick={() => onRepoSelect(r.slug)}>
+                  <div className="wo-search-result-header">
+                    <span className="wo-repo-sev-dot" style={{ background: color }} />
+                    <span className="wo-search-result-name"><Hl text={r.name} query={query} /></span>
+                  </div>
+                  {r.matchedCves.length > 0 && (
+                    <div className="wo-search-result-tags">
+                      {r.matchedCves.slice(0, 6).map((id) => (
+                        <span key={id} className="wo-pkg-tag"><Hl text={id} query={query} /></span>
+                      ))}
+                      {r.matchedCves.length > 6 && <span className="wo-tag-overflow">+{r.matchedCves.length - 6}</span>}
+                    </div>
+                  )}
+                  {r.matchedPkgs.length > 0 && (
+                    <div className="wo-search-result-tags">
+                      {r.matchedPkgs.slice(0, 4).map((p) => (
+                        <span key={p} className="wo-repo-tag"><Hl text={p} query={query} /></span>
+                      ))}
+                      {r.matchedPkgs.length > 4 && <span className="wo-tag-overflow">+{r.matchedPkgs.length - 4}</span>}
+                    </div>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* Default repo list */
         <>
-          <div className="wo-cve-section-label">
-            CVEs
-            {query && <span className="wo-cve-count-badge">{filteredCves.length} / {uniqueCves}</span>}
-          </div>
-          <div className="wo-search-row">
-            <input
-              className="wo-search-input"
-              type="text"
-              placeholder="Search CVE, package or repo…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && <button className="wo-search-clear" onClick={() => setQuery("")}>×</button>}
-          </div>
-          <div className="wo-cve-list">
-            {filteredCves.length === 0 ? (
-              <div className="wo-cve-empty">No CVEs match "{query}"</div>
-            ) : (
-              filteredCves.map((cve) => <CveRow key={`${cve.id}`} cve={cve} query={query} repoMap={repoMap} />)
-            )}
+          <div className="wo-cve-section-label">Repositories</div>
+          <div className="wo-repo-list">
+            {data.repos.map((repo) => (
+              <button key={repo.slug} className="wo-repo-row" onClick={() => onRepoSelect(repo.slug)}>
+                <span className="wo-repo-sev-dot" style={{ background: repo.max_severity ? SEVERITY_COLORS[repo.max_severity] ?? "#555577" : "#555577" }} />
+                <span className="wo-repo-row-name">{repo.name}</span>
+                <span className="wo-repo-row-count">{repo.package_count} pkg{repo.package_count !== 1 ? "s" : ""}</span>
+                {(repo.critical + repo.high + repo.medium + repo.low) > 0 && (
+                  <span className="wo-repo-row-vulns" style={{ color: SEVERITY_COLORS[repo.max_severity ?? ""] ?? "#ff4d4d" }}>
+                    {repo.vuln_count} vuln{repo.vuln_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         </>
       )}
