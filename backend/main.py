@@ -1095,13 +1095,13 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
 
 
 @app.get("/api/org-graph")
-def get_org_graph(owner: str, request: Request):
+def get_org_graph(owner: str, request: Request, refresh: bool = False):
     api_key = _get_api_key(request)
     if not owner:
         raise HTTPException(status_code=400, detail="owner is required")
 
     cache_key = f"org:{owner}"
-    if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+    if not refresh and cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
         return _cache[cache_key]["data"]
 
     result = _build_org_graph(api_key, owner)
