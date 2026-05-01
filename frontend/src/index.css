@@ -5035,6 +5035,14 @@ body {
   color: #fff;
 }
 
+.cap-node-btn-block {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
 .cap-global-btn-wrap {
   padding: 8px 8px 0;
 }
