@@ -6,6 +6,8 @@ import { getFormatIcon } from "../lib/formatIcons";
 interface Props {
   data: WorkspaceOverviewResponse;
   onRepoSelect: (slug: string, query?: string) => void;
+  formatFilter: Set<string>;
+  onFormatFilter: (formats: Set<string>) => void;
 }
 
 const SEV_ORDER = ["Critical", "High", "Medium", "Low"] as const;
@@ -32,7 +34,11 @@ function SevBar({ critical, high, medium, low, safe }: { critical: number; high:
 }
 
 /* ── Format cards ───────────────────────────────────────────── */
-function FormatCards({ formats }: { formats: Record<string, number> }) {
+function FormatCards({ formats, activeFormats, onToggle }: {
+  formats: Record<string, number>;
+  activeFormats: Set<string>;
+  onToggle: (fmt: string) => void;
+}) {
   const sorted = Object.entries(formats)
     .filter(([, c]) => c > 0)
     .sort(([, a], [, b]) => b - a);
@@ -41,8 +47,15 @@ function FormatCards({ formats }: { formats: Record<string, number> }) {
     <div className="repo-format-grid">
       {sorted.map(([fmt, count]) => {
         const icon = getFormatIcon(fmt);
+        const active = activeFormats.has(fmt.toLowerCase());
         return (
-          <div key={fmt} className="repo-format-card" title={`${fmt}: ${count} package${count !== 1 ? "s" : ""}`}>
+          <button
+            key={fmt}
+            type="button"
+            className={`repo-format-card repo-format-card-clickable${active ? " active" : ""}`}
+            onClick={() => onToggle(fmt.toLowerCase())}
+            title={active ? `Remove ${fmt} filter` : `Filter graph by ${fmt}`}
+          >
             <div className="repo-format-card-icon">
               {icon
                 ? <img src={icon} alt={fmt} />
@@ -53,7 +66,7 @@ function FormatCards({ formats }: { formats: Record<string, number> }) {
               <span className="repo-format-card-name">{fmt}</span>
               <span className="repo-format-card-count">{count}</span>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -68,8 +81,15 @@ function Hl({ text, query }: { text: string; query: string }) {
   return <>{text.slice(0, i)}<mark className="wo-search-highlight">{text.slice(i, i + query.length)}</mark>{text.slice(i + query.length)}</>;
 }
 
-export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
+export default function WorkspaceOverviewPanel({ data, onRepoSelect, formatFilter, onFormatFilter }: Props) {
   const [query, setQuery] = useState("");
+
+  const toggleFormat = (fmt: string) => {
+    const next = new Set(formatFilter);
+    if (next.has(fmt)) next.delete(fmt);
+    else next.add(fmt);
+    onFormatFilter(next);
+  };
 
   /* Aggregate totals */
   const totals = useMemo(() => {
@@ -176,8 +196,15 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
       {/* Format heatmap */}
       {Object.keys(totals.formats).length > 0 && (
         <>
-          <div className="wo-cve-section-label">Package Formats</div>
-          <FormatCards formats={totals.formats} />
+          <div className="wo-cve-section-label">
+            Package Formats
+            {formatFilter.size > 0 && (
+              <button className="wo-filter-clear-btn" onClick={() => onFormatFilter(new Set())} title="Clear format filters">
+                {formatFilter.size} active ×
+              </button>
+            )}
+          </div>
+          <FormatCards formats={totals.formats} activeFormats={formatFilter} onToggle={toggleFormat} />
         </>
       )}
 
