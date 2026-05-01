@@ -6,6 +6,7 @@ interface Props {
   data: OrgGraphResponse;
   nodeId: string;
   onNodeSelect: (id: string) => void;
+  onOpenAttackPaths?: (identityId: string) => void;
   expanded?: boolean;
 }
 
@@ -61,7 +62,7 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-export default function OrgSidePanel({ data, nodeId, onNodeSelect, expanded = false }: Props) {
+export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackPaths, expanded = false }: Props) {
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -95,6 +96,19 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, expanded = fa
           <h3 className="org-panel-hero-title">{node.label}</h3>
           <span className="org-panel-hero-type" style={{ color }}>{TYPE_LABELS[node.type] ?? node.type}</span>
         </div>
+        {onOpenAttackPaths && (node.type === "user" || node.type === "service" || node.type === "team") && (
+          <button
+            className="cap-node-btn"
+            onClick={() => onOpenAttackPaths(node.id)}
+            title="View attack paths for this identity"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Attack Paths
+          </button>
+        )}
       </div>
 
       {/* User details */}
