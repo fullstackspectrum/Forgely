@@ -203,12 +203,11 @@ function RiskBadges({ risk }: { risk: IdentityRisk }) {
 
 interface Props {
   data: OrgGraphResponse;
-  initialIdentityId?: string;
   onClose: () => void;
 }
 
-export default function CiemAttackPathPanel({ data, initialIdentityId, onClose }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(initialIdentityId ?? null);
+export default function CiemAttackPathPanel({ data, onClose }: Props) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const nodeMap = useMemo(
     () => new Map(data.nodes.map((n) => [n.id, n])),

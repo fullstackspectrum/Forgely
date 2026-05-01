@@ -65,7 +65,6 @@ export default function App() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
   const [ciemAttackPathOpen, setCiemAttackPathOpen] = useState(false);
-  const [ciemAttackPathIdentity, setCiemAttackPathIdentity] = useState<string | null>(null);
   const [apiToast, setApiToast] = useState<string | null>(null);
   const [topBarCollapsed, setTopBarCollapsed] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
@@ -285,7 +284,7 @@ export default function App() {
           onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
           onConnectClick={() => setConnectOpen(true)}
           onDisconnect={() => { clearApiKey(); setHasKey(false); }}
-          onOpenAttackPaths={() => { setCiemAttackPathIdentity(null); setCiemAttackPathOpen(true); }}
+          onOpenAttackPaths={() => setCiemAttackPathOpen(true)}
         />
       )}
 
@@ -646,7 +645,7 @@ export default function App() {
                   <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); setOrgPanelPos(null); }}>×</button>
                 </div>
                 <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded}
-                  onOpenAttackPaths={(id) => { setCiemAttackPathIdentity(id); setCiemAttackPathOpen(true); }} />
+                  onOpenAttackPaths={() => setCiemAttackPathOpen(true)} />
               </div>
             );
           })()}
@@ -656,8 +655,7 @@ export default function App() {
           {ciemAttackPathOpen && orgData && (
             <CiemAttackPathPanel
               data={orgData}
-              initialIdentityId={ciemAttackPathIdentity ?? undefined}
-              onClose={() => { setCiemAttackPathOpen(false); setCiemAttackPathIdentity(null); }}
+              onClose={() => setCiemAttackPathOpen(false)}
             />
           )}
 
