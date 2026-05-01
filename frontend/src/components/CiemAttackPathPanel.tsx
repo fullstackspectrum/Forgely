@@ -1,180 +1,336 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { OrgGraphResponse, OrgGraphNode } from "../types";
 import { ORG_NODE_COLORS } from "../types";
-import { computeAttackPaths, type IdentityRisk, type AttackPath, type Permission } from "../lib/ciemAttackPaths";
+import { computeAttackPaths, type IdentityRisk, type Permission } from "../lib/ciemAttackPaths";
 
-/* ── SVG layout constants ───────────────────────────────────── */
-const ROW_H   = 48;
-const ROW_GAP = 10;
-const TOP_PAD = 24;
-const BOT_PAD = 24;
-const L_PAD   = 20;
+/* ── Layout constants ─────────────────────────────────────── */
+const ICON_R  = 28;
+const COL_GAP = 90;
+const L_PAD   = 80;
+const ROW_H   = 130;
+const TOP_PAD = 52;
+const BOT_PAD = 64;
 
-const COL_ID_X   = L_PAD;
-const COL_ID_W   = 160;
-const COL_TEAM_X = COL_ID_X + COL_ID_W + 48;
-const COL_TEAM_W = 132;
-const COL_REPO_X = COL_TEAM_X + COL_TEAM_W + 48;
-const COL_REPO_W = 160;
-const COL_PERM_X = COL_REPO_X + COL_REPO_W + 14;
-const COL_PERM_W = 72;
-const SVG_W      = COL_PERM_X + COL_PERM_W + L_PAD;
+const X_ID_C   = L_PAD;
+const X_TEAM_C = L_PAD + ICON_R * 2 + COL_GAP;
+const X_REPO_C = X_TEAM_C + ICON_R * 2 + COL_GAP;
+const SVG_W    = X_REPO_C + ICON_R + L_PAD;
 
-const PERM_C: Record<Permission, { fill: string; stroke: string; text: string; dot: string }> = {
-  Admin: { fill: "rgba(255,77,77,0.13)",   stroke: "rgba(255,77,77,0.5)",   text: "#ff7070", dot: "#ff4d4d" },
-  Write: { fill: "rgba(255,140,26,0.13)",  stroke: "rgba(255,140,26,0.5)",  text: "#ffa040", dot: "#ff8c1a" },
+function rowCY(i: number) { return TOP_PAD + i * ROW_H + ROW_H / 2; }
+function svgHeight(n: number) { return TOP_PAD + n * ROW_H + BOT_PAD; }
+
+/* ── Permission colors ─────────────────────────────────────── */
+const PERM_COLORS: Record<Permission, { circle: string; border: string; pill: string }> = {
+  Admin: { circle: "rgba(239,68,68,0.13)",  border: "rgba(239,68,68,0.5)",  pill: "#ef4444" },
+  Write: { circle: "rgba(249,115,22,0.13)", border: "rgba(249,115,22,0.5)", pill: "#f97316" },
+};
+const PERM_ARROW: Record<Permission, string> = {
+  Admin: "rgba(239,68,68,0.45)",
+  Write: "rgba(249,115,22,0.45)",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  user: "USER", service: "SERVICE", team: "TEAM", repo: "REPOSITORY",
+/* ── Node colors ───────────────────────────────────────────── */
+const NODE_COLORS: Record<string, { fill: string; border: string; icon: string }> = {
+  user:    { fill: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.45)",  icon: "#3b82f6" },
+  service: { fill: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.45)",  icon: "#8b5cf6" },
+  team:    { fill: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.45)",  icon: "#f59e0b" },
+  repo:    { fill: "rgba(16,185,129,0.12)",  border: "rgba(16,185,129,0.45)",  icon: "#10b981" },
 };
+
+const TYPE_SUBLABELS: Record<string, string> = {
+  user: "User", service: "Service Account", team: "Team", repo: "Repository",
+};
+
+/* ── Sidebar icon constants ────────────────────────────────── */
 const TYPE_ICONS: Record<string, string> = {
   user: "👤", service: "🤖", team: "👥", repo: "📦",
 };
 
-function rowY(i: number)  { return TOP_PAD + i * (ROW_H + ROW_GAP); }
-function rowCY(i: number) { return rowY(i) + ROW_H / 2; }
-
-function svgHeight(n: number) {
-  return TOP_PAD + n * ROW_H + Math.max(0, n - 1) * ROW_GAP + BOT_PAD;
+/* ── Inline SVG icon paths per node type ───────────────────── */
+function NodeIconPaths({ type, color }: { type: string; color: string }) {
+  const p = { fill: "none", stroke: color, strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  switch (type) {
+    case "user":
+      return <><path {...p} d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle {...p} cx="12" cy="7" r="4"/></>;
+    case "service":
+      return <><rect {...p} x="4" y="4" width="16" height="16" rx="2"/><rect {...p} x="9" y="9" width="6" height="6"/><path {...p} d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" strokeWidth="1.4"/></>;
+    case "team":
+      return <><path {...p} d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle {...p} cx="9" cy="7" r="4"/><path {...p} d="M23 21v-2a4 4 0 0 0-3-3.87"/><path {...p} d="M16 3.13a4 4 0 0 1 0 7.75"/></>;
+    case "repo":
+      return <><path {...p} d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></>;
+    default:
+      return <circle {...p} cx="12" cy="12" r="8"/>;
+  }
 }
 
-function truncate(s: string, max = 18) {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
-}
-
-function nodeColor(type: string) {
-  const hex = ORG_NODE_COLORS[type as keyof typeof ORG_NODE_COLORS] ?? "#888";
-  return {
-    fill:   hex + "18",
-    stroke: hex + "66",
-    text:   hex,
-  };
-}
-
-/* ── SVG sub-components ─────────────────────────────────────── */
-
-function SvgCard({
-  x, y, w, h = ROW_H, type, label,
-}: { x: number; y: number; w: number; h?: number; type: string; label: string }) {
-  const c = nodeColor(type);
-  return (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx={8}
-        fill={c.fill} stroke={c.stroke} strokeWidth={1} />
-      <text x={x + 10} y={y + 15} fontSize={9} fill={c.text}
-        fontWeight="700" letterSpacing="0.6" fontFamily="inherit">
-        {TYPE_ICONS[type]} {TYPE_LABELS[type] ?? type.toUpperCase()}
-      </text>
-      <text x={x + 10} y={y + 32} fontSize={12.5} fill="rgba(230,235,255,0.92)"
-        fontWeight="600" fontFamily="inherit">
-        {truncate(label)}
-      </text>
-    </g>
-  );
-}
-
-function SvgPermBadge({ x, y, perm }: { x: number; y: number; perm: Permission }) {
-  const c = PERM_C[perm];
-  return (
-    <g>
-      <rect x={x} y={y + ROW_H / 2 - 14} width={COL_PERM_W} height={28} rx={6}
-        fill={c.fill} stroke={c.stroke} strokeWidth={1} />
-      <circle cx={x + 12} cy={y + ROW_H / 2} r={4} fill={c.dot} />
-      <text x={x + 22} y={y + ROW_H / 2 + 5} fontSize={12} fill={c.text}
-        fontWeight="700" fontFamily="inherit">
-        {perm}
-      </text>
-    </g>
-  );
-}
-
-function SvgArrow({ x1, y1, x2, y2, perm }: {
-  x1: number; y1: number; x2: number; y2: number; perm: Permission;
+/* ── SVG node: circle + icon + label + pill ─────────────────── */
+function CiemSvgNode({
+  cx, cy, type, label, pill, delay = "0s", permOverride,
+}: {
+  cx: number; cy: number; type: string; label: string;
+  pill?: { text: string; color: string };
+  delay?: string;
+  permOverride?: Permission;
 }) {
-  const c = PERM_C[perm];
-  const mid = (x1 + x2) / 2;
-  const d = `M ${x1} ${y1} C ${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`;
+  const c = permOverride
+    ? { fill: PERM_COLORS[permOverride].circle, border: PERM_COLORS[permOverride].border, icon: PERM_COLORS[permOverride].pill }
+    : (NODE_COLORS[type] ?? { fill: "rgba(136,136,136,0.12)", border: "rgba(136,136,136,0.45)", icon: "#888" });
+
+  const sub = TYPE_SUBLABELS[type] ?? type;
+  const truncLabel = label.length > 15 ? label.slice(0, 14) + "…" : label;
+  const truncSub   = sub.length > 18   ? sub.slice(0, 17) + "…"   : sub;
+
+  const iconScale = 22 / 24;
+  const iconOff   = ICON_R - 11;
+
   return (
-    <path d={d} fill="none" stroke={c.dot} strokeWidth={1.5} strokeOpacity={0.55}
-      markerEnd={`url(#arr-${perm.toLowerCase()})`} />
+    <g className="ciem-node-enter" style={{ animationDelay: delay, transformOrigin: `${cx}px ${cy}px` }}>
+      {/* Circle background */}
+      <circle cx={cx} cy={cy} r={ICON_R} fill={c.fill} stroke={c.border} strokeWidth="1.5" />
+
+      {/* Icon — native SVG, no foreignObject */}
+      <g transform={`translate(${cx - iconOff}, ${cy - iconOff}) scale(${iconScale})`}>
+        <NodeIconPaths type={type} color={c.icon} />
+      </g>
+
+      {/* Label */}
+      <text x={cx} y={cy + ICON_R + 17} textAnchor="middle"
+        fontSize="12" fontWeight="600" fill="#1e293b" fontFamily="Geist, system-ui, sans-serif">
+        {truncLabel}
+      </text>
+
+      {/* Sub-label */}
+      <text x={cx} y={cy + ICON_R + 30} textAnchor="middle"
+        fontSize="10" fill="#64748b" fontFamily="Geist, system-ui, sans-serif">
+        {truncSub}
+      </text>
+
+      {/* Permission pill */}
+      {pill && (() => {
+        const pw = pill.text.length * 6.5 + 14;
+        const pillY = cy + ICON_R + 40;
+        return (
+          <>
+            <rect x={cx - pw / 2} y={pillY} width={pw} height={17} rx={8} fill={pill.color} opacity={0.92} />
+            <text x={cx} y={pillY + 12} textAnchor="middle"
+              fontSize="9.5" fontWeight="700" fill="#fff" letterSpacing="0.04em"
+              fontFamily="Geist, system-ui, sans-serif">
+              {pill.text}
+            </text>
+          </>
+        );
+      })()}
+    </g>
   );
 }
 
-/* ── Identity paths SVG ─────────────────────────────────────── */
+/* ── Bezier arrow ──────────────────────────────────────────── */
+function CiemSvgArrow({
+  x1, y1, x2, y2, perm, delay = "0s",
+}: {
+  x1: number; y1: number; x2: number; y2: number; perm: Permission; delay?: string;
+}) {
+  const mid = (x1 + x2) / 2;
+  const d = `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`;
+  return (
+    <path
+      d={d} fill="none"
+      stroke={PERM_ARROW[perm]} strokeWidth="1.5"
+      markerEnd={`url(#ciem-arr-${perm.toLowerCase()})`}
+      strokeDasharray="800"
+      className="ciem-edge-draw"
+      style={{ animationDelay: delay }}
+    />
+  );
+}
 
-function PathsSvg({ risk, nodeMap }: { risk: IdentityRisk; nodeMap: Map<string, OrgGraphNode> }) {
+/* ── Interactive path canvas ───────────────────────────────── */
+interface CanvasProps {
+  risk: IdentityRisk;
+  nodeMap: Map<string, OrgGraphNode>;
+}
+
+function CiemPathCanvas({ risk, nodeMap }: CanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const [scale, setScale] = useState(1);
+  const dragging = useRef(false);
+  const lastMouse = useRef({ x: 0, y: 0 });
+  const [animKey, setAnimKey] = useState(0);
+
   const { paths, node } = risk;
   const n = paths.length;
-  const h = svgHeight(n);
+  const svgH = svgHeight(n);
 
-  // Identity card spans all rows
-  const idCardH = Math.max(ROW_H, n * ROW_H + Math.max(0, n - 1) * ROW_GAP);
-  const idCardY = TOP_PAD;
+  const fitToContainer = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { width: cw, height: ch } = el.getBoundingClientRect();
+    if (cw === 0 || ch === 0) return;
+    const padX = 48; const padY = 48;
+    const s = Math.min((cw - padX * 2) / SVG_W, (ch - padY * 2) / svgH, 1.15);
+    setScale(s);
+    setTx((cw - SVG_W * s) / 2);
+    setTy((ch - svgH * s) / 2);
+    setAnimKey((k) => k + 1);
+  }, [svgH]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    fitToContainer();
+    const ro = new ResizeObserver(() => fitToContainer());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitToContainer]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    lastMouse.current = { x: e.clientX, y: e.clientY };
+    e.preventDefault();
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging.current) return;
+    const dx = e.clientX - lastMouse.current.x;
+    const dy = e.clientY - lastMouse.current.y;
+    lastMouse.current = { x: e.clientX, y: e.clientY };
+    setTx((v) => v + dx);
+    setTy((v) => v + dy);
+  }, []);
+
+  const handleMouseUp = useCallback(() => { dragging.current = false; }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    setScale((s) => {
+      const ns = Math.max(0.2, Math.min(3, s * factor));
+      setTx((x) => mx - (mx - x) * (ns / s));
+      setTy((y) => my - (my - y) * (ns / s));
+      return ns;
+    });
+  }, []);
+
+  const idCY = svgH / 2;
 
   return (
-    <svg width={SVG_W} height={h} style={{ display: "block", minWidth: SVG_W }}>
-      <defs>
-        {(["admin", "write"] as const).map((k) => {
-          const color = k === "admin" ? "#ff4d4d" : "#ff8c1a";
-          return (
-            <marker key={k} id={`arr-${k}`} markerWidth={7} markerHeight={7}
-              refX={6} refY={3.5} orient="auto">
-              <path d="M 0 0 L 7 3.5 L 0 7 Z" fill={color} opacity={0.7} />
-            </marker>
-          );
-        })}
-      </defs>
+    <div
+      ref={containerRef}
+      className="ag-canvas-bg"
+      style={{ cursor: dragging.current ? "grabbing" : "grab", flex: 1 }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onWheel={handleWheel}
+    >
+      <svg key={animKey} className="ag-canvas-svg" width="100%" height="100%" style={{ overflow: "visible" }}>
+        <defs>
+          {(["admin", "write"] as const).map((k) => {
+            const color = k === "admin" ? "#ef4444" : "#f97316";
+            return (
+              <marker key={k} id={`ciem-arr-${k}`} markerWidth="7" markerHeight="7"
+                refX="6" refY="3.5" orient="auto">
+                <path d="M 0 0 L 7 3.5 L 0 7 Z" fill={color} opacity={0.8} />
+              </marker>
+            );
+          })}
+          <style>{`
+            .ciem-node-enter { animation: ciemNodeIn 0.35s cubic-bezier(0.16,1,0.3,1) both; }
+            .ciem-edge-draw  { animation: ciemEdgeDraw 0.55s ease both; }
+            @keyframes ciemNodeIn {
+              from { opacity: 0; transform: scale(0.82); }
+              to   { opacity: 1; transform: scale(1); }
+            }
+            @keyframes ciemEdgeDraw {
+              from { stroke-dashoffset: 800; opacity: 0; }
+              to   { stroke-dashoffset: 0;   opacity: 1; }
+            }
+          `}</style>
+        </defs>
 
-      {/* Column headers */}
-      {[
-        { x: COL_ID_X,   label: "IDENTITY" },
-        { x: COL_TEAM_X, label: "VIA TEAM" },
-        { x: COL_REPO_X, label: "REPOSITORY" },
-        { x: COL_PERM_X, label: "PERMISSION" },
-      ].map(({ x, label }) => (
-        <text key={label} x={x} y={12} fontSize={9} fill="rgba(150,160,200,0.7)"
-          fontWeight="700" letterSpacing="0.6" fontFamily="inherit">
-          {label}
-        </text>
-      ))}
+        <g transform={`translate(${tx},${ty}) scale(${scale})`}>
 
-      {/* Identity node */}
-      <SvgCard x={COL_ID_X} y={idCardY} w={COL_ID_W} h={idCardH}
-        type={node.type} label={node.label} />
+          {/* Column headers */}
+          {[
+            { x: X_ID_C,   label: "IDENTITY" },
+            { x: X_TEAM_C, label: "VIA TEAM" },
+            { x: X_REPO_C, label: "REPOSITORY" },
+          ].map(({ x, label }) => (
+            <text key={label} x={x} y={22} textAnchor="middle"
+              fontSize="9" fontWeight="700" letterSpacing="0.07em"
+              fill="rgba(100,116,139,0.65)" fontFamily="Geist, system-ui, sans-serif">
+              {label}
+            </text>
+          ))}
 
-      {/* Paths */}
-      {paths.map((path, i) => {
-        const repoNode  = nodeMap.get(path.repoId);
-        const teamNode  = path.teamId ? nodeMap.get(path.teamId) : null;
-        const cy        = rowCY(i);
-        const idRightX  = COL_ID_X + COL_ID_W;
+          {/* Identity node — vertically centred across all rows */}
+          <CiemSvgNode
+            cx={X_ID_C} cy={idCY}
+            type={node.type}
+            label={node.label}
+            delay="0s"
+          />
 
-        return (
-          <g key={`${path.repoId}-${i}`}>
-            {path.pathType === "indirect" && teamNode ? (
-              <>
-                <SvgCard x={COL_TEAM_X} y={rowY(i)} w={COL_TEAM_W}
-                  type="team" label={teamNode.label} />
-                <SvgArrow x1={idRightX} y1={cy}
-                  x2={COL_TEAM_X} y2={cy} perm={path.permission} />
-                <SvgArrow x1={COL_TEAM_X + COL_TEAM_W} y1={cy}
-                  x2={COL_REPO_X} y2={cy} perm={path.permission} />
-              </>
-            ) : (
-              <SvgArrow x1={idRightX} y1={cy}
-                x2={COL_REPO_X} y2={cy} perm={path.permission} />
-            )}
+          {/* Path rows */}
+          {paths.map((path, i) => {
+            const repoNode = nodeMap.get(path.repoId);
+            const teamNode = path.teamId ? nodeMap.get(path.teamId) : null;
+            const cy = rowCY(i);
+            const baseDelay = 0.08 + i * 0.06;
 
-            <SvgCard x={COL_REPO_X} y={rowY(i)} w={COL_REPO_W}
-              type="repo" label={repoNode?.label ?? path.repoId} />
+            return (
+              <g key={`${path.repoId}-${path.permission}-${i}`}>
+                {path.pathType === "indirect" && teamNode ? (
+                  <>
+                    <CiemSvgArrow
+                      x1={X_ID_C + ICON_R} y1={idCY}
+                      x2={X_TEAM_C - ICON_R} y2={cy}
+                      perm={path.permission} delay={`${baseDelay}s`}
+                    />
+                    <CiemSvgArrow
+                      x1={X_TEAM_C + ICON_R} y1={cy}
+                      x2={X_REPO_C - ICON_R} y2={cy}
+                      perm={path.permission} delay={`${baseDelay + 0.1}s`}
+                    />
+                    <CiemSvgNode
+                      cx={X_TEAM_C} cy={cy}
+                      type="team"
+                      label={teamNode.label}
+                      delay={`${baseDelay}s`}
+                    />
+                  </>
+                ) : (
+                  <CiemSvgArrow
+                    x1={X_ID_C + ICON_R} y1={idCY}
+                    x2={X_REPO_C - ICON_R} y2={cy}
+                    perm={path.permission} delay={`${baseDelay}s`}
+                  />
+                )}
 
-            <SvgPermBadge x={COL_PERM_X} y={rowY(i)} perm={path.permission} />
-          </g>
-        );
-      })}
-    </svg>
+                <CiemSvgNode
+                  cx={X_REPO_C} cy={cy}
+                  type="repo"
+                  label={repoNode?.label ?? path.repoId}
+                  permOverride={path.permission}
+                  pill={{ text: path.permission, color: PERM_COLORS[path.permission].pill }}
+                  delay={`${baseDelay + 0.05}s`}
+                />
+              </g>
+            );
+          })}
+
+        </g>
+      </svg>
+    </div>
   );
 }
 
@@ -218,11 +374,10 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
 
   const selected = selectedId ? risks.find((r) => r.nodeId === selectedId) ?? null : null;
 
-  // Summary stats
   const totalIdentities = risks.length;
-  const totalAdmin  = risks.filter((r) => r.permissions.has("Admin")).length;
-  const totalBroad  = risks.filter((r) => r.isBroadAccess).length;
-  const totalPaths  = risks.reduce((s, r) => s + r.paths.length, 0);
+  const totalAdmin = risks.filter((r) => r.permissions.has("Admin")).length;
+  const totalBroad = risks.filter((r) => r.isBroadAccess).length;
+  const totalPaths = risks.reduce((s, r) => s + r.paths.length, 0);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -250,7 +405,7 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
         {/* Body */}
         <div className="cap-body">
 
-          {/* Left sidebar — identity list */}
+          {/* Left sidebar */}
           <div className="cap-sidebar">
             <div className="cap-sidebar-stats">
               <div className="cap-stat"><span className="cap-stat-val">{totalIdentities}</span><span className="cap-stat-label">Identities</span></div>
@@ -327,14 +482,12 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
                     </span>
                   </div>
                 </div>
-                <div className="cap-svg-scroll">
-                  <PathsSvg risk={selected} nodeMap={nodeMap} />
-                </div>
+                <CiemPathCanvas risk={selected} nodeMap={nodeMap} />
               </>
             ) : (
               <div className="cap-detail-empty">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
-                  stroke="rgba(150,160,210,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  stroke="rgba(100,116,139,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
                 <p>Select an identity to explore its attack paths</p>
