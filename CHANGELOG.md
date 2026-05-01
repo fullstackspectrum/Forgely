@@ -23,6 +23,16 @@
 - Multi-select package format filter with graph dimming for unmatched repos
 - Selecting a repo in workspace overview auto-applies its CVE search query
 
+### Changelog Modal
+- Version badge in the left panel is now a clickable button that opens a floating changelog window
+- Changelog content is fetched from the backend and rendered as structured release sections
+- Modal renders via a React portal so it floats correctly over all other UI elements
+
+### Vulnly Repo Reports
+- New backend endpoint `GET /api/vulnly-repo-report/{owner}/{repo}` fetches all packages in a repo, collects per-package vulnerability scan results in parallel, and pipes the aggregated data through `vulnly` to produce a repo-level HTML summary
+- "Vulnly Repo Report" button added to the workspace overview repo panel (appears above "Load Full Graph")
+- "Vulnly Report" button added to the SCA artifact graph repo node side panel (appears alongside the "View in Cloudsmith" link)
+
 ### Performance
 - Workspace overview cached in the frontend to avoid redundant fetches
 - Backend parallelism improved for faster workspace overview load times
