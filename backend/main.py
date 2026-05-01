@@ -105,6 +105,16 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/changelog")
+def get_changelog():
+    changelog_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "CHANGELOG.md")
+    try:
+        with open(changelog_path, encoding="utf-8") as f:
+            return {"content": f.read()}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Changelog not found")
+
+
 @app.get("/api/namespaces")
 def list_namespaces(request: Request):
     """List all Cloudsmith workspaces/orgs the user belongs to."""

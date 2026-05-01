@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { OrgGraphResponse, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
+import ChangelogModal from "./ChangelogModal";
 
 type TabType = "packages" | "organisation";
 
@@ -31,6 +33,7 @@ export default function OrgLeftPanel({
   onConnectClick,
   onDisconnect,
 }: Props) {
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   // Counts per node type from the loaded graph
   const counts: Record<string, number> = {};
@@ -119,7 +122,9 @@ export default function OrgLeftPanel({
       </div>
 
       <div className="left-panel-bottom">
-        <div className="left-panel-version">v{__APP_VERSION__}</div>
+        <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
+          v{__APP_VERSION__}
+        </button>
         <div className="left-panel-footer">
           {hasKey ? (
             <button className="btn btn-sm btn-muted" onClick={onDisconnect}>Disconnect</button>
@@ -128,6 +133,8 @@ export default function OrgLeftPanel({
           )}
         </div>
       </div>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }

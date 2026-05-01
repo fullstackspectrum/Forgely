@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { FilterType } from "../types";
+import ChangelogModal from "./ChangelogModal";
 
 type TabType = "packages" | "organisation";
 
@@ -63,6 +64,7 @@ export default function FilterBar({
   onConnectClick,
   onDisconnect,
 }: Props) {
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const hasAnyFilter = filter !== "all" || filterFlags.size > 0;
 
   const toggleFlag = (key: string) => {
@@ -190,7 +192,9 @@ export default function FilterBar({
       </div>
 
       <div className="left-panel-bottom">
-        <div className="left-panel-version">v{__APP_VERSION__}</div>
+        <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
+          v{__APP_VERSION__}
+        </button>
         <div className="left-panel-connection">
           <button
             className={`connect-btn ${hasKey ? "connected" : ""}`}
@@ -210,6 +214,8 @@ export default function FilterBar({
           )}
         </div>
       </div>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }
