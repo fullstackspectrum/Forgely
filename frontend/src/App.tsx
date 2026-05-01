@@ -73,6 +73,7 @@ export default function App() {
   const [workspaceOverviewLoading, setWorkspaceOverviewLoading] = useState(false);
   const [workspaceOverviewError, setWorkspaceOverviewError] = useState<string | null>(null);
   const [selectedWorkspaceRepo, setSelectedWorkspaceRepo] = useState<string | null>(null);
+  const [workspaceRepoInitialQuery, setWorkspaceRepoInitialQuery] = useState<string>("");
   const [workspaceNodeSelected, setWorkspaceNodeSelected] = useState(false);
   const woPanelRef = useRef<HTMLDivElement>(null);
   const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
@@ -494,7 +495,7 @@ export default function App() {
                 </div>
                 <WorkspaceOverviewPanel
                   data={workspaceOverviewData}
-                  onRepoSelect={(slug) => { setWorkspaceNodeSelected(false); setSelectedWorkspaceRepo(slug); }}
+                  onRepoSelect={(slug, q) => { setWorkspaceNodeSelected(false); setSelectedWorkspaceRepo(slug); setWorkspaceRepoInitialQuery(q ?? ""); }}
                 />
               </div>
             );
@@ -544,14 +545,15 @@ export default function App() {
                   <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>
                     {woPanelExpanded ? "⇥" : "⇤"}
                   </button>
-                  <button className="panel-close" onClick={() => { setSelectedWorkspaceRepo(null); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                  <button className="panel-close" onClick={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
                 </div>
                 <WorkspaceRepoPanel
                   data={repoData}
                   owner={owner}
                   expanded={woPanelExpanded}
+                  initialQuery={workspaceRepoInitialQuery}
                   onLoadFullGraph={() => handleRepoSelect(owner, selectedWorkspaceRepo)}
-                  onClose={() => setSelectedWorkspaceRepo(null)}
+                  onClose={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); }}
                 />
               </div>
             );

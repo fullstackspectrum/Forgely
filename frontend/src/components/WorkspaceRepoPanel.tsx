@@ -6,6 +6,7 @@ interface Props {
   data: WorkspaceRepoSummary;
   owner: string;
   expanded: boolean;
+  initialQuery?: string;
   onLoadFullGraph: () => void;
   onClose: () => void;
 }
@@ -100,8 +101,8 @@ function CveRow({ cve, query }: { cve: WorkspaceCveSummary; query: string }) {
   );
 }
 
-export default function WorkspaceRepoPanel({ data, owner, expanded, onLoadFullGraph, onClose }: Props) {
-  const [query, setQuery] = useState("");
+export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery, onLoadFullGraph, onClose }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? "");
   const [sevFilter, setSevFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 

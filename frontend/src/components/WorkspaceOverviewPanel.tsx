@@ -4,7 +4,7 @@ import type { WorkspaceOverviewResponse } from "../types";
 
 interface Props {
   data: WorkspaceOverviewResponse;
-  onRepoSelect: (slug: string) => void;
+  onRepoSelect: (slug: string, query?: string) => void;
 }
 
 const SEV_ORDER = ["Critical", "High", "Medium", "Low"] as const;
@@ -232,7 +232,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
             searchResults.map((r) => {
               const color = r.maxSev ? SEVERITY_COLORS[r.maxSev] ?? "#555577" : "#555577";
               return (
-                <button key={r.slug} className="wo-search-result-row" onClick={() => onRepoSelect(r.slug)}>
+                <button key={r.slug} className="wo-search-result-row" onClick={() => onRepoSelect(r.slug, query.trim() || undefined)}>
                   <div className="wo-search-result-header">
                     <span className="wo-repo-sev-dot" style={{ background: color }} />
                     <span className="wo-search-result-name"><Hl text={r.name} query={query} /></span>
