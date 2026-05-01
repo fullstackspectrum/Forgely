@@ -783,11 +783,13 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
 
     # Repo nodes
     repo_slugs: list[str] = []
+    repo_fmts: dict[str, str] = {}   # slug → format (used to limit upstream API calls)
     for r in repos:
         slug = r.get("slug", "")
         if not slug:
             continue
         repo_slugs.append(slug)
+        repo_fmts[slug] = r.get("repository_type_str", r.get("type_str", "")).lower()
         rid = f"repo:{slug}"
         if rid in seen:
             continue
@@ -885,7 +887,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                 edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
 
     # Fetch team members in parallel and create membership edges
-    MAX_WORKERS = 20
+    MAX_WORKERS = 6
 
     def _fetch_team_members(team_slug: str) -> tuple[str, list[dict]]:
         members_list = fetch_team_members(session, owner, team_slug)
@@ -915,13 +917,16 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                 elif sid in seen:
                     edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
 
-    # Fetch privileges, entitlements, and upstreams for each repo (parallel)
-    MAX_WORKERS = 20
+    # Fetch privileges, entitlements, and upstreams for each repo (parallel).
+    # Passing the repo's known format limits fetch_repo_upstreams to 1 API call
+    # instead of 18 (one per format), reducing total calls from ~20/repo to 3/repo.
+    MAX_WORKERS = 6
 
     def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict]]:
+        fmt = repo_fmts.get(repo_slug, "")
         privs = fetch_repo_privileges(session, owner, repo_slug)
         ents = fetch_repo_entitlements(session, owner, repo_slug)
-        ups = fetch_repo_upstreams(session, owner, repo_slug)
+        ups = fetch_repo_upstreams(session, owner, repo_slug, fmt)
         return (repo_slug, privs, ents, ups)
 
     # Track upstream URLs → which repos use them (for shared-upstream edges)
