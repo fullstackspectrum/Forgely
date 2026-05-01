@@ -9,17 +9,28 @@
 
 **Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It covers two core cloud-native security disciplines — **SCA** and **CIEM** — surfacing them as interactive, colour-coded graphs so DevOps and Security teams can identify blast radii, transitive risks, and access exposure at a glance.
 
-![Example – Artifacts Overview](assets/readme/example1.jpg)
 
-![Example – Critical Artifacts](assets/readme/example2.jpg)
+Workspace overview
+![Example – Workspace Overview](assets/readme/example1.jpg)
 
-![Example – Artifacts Inspect](assets/readme/example3.jpg)
 
-![Example – Repo Inspect](assets/readme/example4.jpg)
+Repository overview
+![Example – Repo Overview](assets/readme/example_repo_graph.jpg)
 
-![Example – Workspace Overview](assets/readme/example5.jpg)
+Vulnerable packages
+![Example – Vulnerable packages](assets/readme/example2.jpg)
 
-![Example – User Inspect](assets/readme/example6.jpg)
+Package Attack Path
+![Example – Attack Path](assets/readme/example3.jpg)
+
+Dependancy tracking
+![Example – Dependancies](assets/readme/example4.jpg)
+
+![Example – CIEM Graph](assets/readme/example5.jpg)
+
+![Example – CIEM user](assets/readme/example6.jpg)
+
+![Example – CIEM attack path](assets/readme/example7.jpg)
 
 ---
 
