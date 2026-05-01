@@ -4426,47 +4426,6 @@ body {
   font-weight: 600;
 }
 
-/* ── Format heatmap ──────────────────────────────────── */
-
-.wo-format-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.wo-format-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  gap: 2px;
-  cursor: default;
-  transition: transform 0.1s;
-}
-
-.wo-format-tile:hover {
-  transform: scale(1.06);
-}
-
-.wo-format-tile-name {
-  font-size: 10px;
-  font-weight: 600;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.9;
-}
-
-.wo-format-tile-count {
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-}
-
 /* ── Repo list ───────────────────────────────────────── */
 
 .wo-repo-list {

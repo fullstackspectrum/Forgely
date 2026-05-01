@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse } from "../types";
+import { getFormatIcon } from "../lib/formatIcons";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -8,32 +9,6 @@ interface Props {
 }
 
 const SEV_ORDER = ["Critical", "High", "Medium", "Low"] as const;
-
-const FORMAT_COLORS: Record<string, string> = {
-  docker:    "#2496ed",
-  npm:       "#cb3837",
-  python:    "#3776ab",
-  nuget:     "#004880",
-  ruby:      "#cc342d",
-  go:        "#00add8",
-  cargo:     "#ce422b",
-  helm:      "#0f1689",
-  deb:       "#a81d33",
-  debian:    "#a81d33",
-  rpm:       "#c00",
-  composer:  "#885630",
-  swift:     "#f05138",
-  dart:      "#0175c2",
-  maven:     "#c71a36",
-  gradle:    "#02303a",
-  terraform: "#7b42bc",
-  conan:     "#6699cb",
-  hex:       "#4e2a8e",
-};
-
-function formatColor(fmt: string): string {
-  return FORMAT_COLORS[fmt.toLowerCase()] ?? "#4a6080";
-}
 
 /* ── Severity bar ───────────────────────────────────────────── */
 function SevBar({ critical, high, medium, low, safe }: { critical: number; high: number; medium: number; low: number; safe: number }) {
@@ -56,27 +31,28 @@ function SevBar({ critical, high, medium, low, safe }: { critical: number; high:
   );
 }
 
-/* ── Format heatmap ─────────────────────────────────────────── */
-function FormatHeatmap({ formats }: { formats: Record<string, number> }) {
+/* ── Format cards ───────────────────────────────────────────── */
+function FormatCards({ formats }: { formats: Record<string, number> }) {
   const sorted = Object.entries(formats)
     .filter(([, c]) => c > 0)
     .sort(([, a], [, b]) => b - a);
   if (sorted.length === 0) return null;
-  const max = sorted[0][1];
   return (
-    <div className="wo-format-grid">
+    <div className="repo-format-grid">
       {sorted.map(([fmt, count]) => {
-        const intensity = 0.25 + (count / max) * 0.75;
-        const bg = formatColor(fmt);
+        const icon = getFormatIcon(fmt);
         return (
-          <div
-            key={fmt}
-            className="wo-format-tile"
-            style={{ background: `${bg}${Math.round(intensity * 255).toString(16).padStart(2, "0")}`, borderColor: `${bg}66` }}
-            title={`${fmt}: ${count} package${count !== 1 ? "s" : ""}`}
-          >
-            <span className="wo-format-tile-name">{fmt}</span>
-            <span className="wo-format-tile-count">{count}</span>
+          <div key={fmt} className="repo-format-card" title={`${fmt}: ${count} package${count !== 1 ? "s" : ""}`}>
+            <div className="repo-format-card-icon">
+              {icon
+                ? <img src={icon} alt={fmt} />
+                : <span className="repo-format-card-icon-fallback">{fmt.slice(0, 2).toUpperCase()}</span>
+              }
+            </div>
+            <div className="repo-format-card-meta">
+              <span className="repo-format-card-name">{fmt}</span>
+              <span className="repo-format-card-count">{count}</span>
+            </div>
           </div>
         );
       })}
@@ -201,7 +177,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect }: Props) {
       {Object.keys(totals.formats).length > 0 && (
         <>
           <div className="wo-cve-section-label">Package Formats</div>
-          <FormatHeatmap formats={totals.formats} />
+          <FormatCards formats={totals.formats} />
         </>
       )}
 
