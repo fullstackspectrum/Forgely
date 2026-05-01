@@ -6,6 +6,7 @@ interface Props {
   data: OrgGraphResponse;
   nodeId: string;
   onNodeSelect: (id: string) => void;
+  onOpenAttackPaths?: () => void;
   expanded?: boolean;
 }
 
@@ -61,7 +62,7 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-export default function OrgSidePanel({ data, nodeId, onNodeSelect, expanded = false }: Props) {
+export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackPaths, expanded = false }: Props) {
   const node = data.nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
@@ -179,6 +180,17 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, expanded = fa
             {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
           </InfoCard>
         </>
+      )}
+
+      {/* Org node — attack paths entry point */}
+      {node.type === "org" && onOpenAttackPaths && (
+        <button className="cap-node-btn cap-node-btn-block" onClick={onOpenAttackPaths}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          View Attack Paths
+        </button>
       )}
 
       {/* Team — no extra details beyond connections */}

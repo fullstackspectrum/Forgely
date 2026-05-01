@@ -197,16 +197,22 @@ UPSTREAM_FORMATS = [
 ]
 
 
-def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str) -> list[dict]:
-    """Fetch all upstream proxy/cache configs across all format types for a repo."""
+def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str, fmt: str = "") -> list[dict]:
+    """Fetch upstream proxy/cache configs for a repo.
+
+    If *fmt* is given, only the single matching format is queried (1 API call).
+    Otherwise all known formats are tried (18 calls) — kept for back-compat but
+    avoided in the org-graph builder to prevent rate-limit exhaustion.
+    """
+    formats_to_check = [fmt.lower()] if fmt else UPSTREAM_FORMATS
     upstreams: list[dict] = []
-    for fmt in UPSTREAM_FORMATS:
-        url = f"{BASE_URL}/repos/{owner}/{repo}/upstream/{fmt}/"
+    for f in formats_to_check:
+        url = f"{BASE_URL}/repos/{owner}/{repo}/upstream/{f}/"
         try:
             data = _api_get(session, url)
             if isinstance(data, list):
                 for item in data:
-                    item["_format"] = fmt
+                    item["_format"] = f
                 upstreams.extend(data)
         except requests.HTTPError as exc:
             if exc.response is not None and exc.response.status_code in (400, 403, 404, 405, 501):

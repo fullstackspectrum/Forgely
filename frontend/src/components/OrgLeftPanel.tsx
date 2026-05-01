@@ -13,6 +13,7 @@ interface Props {
   onTabChange: (t: TabType) => void;
   onConnectClick: () => void;
   onDisconnect: () => void;
+  onOpenAttackPaths?: () => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -32,6 +33,7 @@ export default function OrgLeftPanel({
   onTabChange,
   onConnectClick,
   onDisconnect,
+  onOpenAttackPaths,
 }: Props) {
   const [changelogOpen, setChangelogOpen] = useState(false);
 
@@ -120,6 +122,18 @@ export default function OrgLeftPanel({
           })}
         </div>
       </div>
+
+      {onOpenAttackPaths && orgData && (
+        <div className="cap-global-btn-wrap">
+          <button className="cap-global-btn" onClick={onOpenAttackPaths}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Attack Paths
+          </button>
+        </div>
+      )}
 
       <div className="left-panel-bottom">
         <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
