@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface Props {
   open: boolean;
@@ -58,7 +59,7 @@ export default function ChangelogModal({ open, onClose }: Props) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content changelog-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -88,6 +89,7 @@ export default function ChangelogModal({ open, onClose }: Props) {
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
