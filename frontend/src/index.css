@@ -4255,6 +4255,26 @@ body {
   text-transform: none;
 }
 
+.wo-filter-clear-btn {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(74, 144, 217, 0.12);
+  border: 1px solid rgba(74, 144, 217, 0.3);
+  border-radius: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wo-filter-clear-btn:hover {
+  background: rgba(74, 144, 217, 0.22);
+  border-color: rgba(74, 144, 217, 0.5);
+}
+
 /* ── Severity filter pills ───────────────────────────── */
 
 .wo-sev-filters {

@@ -13,6 +13,7 @@ interface Props {
   data: WorkspaceOverviewResponse;
   selectedRepo: string | null;
   workspaceSelected: boolean;
+  formatFilter: Set<string>;
   onRepoSelect: (slug: string | null) => void;
   onWorkspaceSelect: () => void;
   onLoadFullGraph: (slug: string) => void;
@@ -92,6 +93,7 @@ export default function WorkspaceOverviewCanvas({
   data,
   selectedRepo,
   workspaceSelected,
+  formatFilter,
   onRepoSelect,
   onWorkspaceSelect,
   onLoadFullGraph,
@@ -280,31 +282,54 @@ export default function WorkspaceOverviewCanvas({
     sigma.refresh();
   }, [edgeStyle]);
 
-  /* Refresh node/edge reducers when selection changes without rebuilding */
+  /* Refresh node/edge reducers when selection or format filter changes */
   useEffect(() => {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
+
+    const repoFormats = new Map<string, Set<string>>();
+    for (const repo of data.repos) {
+      repoFormats.set(repo.slug, new Set(Object.keys(repo.formats ?? {}).map((f) => f.toLowerCase())));
+    }
+
     sigma.setSetting("nodeReducer", (node, attrs) => {
+      const isRepo = attrs.nodeType === "repo";
       const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
       const baseSize = attrs.nodeType === "workspace" ? 48 : (attrs.size as number ?? 14);
-      const hidden = !!selectedRepo && attrs.nodeType === "repo" && node !== selectedRepo;
+
+      const hiddenByRepo = !!selectedRepo && isRepo && node !== selectedRepo;
+
+      const fmts = repoFormats.get(node);
+      const matchesFormat = !formatFilter.size || (fmts ? [...formatFilter].some((f) => fmts.has(f)) : false);
+      const dimmed = isRepo && formatFilter.size > 0 && !matchesFormat;
+
       return {
         ...attrs,
         size: isSelected ? baseSize * 1.2 : baseSize,
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
-        hidden,
+        hidden: hiddenByRepo,
+        color: dimmed ? "#2a2a3a" : attrs.color,
+        borderColor: dimmed ? "#3a3a4a" : attrs.borderColor,
       };
     });
     sigma.setSetting("edgeReducer", (edge, attrs) => {
-      if (!selectedRepo) return attrs;
       const src = graph.source(edge);
       const tgt = graph.target(edge);
-      return { ...attrs, hidden: src !== selectedRepo && tgt !== selectedRepo };
+      if (selectedRepo) {
+        return { ...attrs, hidden: src !== selectedRepo && tgt !== selectedRepo };
+      }
+      if (formatFilter.size) {
+        const repoNode = src === `ws:${data.owner}` ? tgt : src;
+        const fmts = repoFormats.get(repoNode);
+        const matches = fmts ? [...formatFilter].some((f) => fmts.has(f)) : false;
+        return { ...attrs, color: matches ? "rgba(70,130,210,0.5)" : "rgba(70,130,210,0.1)" };
+      }
+      return attrs;
     });
     sigma.refresh();
-  }, [selectedRepo, workspaceSelected]);
+  }, [selectedRepo, workspaceSelected, formatFilter, data.repos, data.owner]);
 
   const cam = () => sigmaRef.current?.getCamera();
   const wsId = `ws:${data.owner}`;

@@ -74,6 +74,7 @@ export default function App() {
   const [workspaceOverviewError, setWorkspaceOverviewError] = useState<string | null>(null);
   const [selectedWorkspaceRepo, setSelectedWorkspaceRepo] = useState<string | null>(null);
   const [workspaceRepoInitialQuery, setWorkspaceRepoInitialQuery] = useState<string>("");
+  const [workspaceFormatFilter, setWorkspaceFormatFilter] = useState<Set<string>>(new Set());
   const [workspaceNodeSelected, setWorkspaceNodeSelected] = useState(false);
   const woPanelRef = useRef<HTMLDivElement>(null);
   const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
@@ -361,6 +362,7 @@ export default function App() {
               data={workspaceOverviewData}
               selectedRepo={selectedWorkspaceRepo}
               workspaceSelected={workspaceNodeSelected}
+              formatFilter={workspaceFormatFilter}
               onRepoSelect={(slug) => { setSelectedWorkspaceRepo(slug); setWorkspaceNodeSelected(false); }}
               onWorkspaceSelect={() => { setWorkspaceNodeSelected(true); setSelectedWorkspaceRepo(null); }}
               onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
@@ -496,6 +498,8 @@ export default function App() {
                 <WorkspaceOverviewPanel
                   data={workspaceOverviewData}
                   onRepoSelect={(slug, q) => { setWorkspaceNodeSelected(false); setSelectedWorkspaceRepo(slug); setWorkspaceRepoInitialQuery(q ?? ""); }}
+                  formatFilter={workspaceFormatFilter}
+                  onFormatFilter={setWorkspaceFormatFilter}
                 />
               </div>
             );
