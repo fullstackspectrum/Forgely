@@ -4531,6 +4531,15 @@ body {
   font-weight: 600;
 }
 
+.wo-vulnly-btn {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 /* ── Repo list ───────────────────────────────────────── */
 
 .wo-repo-list {
