@@ -171,12 +171,13 @@ export default function App() {
   }, [workspaceOverviewData]);
 
   /* Fetch org graph when switching to org tab */
-  const fetchOrgGraph = useCallback(async (orgOwner: string) => {
+  const fetchOrgGraph = useCallback(async (orgOwner: string, forceRefresh = false) => {
     if (!orgOwner) return;
     setOrgLoading(true);
     setOrgError(null);
     try {
-      const resp = await apiFetch(`/api/org-graph?owner=${encodeURIComponent(orgOwner)}`);
+      const url = `/api/org-graph?owner=${encodeURIComponent(orgOwner)}${forceRefresh ? "&refresh=true" : ""}`;
+      const resp = await apiFetch(url);
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
         throw new Error(resp.status === 401
@@ -193,10 +194,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (tab === "organisation" && owner && !orgData) {
+    if (tab === "organisation" && owner && !orgData && !orgLoading) {
       fetchOrgGraph(owner);
     }
-  }, [tab, owner, orgData, fetchOrgGraph]);
+  }, [tab, owner, orgData, orgLoading, fetchOrgGraph]);
 
   /* Handle org workspace change */
   const handleOrgOwnerChange = useCallback((newOwner: string) => {
@@ -208,9 +209,8 @@ export default function App() {
 
   const handleOrgRefresh = useCallback(() => {
     if (owner) {
-      setOrgData(null);
       setOrgSelectedNode(null);
-      fetchOrgGraph(owner);
+      fetchOrgGraph(owner, true);
     }
   }, [owner, fetchOrgGraph]);
 
