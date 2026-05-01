@@ -4,7 +4,8 @@
 
 ---
 
-> **Disclaimer:** Forgely is a personal, community-driven project. It is **not** an official Cloudsmith product and is not endorsed, supported, or maintained by Cloudsmith.
+> [!CAUTION]
+> This project is an independent, community-developed tool and is **not** affiliated with, endorsed by, or supported by Cloudsmith Ltd. It is provided "as is", without warranty of any kind. Cloudsmith Ltd. accepts no responsibility or liability for any loss, damage, or issues arising from the use of this tool. Use at your own risk.
 
 **Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It covers two core cloud-native security disciplines — **SCA** and **CIEM** — surfacing them as interactive, colour-coded graphs so DevOps and Security teams can identify blast radii, transitive risks, and access exposure at a glance.
 
