@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceRepoSummary, WorkspaceCveSummary } from "../types";
+import { apiFetch } from "../lib/auth";
 
 interface Props {
   data: WorkspaceRepoSummary;
@@ -105,6 +106,39 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sevFilter, setSevFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  async function handleRepoReport() {
+    if (reportLoading || reportDone) return;
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const resp = await apiFetch(
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(data.slug)}`,
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vulnly-${owner}-${data.slug}-repo-summary.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setReportDone(true);
+      setTimeout(() => setReportDone(false), 2500);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Failed to generate report");
+    } finally {
+      setReportLoading(false);
+    }
+  }
 
   const pageSize = expanded ? 35 : 10;
 
@@ -227,6 +261,26 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
         <div className="wo-no-cves">
           {data.vuln_count === 0 ? "No vulnerabilities found." : "No CVE details available."}
         </div>
+      )}
+
+      {/* Vulnly repo summary */}
+      <button
+        className={`vulnly-report-btn wo-vulnly-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
+        onClick={handleRepoReport}
+        disabled={reportLoading || reportDone}
+        title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
+      >
+        {reportLoading ? (
+          <span className="vulnly-spinner" aria-hidden="true" />
+        ) : reportDone ? (
+          <span aria-hidden="true">✓</span>
+        ) : (
+          <span aria-hidden="true">⬇</span>
+        )}
+        <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Repo Report"}</span>
+      </button>
+      {reportError && (
+        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
       )}
 
       {/* Load full graph */}

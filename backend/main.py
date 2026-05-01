@@ -434,6 +434,86 @@ def validate_api_key(request: Request):
         return {"valid": False, "error": str(exc)}
 
 
+@app.get("/api/vulnly-repo-report/{owner}/{repo}")
+def vulnly_repo_report(owner: str, repo: str, request: Request):
+    """Generate an HTML repo-level vulnerability summary using vulnly.
+
+    Fetches all packages in the repo, collects their latest scan results in
+    parallel, assembles the Cloudsmith repo-summary envelope, and streams the
+    rendered HTML back to the caller.
+    """
+    api_key = _get_api_key(request)
+    session = create_session(api_key)
+
+    packages = fetch_all_packages(session, owner, repo)
+    if not packages:
+        raise HTTPException(status_code=404, detail="No packages found in this repository.")
+
+    seen_ids: set[str] = set()
+    pkg_metas: list[dict] = []
+
+    for pkg in packages:
+        p_slug = pkg["slug_perm"]
+        p_name = pkg.get("name") or p_slug
+        version = pkg.get("version") or ""
+        node_id = f"{p_name}@{version}" if version else p_name
+        if node_id in seen_ids:
+            continue
+        seen_ids.add(node_id)
+        raw_status = (pkg.get("security_scan_status") or "").lower()
+        scannable = "not supported" not in raw_status
+        pkg_metas.append({"slug": p_slug, "name": p_name, "scannable": scannable})
+
+    def _fetch_pkg_summary(meta: dict) -> dict:
+        if not meta["scannable"]:
+            return {"package": meta["name"], "slug_perm": meta["slug"], "status": "no_scan",
+                    "vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}}
+        _, _, vulns = get_package_vulnerabilities(session, owner, repo, meta["slug"])
+        if vulns is None:
+            return {"package": meta["name"], "slug_perm": meta["slug"], "status": "no_scan",
+                    "vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}}
+        counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
+        for v in vulns:
+            sev = (v.get("severity") or "unknown").lower()
+            counts[sev] = counts.get(sev, 0) + 1
+        total = sum(counts.values())
+        status = "vulnerable" if total > 0 else "no_issues_found"
+        return {"package": meta["name"], "slug_perm": meta["slug"], "status": status, "vulnerabilities": counts}
+
+    pkg_summaries: list[dict] = []
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {pool.submit(_fetch_pkg_summary, m): m for m in pkg_metas}
+        for fut in as_completed(futures):
+            pkg_summaries.append(fut.result())
+
+    payload = json.dumps({"data": {"owner": owner, "repository": repo, "packages": pkg_summaries}}).encode("utf-8")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, "report.html")
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith", "-o", out_path],
+                input=payload,
+                capture_output=True,
+                timeout=120,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail=f"vulnly is not installed: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise HTTPException(status_code=504, detail="vulnly repo report generation timed out.") from exc
+
+        if proc.returncode != 0 or not os.path.exists(out_path):
+            err = proc.stderr.decode("utf-8", errors="replace")[:1000]
+            log.warning("vulnly repo report failed (rc=%s): %s", proc.returncode, err)
+            raise HTTPException(status_code=500, detail=f"vulnly failed: {err.strip() or 'unknown error'}")
+
+        with open(out_path, "rb") as f:
+            html_bytes = f.read()
+
+    return Response(content=html_bytes, media_type="text/html; charset=utf-8")
+
+
 @app.get("/api/vulnly-report/{owner}/{repo}/{slug}")
 def vulnly_report(owner: str, repo: str, slug: str, request: Request):
     """Generate an HTML vulnerability report for a package using vulnly.
