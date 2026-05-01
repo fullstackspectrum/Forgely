@@ -4725,15 +4725,22 @@ body {
 .cap-panel {
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  width: 92vw;
-  max-width: 1100px;
-  height: 84vh;
+  border-radius: 16px;
+  width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.7);
-  animation: slideUp 0.2s ease;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  animation: agPanelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .cap-panel {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+    border-radius: 10px;
+  }
 }
 
 .cap-header {
