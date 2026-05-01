@@ -23,10 +23,10 @@ APP_VERSION = _read_app_version()
 BASE_URL = "https://api.cloudsmith.io/v1"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2
-# Match the largest ThreadPoolExecutor used by main.py so concurrent
-# requests don't exhaust the urllib3 connection pool (which logs
-# "Connection pool is full, discarding connection").
-CONNECTION_POOL_SIZE = 32
+# workspace-overview runs 6 outer workers × 10 inner workers = up to 60
+# concurrent connections. pool_block=True makes threads wait for a free slot
+# instead of discarding connections (which logs "Connection pool is full").
+CONNECTION_POOL_SIZE = 64
 
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
@@ -41,7 +41,7 @@ def create_session(api_key: str) -> requests.Session:
     adapter = HTTPAdapter(
         pool_connections=CONNECTION_POOL_SIZE,
         pool_maxsize=CONNECTION_POOL_SIZE,
-        pool_block=False,
+        pool_block=True,
     )
     s.mount("https://", adapter)
     s.mount("http://", adapter)

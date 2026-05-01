@@ -774,6 +774,40 @@ function RepoDetail({
   onFormatFilterChange?: (f: string | null) => void;
   onNodeSelect?: (id: string) => void;
 }) {
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  async function handleRepoReport() {
+    if (reportLoading || reportDone) return;
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      const resp = await apiFetch(
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Error ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `vulnly-${owner}-${repo}-repo-summary.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setReportDone(true);
+      setTimeout(() => setReportDone(false), 2500);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : "Failed to generate report");
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
   const stats = useMemo(() => {
     const packages = data.nodes.filter((n) => n.type === "package");
     const deps = data.nodes.filter((n) => n.type === "dependency");
@@ -848,7 +882,25 @@ function RepoDetail({
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         </a>
+        <button
+          className={`vulnly-report-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
+          onClick={handleRepoReport}
+          disabled={reportLoading || reportDone}
+          title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
+        >
+          {reportLoading ? (
+            <span className="vulnly-spinner" aria-hidden="true" />
+          ) : reportDone ? (
+            <span aria-hidden="true">✓</span>
+          ) : (
+            <span aria-hidden="true">⬇</span>
+          )}
+          <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
+        </button>
       </div>
+      {reportError && (
+        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
+      )}
 
       {/* Overview cards */}
       <div className="repo-cards">

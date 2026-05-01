@@ -19,6 +19,7 @@ interface Props {
   currentRepo: string;
   refreshKey: number;
   onSelect: (owner: string, repo: string) => void;
+  onOverview?: (owner: string) => void;
 }
 
 /* ── Custom dropdown ─────────────────────────────────────────── */
@@ -136,6 +137,7 @@ export default function RepoSelector({
   currentRepo,
   refreshKey,
   onSelect,
+  onOverview,
 }: Props) {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -242,6 +244,17 @@ export default function RepoSelector({
       >
         Load Graph
       </button>
+
+      {onOverview && (
+        <button
+          className="btn btn-secondary btn-block"
+          onClick={() => owner && onOverview(owner)}
+          disabled={!owner}
+          title="Load a vulnerability overview graph for all repos in this workspace"
+        >
+          Workspace Overview
+        </button>
+      )}
     </div>
   );
 }

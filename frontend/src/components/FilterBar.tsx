@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { FilterType } from "../types";
+import ChangelogModal from "./ChangelogModal";
 
 type TabType = "packages" | "organisation";
 
@@ -13,6 +14,7 @@ interface Props {
   hideCriticalAnimation: boolean;
   hasKey: boolean;
   tab: TabType;
+  disabled?: boolean;
   onTabChange: (t: TabType) => void;
   onFilterChange: (f: FilterType) => void;
   onFilterFlagsChange: (flags: Set<string>) => void;
@@ -50,6 +52,7 @@ export default function FilterBar({
   hideCriticalAnimation,
   hasKey,
   tab,
+  disabled = false,
   onTabChange,
   onFilterChange,
   onFilterFlagsChange,
@@ -61,6 +64,7 @@ export default function FilterBar({
   onConnectClick,
   onDisconnect,
 }: Props) {
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const hasAnyFilter = filter !== "all" || filterFlags.size > 0;
 
   const toggleFlag = (key: string) => {
@@ -89,104 +93,108 @@ export default function FilterBar({
           className={`left-panel-tab${tab === "packages" ? " active" : ""}`}
           onClick={() => onTabChange("packages")}
         >
-          📦 Artifacts
+          📦 SCA
         </button>
         <button
           className={`left-panel-tab${tab === "organisation" ? " active" : ""}`}
           onClick={() => onTabChange("organisation")}
         >
-          🏢 Workspace
+          🔐 CIEM
         </button>
       </div>
 
-      <CollapsibleSection title="Status" defaultOpen={true}>
-        {filterFlags.size >= 2 && (
-          <div className="filter-mode-row">
-            <span className="filter-mode-label">Match</span>
-            <div className="filter-mode-toggle">
-              <button
-                className={`filter-mode-btn${filterFlagsMode === "and" ? " active" : ""}`}
-                onClick={() => onFilterFlagsModeChange("and")}
-              >AND</button>
-              <button
-                className={`filter-mode-btn${filterFlagsMode === "or" ? " active" : ""}`}
-                onClick={() => onFilterFlagsModeChange("or")}
-              >OR</button>
+      <div className={`left-panel-filters${disabled ? " left-panel-filters-disabled" : ""}`}>
+        <CollapsibleSection title="Status" defaultOpen={true}>
+          {filterFlags.size >= 2 && (
+            <div className="filter-mode-row">
+              <span className="filter-mode-label">Match</span>
+              <div className="filter-mode-toggle">
+                <button
+                  className={`filter-mode-btn${filterFlagsMode === "and" ? " active" : ""}`}
+                  onClick={() => onFilterFlagsModeChange("and")}
+                >AND</button>
+                <button
+                  className={`filter-mode-btn${filterFlagsMode === "or" ? " active" : ""}`}
+                  onClick={() => onFilterFlagsModeChange("or")}
+                >OR</button>
+              </div>
             </div>
+          )}
+          <div className="left-panel-btn-group">
+            {STATUS_FILTERS.map((f) => {
+              const active = filterFlags.has(f.key);
+              return (
+                <button
+                  key={f.key}
+                  className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
+                  onClick={() => toggleFlag(f.key)}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    {f.icon && <span aria-hidden="true">{f.icon}</span>}
+                    {f.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Max Severity" defaultOpen={true}>
+          <div className="left-panel-btn-group">
+            {SEVERITY_FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
+                  style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "#fff" }}
+                  onClick={() => toggleSeverity(f.key)}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+        </CollapsibleSection>
+
+        {hasAnyFilter && (
+          <div style={{ padding: "0 12px 4px" }}>
+            <button className="btn btn-block btn-muted" style={{ fontSize: 11, opacity: 0.7 }} onClick={clearAll}>
+              ✕ Clear all filters
+            </button>
           </div>
         )}
-        <div className="left-panel-btn-group">
-          {STATUS_FILTERS.map((f) => {
-            const active = filterFlags.has(f.key);
-            return (
-              <button
-                key={f.key}
-                className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
-                onClick={() => toggleFlag(f.key)}
-              >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  {f.icon && <span aria-hidden="true">{f.icon}</span>}
-                  {f.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </CollapsibleSection>
 
-      <CollapsibleSection title="Max Severity" defaultOpen={true}>
-        <div className="left-panel-btn-group">
-          {SEVERITY_FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <button
-                key={f.key}
-                className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
-                style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "#fff" }}
-                onClick={() => toggleSeverity(f.key)}
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
-      </CollapsibleSection>
-
-      {hasAnyFilter && (
-        <div style={{ padding: "0 12px 4px" }}>
-          <button className="btn btn-block btn-muted" style={{ fontSize: 11, opacity: 0.7 }} onClick={clearAll}>
-            ✕ Clear all filters
-          </button>
-        </div>
-      )}
-
-      <CollapsibleSection title="Visibility" defaultOpen={false}>
-        <div className="visibility-toggles">
-          <VisibilityToggle
-            label="Shared CVE edges"
-            visible={!hideSharedCveEdges}
-            onToggle={() => onHideSharedCveEdgesChange(!hideSharedCveEdges)}
-          />
-          <VisibilityToggle
-            label="Dependencies"
-            visible={!hideDependencies}
-            onToggle={() => onHideDependenciesChange(!hideDependencies)}
-          />
-          <VisibilityToggle
-            label="Unsupported scans"
-            visible={!hideUnsupported}
-            onToggle={() => onHideUnsupportedChange(!hideUnsupported)}
-          />
-          <VisibilityToggle
-            label="Critical animation"
-            visible={!hideCriticalAnimation}
-            onToggle={() => onHideCriticalAnimationChange(!hideCriticalAnimation)}
-          />
-        </div>
-      </CollapsibleSection>
+        <CollapsibleSection title="Visibility" defaultOpen={false}>
+          <div className="visibility-toggles">
+            <VisibilityToggle
+              label="Shared CVE edges"
+              visible={!hideSharedCveEdges}
+              onToggle={() => onHideSharedCveEdgesChange(!hideSharedCveEdges)}
+            />
+            <VisibilityToggle
+              label="Dependencies"
+              visible={!hideDependencies}
+              onToggle={() => onHideDependenciesChange(!hideDependencies)}
+            />
+            <VisibilityToggle
+              label="Unsupported scans"
+              visible={!hideUnsupported}
+              onToggle={() => onHideUnsupportedChange(!hideUnsupported)}
+            />
+            <VisibilityToggle
+              label="Critical animation"
+              visible={!hideCriticalAnimation}
+              onToggle={() => onHideCriticalAnimationChange(!hideCriticalAnimation)}
+            />
+          </div>
+        </CollapsibleSection>
+      </div>
 
       <div className="left-panel-bottom">
-        <div className="left-panel-version">v{__APP_VERSION__}</div>
+        <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
+          v{__APP_VERSION__}
+        </button>
         <div className="left-panel-connection">
           <button
             className={`connect-btn ${hasKey ? "connected" : ""}`}
@@ -206,6 +214,8 @@ export default function FilterBar({
           )}
         </div>
       </div>
+
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }

@@ -11,12 +11,15 @@ import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
 import WorkspaceSelector from "./components/WorkspaceSelector";
+import WorkspaceOverviewCanvas from "./components/WorkspaceOverviewCanvas";
+import WorkspaceRepoPanel from "./components/WorkspaceRepoPanel";
+import WorkspaceOverviewPanel from "./components/WorkspaceOverviewPanel";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
 import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
-import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter } from "./types";
+import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
 
@@ -64,6 +67,19 @@ export default function App() {
   const [topBarCollapsed, setTopBarCollapsed] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
 
+  /* Workspace package overview state */
+  const [viewMode, setViewMode] = useState<"graph" | "workspace">("graph");
+  const [workspaceOverviewData, setWorkspaceOverviewData] = useState<WorkspaceOverviewResponse | null>(null);
+  const [workspaceOverviewLoading, setWorkspaceOverviewLoading] = useState(false);
+  const [workspaceOverviewError, setWorkspaceOverviewError] = useState<string | null>(null);
+  const [selectedWorkspaceRepo, setSelectedWorkspaceRepo] = useState<string | null>(null);
+  const [workspaceRepoInitialQuery, setWorkspaceRepoInitialQuery] = useState<string>("");
+  const [workspaceFormatFilter, setWorkspaceFormatFilter] = useState<Set<string>>(new Set());
+  const [workspaceNodeSelected, setWorkspaceNodeSelected] = useState(false);
+  const woPanelRef = useRef<HTMLDivElement>(null);
+  const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const [woPanelExpanded, setWoPanelExpanded] = useState(false);
+
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
     setLayout(l);
@@ -104,6 +120,8 @@ export default function App() {
       setRepo(newRepo);
       setSelectedNode(null);
       setSearchResults([]);
+      setSelectedWorkspaceRepo(null);
+      setViewMode("graph");
       fetchGraph(newOwner, newRepo);
     },
     [fetchGraph],
@@ -114,6 +132,41 @@ export default function App() {
       fetchGraph(owner, repo, true);
     }
   }, [owner, repo, fetchGraph]);
+
+  const handleLoadWorkspaceOverview = useCallback(async (wsOwner: string, refresh = false) => {
+    setOwner(wsOwner);
+    setSelectedWorkspaceRepo(null);
+    setWorkspaceNodeSelected(false);
+    setSelectedNode(null);
+
+    // If we already have fresh data for this owner and it's not a forced refresh, just switch view
+    if (!refresh && workspaceOverviewData?.owner === wsOwner) {
+      setViewMode("workspace");
+      return;
+    }
+
+    setWorkspaceOverviewLoading(true);
+    setWorkspaceOverviewError(null);
+    try {
+      const url = `/api/workspace-overview?owner=${encodeURIComponent(wsOwner)}${refresh ? "&refresh=true" : ""}`;
+      const resp = await apiFetch(url);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(resp.status === 401
+          ? `401: ${body.detail || "Authentication required"}`
+          : body.detail || `HTTP ${resp.status}`);
+      }
+      const json: WorkspaceOverviewResponse = await resp.json();
+      setWorkspaceOverviewData(json);
+      setViewMode("workspace");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load workspace overview";
+      setWorkspaceOverviewError(msg);
+      setApiToast(msg);
+    } finally {
+      setWorkspaceOverviewLoading(false);
+    }
+  }, [workspaceOverviewData]);
 
   /* Fetch org graph when switching to org tab */
   const fetchOrgGraph = useCallback(async (orgOwner: string) => {
@@ -207,6 +260,7 @@ export default function App() {
           hideCriticalAnimation={hideCriticalAnimation}
           hasKey={hasKey}
           tab={tab}
+          disabled={viewMode === "workspace"}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
           onFilterChange={setFilter}
           onFilterFlagsChange={setFilterFlags}
@@ -241,6 +295,7 @@ export default function App() {
                 currentRepo={repo}
                 refreshKey={repoRefreshKey}
                 onSelect={handleRepoSelect}
+                onOverview={handleLoadWorkspaceOverview}
               />
               {owner && repo && (
                 <SearchBar
@@ -294,14 +349,25 @@ export default function App() {
       {/* Packages tab content */}
       {tab === "packages" && (
         <>
-          {loading ? (
-            <LoadingIndicator />
-          ) : error && !data ? (
+          {(loading || workspaceOverviewLoading) ? (
+            <LoadingIndicator variant={workspaceOverviewLoading ? "workspace-overview" : "packages"} />
+          ) : error && !data && !workspaceOverviewData ? (
             <div className="graph-loading">
               <h2>Connection Error</h2>
-              <p>{error}</p>
+              <p>{error || workspaceOverviewError}</p>
               <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
             </div>
+          ) : viewMode === "workspace" && workspaceOverviewData ? (
+            <WorkspaceOverviewCanvas
+              data={workspaceOverviewData}
+              selectedRepo={selectedWorkspaceRepo}
+              workspaceSelected={workspaceNodeSelected}
+              formatFilter={workspaceFormatFilter}
+              onRepoSelect={(slug) => { setSelectedWorkspaceRepo(slug); setWorkspaceNodeSelected(false); }}
+              onWorkspaceSelect={() => { setWorkspaceNodeSelected(true); setSelectedWorkspaceRepo(null); }}
+              onLoadFullGraph={(slug) => handleRepoSelect(owner, slug)}
+              onRefresh={() => handleLoadWorkspaceOverview(owner, true)}
+            />
           ) : data ? (
             <GraphCanvas
               data={data}
@@ -393,7 +459,111 @@ export default function App() {
             </div>
           )}
 
-          <Legend />
+          {/* Workspace node panel (whole-workspace summary) */}
+          {viewMode === "workspace" && workspaceOverviewData && workspaceNodeSelected && (() => {
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = woPanelExpanded
+              ? undefined
+              : woPanelPos
+                ? { top: woPanelPos.y, left: woPanelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (woPanelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = woPanelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => { dx = me.clientX - startX; dy = me.clientY - startY; panel.style.transform = `translate(${dx}px,${dy}px)`; };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                setWoPanelPos({ x: Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width)), y: Math.max(0, Math.min(startTop + dy, window.innerHeight - 60)) });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={woPanelRef} className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>{woPanelExpanded ? "⇥" : "⇤"}</button>
+                  <button className="panel-close" onClick={() => { setWorkspaceNodeSelected(false); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                </div>
+                <WorkspaceOverviewPanel
+                  data={workspaceOverviewData}
+                  onRepoSelect={(slug, q) => { setWorkspaceNodeSelected(false); setSelectedWorkspaceRepo(slug); setWorkspaceRepoInitialQuery(q ?? ""); }}
+                  formatFilter={workspaceFormatFilter}
+                  onFormatFilter={setWorkspaceFormatFilter}
+                />
+              </div>
+            );
+          })()}
+
+          {/* Workspace overview repo panel */}
+          {viewMode === "workspace" && workspaceOverviewData && selectedWorkspaceRepo && (() => {
+            const repoData = workspaceOverviewData.repos.find((r) => r.slug === selectedWorkspaceRepo);
+            if (!repoData) return null;
+            const defaultTop = 84;
+            const defaultLeft = panelCollapsed ? 48 : 280;
+            const panelStyle = woPanelExpanded
+              ? undefined
+              : woPanelPos
+                ? { top: woPanelPos.y, left: woPanelPos.x, right: "auto" as const }
+                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
+
+            const onToolbarMouseDown = (e: React.MouseEvent) => {
+              if (woPanelExpanded || (e.target as HTMLElement).closest("button")) return;
+              const panel = woPanelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              const startX = e.clientX, startY = e.clientY;
+              const startLeft = rect.left, startTop = rect.top;
+              let dx = 0, dy = 0;
+              const onMove = (me: MouseEvent) => {
+                dx = me.clientX - startX;
+                dy = me.clientY - startY;
+                panel.style.transform = `translate(${dx}px,${dy}px)`;
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                panel.style.transform = "";
+                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
+                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
+                setWoPanelPos({ x: finalX, y: finalY });
+              };
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+              e.preventDefault();
+            };
+
+            return (
+              <div ref={woPanelRef} className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
+                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+                  <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>
+                    {woPanelExpanded ? "⇥" : "⇤"}
+                  </button>
+                  <button className="panel-close" onClick={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                </div>
+                <WorkspaceRepoPanel
+                  data={repoData}
+                  owner={owner}
+                  expanded={woPanelExpanded}
+                  initialQuery={workspaceRepoInitialQuery}
+                  onLoadFullGraph={() => handleRepoSelect(owner, selectedWorkspaceRepo)}
+                  onClose={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); }}
+                />
+              </div>
+            );
+          })()}
+
+          {viewMode !== "workspace" && <Legend />}
 
         </>
       )}

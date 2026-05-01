@@ -266,7 +266,7 @@ export default function OrgGraphCanvas({
           };
           if (isOrg) {
             nodeAttrs.type = "image";
-            nodeAttrs.image = "/cloudsmith.png";
+            nodeAttrs.image = "/forgely-icon.png";
           } else if (node.type === "repo") {
             nodeAttrs.type = "square";
           } else if (node.type === "upstream") {

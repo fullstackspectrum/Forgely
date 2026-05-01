@@ -127,6 +127,35 @@ export interface OrgGraphResponse {
   stats: OrgGraphStats;
 }
 
+/* ===== Workspace package overview types ===== */
+
+export interface WorkspaceCveSummary {
+  id: string;
+  severity: string;
+  description: string;
+  packages: string[];
+}
+
+export interface WorkspaceRepoSummary {
+  slug: string;
+  name: string;
+  package_count: number;
+  vuln_count: number;
+  max_severity: string | null;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  safe: number;
+  cves: WorkspaceCveSummary[];
+  formats: Record<string, number>;
+}
+
+export interface WorkspaceOverviewResponse {
+  owner: string;
+  repos: WorkspaceRepoSummary[];
+}
+
 export const ORG_NODE_COLORS: Record<string, string> = {
   org: "#4a90d9",
   repo: "#28a745",

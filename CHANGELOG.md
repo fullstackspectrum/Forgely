@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.0.0-beta.10 — 1 May 2026
+
+### SCA / CIEM Rebranding
+- Renamed the "Artifacts" tab to **SCA** (Software Composition Analysis)
+- Renamed the "Workspace" tab to **CIEM** (Cloud Infrastructure Entitlements Management) with a lock icon
+- Synced SCA/CIEM tab names throughout `OrgLeftPanel`
+- Forgely logo now used for the org node in the CIEM graph
+
+### Workspace Overview
+- New workspace node panel with a full repo list, severity breakdown, and cross-repo CVE search
+- Layout and edge style controls added to workspace overview (shared `LayoutPopout` component)
+- Workspace-overview loading state with contextual stage labels and patience messages
+- Repo node sizes now use a log scale with a wider size range for clearer visual hierarchy
+- Selecting a repo hides unrelated nodes and edges to focus the graph
+- Repo list in the workspace panel sorted by vulnerability count descending
+- CVE list in the repo panel paginated: 10 items collapsed, 35 when expanded
+- Collapsed repo panel auto-sizes to fit 10 CVEs; expands to a grid layout
+- Severity filter pills added to the workspace repo CVE panel
+- Filter panel disabled automatically when workspace overview is active
+- Format heatmap replaced with repo-format cards using [devicon](https://devicon.dev/) icons
+- Multi-select package format filter with graph dimming for unmatched repos
+- Selecting a repo in workspace overview auto-applies its CVE search query
+
+### Changelog Modal
+- Version badge in the left panel is now a clickable button that opens a floating changelog window
+- Changelog content is fetched from the backend and rendered as structured release sections
+- Modal renders via a React portal so it floats correctly over all other UI elements
+
+### Vulnly Repo Reports
+- New backend endpoint `GET /api/vulnly-repo-report/{owner}/{repo}` fetches all packages in a repo, collects per-package vulnerability scan results in parallel, and pipes the aggregated data through `vulnly` to produce a repo-level HTML summary
+- "Vulnly Repo Report" button added to the workspace overview repo panel (appears above "Load Full Graph")
+- "Vulnly Report" button added to the SCA artifact graph repo node side panel (appears alongside the "View in Cloudsmith" link)
+
+### Performance
+- Workspace overview cached in the frontend to avoid redundant fetches
+- Backend parallelism improved for faster workspace overview load times
+
 ## v1.0.0-beta.4 — 21 April 2026
 
 ### Vulnly Integration
