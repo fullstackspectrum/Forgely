@@ -28,7 +28,9 @@ Dependancy tracking
 
 ![Example – CIEM Graph](assets/readme/example5.jpg)
 
-![Example – CIEM filter](assets/readme/example6.jpg)
+![Example – CIEM user](assets/readme/example6.jpg)
+
+![Example – CIEM attack path](assets/readme/example7.jpg)
 
 ---
 
