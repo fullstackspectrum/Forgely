@@ -7,6 +7,7 @@ import OrgSidePanel from "./components/OrgSidePanel";
 import OrgLegend from "./components/OrgLegend";
 import SidePanel from "./components/SidePanel";
 import AttackGraphPanel from "./components/AttackGraphPanel";
+import CiemAttackPathPanel from "./components/CiemAttackPathPanel";
 import SearchBar from "./components/SearchBar";
 import FilterBar from "./components/FilterBar";
 import RepoSelector from "./components/RepoSelector";
@@ -63,6 +64,8 @@ export default function App() {
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
+  const [ciemAttackPathOpen, setCiemAttackPathOpen] = useState(false);
+  const [ciemAttackPathIdentity, setCiemAttackPathIdentity] = useState<string | null>(null);
   const [apiToast, setApiToast] = useState<string | null>(null);
   const [topBarCollapsed, setTopBarCollapsed] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
@@ -282,6 +285,7 @@ export default function App() {
           onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
           onConnectClick={() => setConnectOpen(true)}
           onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+          onOpenAttackPaths={() => { setCiemAttackPathIdentity(null); setCiemAttackPathOpen(true); }}
         />
       )}
 
@@ -641,12 +645,21 @@ export default function App() {
                   </button>
                   <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); setOrgPanelPos(null); }}>×</button>
                 </div>
-                <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded} />
+                <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded}
+                  onOpenAttackPaths={(id) => { setCiemAttackPathIdentity(id); setCiemAttackPathOpen(true); }} />
               </div>
             );
           })()}
 
           <OrgLegend />
+
+          {ciemAttackPathOpen && orgData && (
+            <CiemAttackPathPanel
+              data={orgData}
+              initialIdentityId={ciemAttackPathIdentity ?? undefined}
+              onClose={() => { setCiemAttackPathOpen(false); setCiemAttackPathIdentity(null); }}
+            />
+          )}
 
         </>
       )}
