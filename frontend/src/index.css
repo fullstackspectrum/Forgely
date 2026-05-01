@@ -365,6 +365,17 @@ body {
   transition: transform 0.3s ease;
 }
 
+.left-panel-filters {
+  display: contents;
+}
+
+.left-panel-filters-disabled {
+  display: block;
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+}
+
 .panel-collapsed .left-panel {
   transform: translateX(-100%);
 }
@@ -981,6 +992,21 @@ body {
   display: block;
   width: 100%;
   text-align: left;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.btn-secondary:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
 }
 
 /* ===== Package search ===== */
@@ -3626,6 +3652,91 @@ body {
   color: var(--text-dim);
   user-select: none;
   flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s ease;
+}
+.left-panel-version:hover {
+  color: var(--text-primary);
+}
+
+/* ===== Changelog modal ===== */
+
+.changelog-modal {
+  width: 560px;
+  max-width: 92vw;
+}
+
+.changelog-body {
+  max-height: 65vh;
+  overflow-y: auto;
+  gap: 0;
+  padding: 0;
+}
+
+.changelog-loading,
+.changelog-error {
+  padding: 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.changelog-release {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.changelog-release:last-child {
+  border-bottom: none;
+}
+
+.changelog-release-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.changelog-version {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.changelog-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.changelog-section {
+  margin-bottom: 10px;
+}
+.changelog-section:last-child {
+  margin-bottom: 0;
+}
+
+.changelog-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #79b8ff);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 6px;
+}
+
+.changelog-items {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.changelog-items li {
+  font-size: 13px;
+  color: var(--text-secondary, var(--text-muted));
+  line-height: 1.5;
 }
 
 .left-panel-bottom .left-panel-connection,
@@ -4124,4 +4235,475 @@ body {
   .ag-node-sub {
     font-size: 10px;
   }
+}
+
+/* ================================================================
+   Workspace package overview
+   ================================================================ */
+
+
+/* ----------------------------------------------------------------
+   Workspace repo panel (reuses .side-panel container via App.tsx)
+   ---------------------------------------------------------------- */
+
+.wo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wo-stats-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.wo-stat-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 4px 6px;
+  gap: 2px;
+}
+
+.wo-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.wo-stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wo-sev-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 1px;
+  margin: 2px 0;
+}
+
+.wo-sev-bar-seg {
+  height: 100%;
+  min-width: 3px;
+  border-radius: 2px;
+  transition: flex 0.3s ease;
+}
+
+.wo-sev-bar-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px;
+}
+
+.wo-sev-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.wo-sev-stat {
+  font-weight: 600;
+}
+
+.wo-cve-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.wo-cve-count-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 1px 6px;
+  text-transform: none;
+}
+
+.wo-filter-clear-btn {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(74, 144, 217, 0.12);
+  border: 1px solid rgba(74, 144, 217, 0.3);
+  border-radius: 10px;
+  padding: 2px 7px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.4;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wo-filter-clear-btn:hover {
+  background: rgba(74, 144, 217, 0.22);
+  border-color: rgba(74, 144, 217, 0.5);
+}
+
+/* ── Severity filter pills ───────────────────────────── */
+
+.wo-sev-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.wo-sev-filter-btn {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--sev-color) 40%, transparent);
+  background: color-mix(in srgb, var(--sev-color) 10%, transparent);
+  color: var(--sev-color);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.wo-sev-filter-btn:hover {
+  background: color-mix(in srgb, var(--sev-color) 20%, transparent);
+}
+
+.wo-sev-filter-btn.active {
+  background: color-mix(in srgb, var(--sev-color) 30%, transparent);
+  border-color: color-mix(in srgb, var(--sev-color) 70%, transparent);
+}
+
+/* ── Search row ──────────────────────────────────────── */
+
+.wo-search-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wo-search-input {
+  width: 100%;
+  padding: 6px 28px 6px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.wo-search-input:focus {
+  border-color: rgba(74, 144, 217, 0.6);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.wo-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.wo-search-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.wo-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.wo-search-highlight {
+  background: rgba(255, 211, 26, 0.3);
+  border-radius: 2px;
+  padding: 0 1px;
+  font-style: normal;
+  color: inherit;
+}
+
+.wo-cve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Expanded panel: CVE cards become a responsive grid */
+.panel-overlay-expanded .wo-cve-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.panel-overlay-expanded .wo-panel {
+  padding: 28px 32px 32px;
+}
+
+.wo-cve-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wo-cve-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.wo-cve-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: monospace;
+}
+
+.wo-cve-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.wo-cve-packages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.wo-pkg-tag {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(74, 144, 217, 0.12);
+  color: #79b8ff;
+  border: 1px solid rgba(74, 144, 217, 0.25);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+}
+
+.wo-cve-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px;
+}
+
+.wo-no-cves {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.wo-load-btn {
+  margin-top: 4px;
+  text-align: center;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.wo-vulnly-btn {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* ── Repo list ───────────────────────────────────────── */
+
+.wo-repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wo-repo-list::-webkit-scrollbar { width: 4px; }
+.wo-repo-list::-webkit-scrollbar-track { background: transparent; }
+.wo-repo-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+.wo-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.wo-repo-row:hover {
+  background: rgba(74,144,217,0.1);
+  border-color: rgba(74,144,217,0.3);
+}
+
+.wo-repo-sev-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.wo-repo-row-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-repo-row-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.wo-repo-row-vulns {
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Cross-repo tag ──────────────────────────────────── */
+
+.wo-repo-tag {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 7px;
+}
+
+/* ── Repo-centric search results ─────────────────────── */
+
+.wo-search-result-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.wo-search-result-row:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.wo-search-result-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.wo-search-result-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c8cadf;
+}
+
+.wo-search-result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 1px;
+}
+
+.wo-tag-overflow {
+  font-size: 10px;
+  color: #6b7280;
+  padding: 1px 5px;
+  align-self: center;
+}
+
+/* ── CVE pagination ──────────────────────────────────── */
+
+.wo-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.wo-page-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: #c8cadf;
+  font-size: 14px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wo-page-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+}
+
+.wo-page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.wo-page-info {
+  font-size: 11px;
+  color: #8b8fa8;
+  min-width: 40px;
+  text-align: center;
 }

@@ -1,0 +1,286 @@
+import { useMemo, useState } from "react";
+import { SEVERITY_COLORS } from "../types";
+import type { WorkspaceOverviewResponse } from "../types";
+import { getFormatIcon } from "../lib/formatIcons";
+
+interface Props {
+  data: WorkspaceOverviewResponse;
+  onRepoSelect: (slug: string, query?: string) => void;
+  formatFilter: Set<string>;
+  onFormatFilter: (formats: Set<string>) => void;
+}
+
+const SEV_ORDER = ["Critical", "High", "Medium", "Low"] as const;
+
+/* ── Severity bar ───────────────────────────────────────────── */
+function SevBar({ critical, high, medium, low, safe }: { critical: number; high: number; medium: number; low: number; safe: number }) {
+  const total = critical + high + medium + low + safe;
+  if (total === 0) return null;
+  const segs = [
+    { key: "critical", count: critical, color: SEVERITY_COLORS.Critical },
+    { key: "high",     count: high,     color: SEVERITY_COLORS.High },
+    { key: "medium",   count: medium,   color: SEVERITY_COLORS.Medium },
+    { key: "low",      count: low,      color: SEVERITY_COLORS.Low },
+    { key: "safe",     count: safe,     color: SEVERITY_COLORS.None },
+  ].filter((s) => s.count > 0);
+  return (
+    <div className="wo-sev-bar">
+      {segs.map((s) => (
+        <div key={s.key} className="wo-sev-bar-seg" style={{ flex: s.count, background: s.color, opacity: 0.85 }}
+          title={`${s.key[0].toUpperCase() + s.key.slice(1)}: ${s.count}`} />
+      ))}
+    </div>
+  );
+}
+
+/* ── Format cards ───────────────────────────────────────────── */
+function FormatCards({ formats, activeFormats, onToggle }: {
+  formats: Record<string, number>;
+  activeFormats: Set<string>;
+  onToggle: (fmt: string) => void;
+}) {
+  const sorted = Object.entries(formats)
+    .filter(([, c]) => c > 0)
+    .sort(([, a], [, b]) => b - a);
+  if (sorted.length === 0) return null;
+  return (
+    <div className="repo-format-grid">
+      {sorted.map(([fmt, count]) => {
+        const icon = getFormatIcon(fmt);
+        const active = activeFormats.has(fmt.toLowerCase());
+        return (
+          <button
+            key={fmt}
+            type="button"
+            className={`repo-format-card repo-format-card-clickable${active ? " active" : ""}`}
+            onClick={() => onToggle(fmt.toLowerCase())}
+            title={active ? `Remove ${fmt} filter` : `Filter graph by ${fmt}`}
+          >
+            <div className="repo-format-card-icon">
+              {icon
+                ? <img src={icon} alt={fmt} />
+                : <span className="repo-format-card-icon-fallback">{fmt.slice(0, 2).toUpperCase()}</span>
+              }
+            </div>
+            <div className="repo-format-card-meta">
+              <span className="repo-format-card-name">{fmt}</span>
+              <span className="repo-format-card-count">{count}</span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Highlight helper ───────────────────────────────────────── */
+function Hl({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const i = text.toLowerCase().indexOf(query.toLowerCase());
+  if (i < 0) return <>{text}</>;
+  return <>{text.slice(0, i)}<mark className="wo-search-highlight">{text.slice(i, i + query.length)}</mark>{text.slice(i + query.length)}</>;
+}
+
+export default function WorkspaceOverviewPanel({ data, onRepoSelect, formatFilter, onFormatFilter }: Props) {
+  const [query, setQuery] = useState("");
+
+  const toggleFormat = (fmt: string) => {
+    const next = new Set(formatFilter);
+    if (next.has(fmt)) next.delete(fmt);
+    else next.add(fmt);
+    onFormatFilter(next);
+  };
+
+  /* Aggregate totals */
+  const totals = useMemo(() => {
+    let packages = 0, vulns = 0, critical = 0, high = 0, medium = 0, low = 0, safe = 0;
+    const formats: Record<string, number> = {};
+    for (const r of data.repos) {
+      packages += r.package_count;
+      vulns += r.vuln_count;
+      critical += r.critical;
+      high += r.high;
+      medium += r.medium;
+      low += r.low;
+      safe += r.safe;
+      for (const [fmt, cnt] of Object.entries(r.formats ?? {})) {
+        formats[fmt] = (formats[fmt] ?? 0) + cnt;
+      }
+    }
+    return { packages, vulns, critical, high, medium, low, safe, formats };
+  }, [data]);
+
+  /* Cheap unique CVE count — just set of IDs, no merging */
+  const uniqueCveCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of data.repos) for (const c of r.cves) ids.add(c.id);
+    return ids.size;
+  }, [data.repos]);
+
+  /* Per-repo search index — built once, O(repos × CVEs × pkgs) but stored */
+  const repoSearchIndex = useMemo(() =>
+    data.repos.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      nameLower: r.name.toLowerCase(),
+      maxSev: r.max_severity,
+      packageCount: r.package_count,
+      vulnCount: r.vuln_count,
+      cveIds: r.cves.map((c) => c.id),
+      packages: [...new Set(r.cves.flatMap((c) => c.packages))],
+    })),
+    [data.repos]
+  );
+
+  /* Search results — repos where something matches */
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return repoSearchIndex
+      .filter((r) =>
+        r.nameLower.includes(q) ||
+        r.cveIds.some((id) => id.toLowerCase().includes(q)) ||
+        r.packages.some((p) => p.toLowerCase().includes(q))
+      )
+      .map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        maxSev: r.maxSev,
+        matchedCves: r.cveIds.filter((id) => id.toLowerCase().includes(q)),
+        matchedPkgs: r.packages.filter((p) => p.toLowerCase().includes(q)),
+      }));
+  }, [repoSearchIndex, query]);
+
+  return (
+    <div className="side-panel wo-panel">
+      {/* Header */}
+      <div className="panel-header">
+        <div className="panel-pkg-name">{data.owner}</div>
+        <div className="panel-pkg-sub">Workspace overview</div>
+      </div>
+
+      {/* Top stats */}
+      <div className="wo-stats-row">
+        <div className="wo-stat-item">
+          <span className="wo-stat-value">{data.repos.length}</span>
+          <span className="wo-stat-label">Repos</span>
+        </div>
+        <div className="wo-stat-item">
+          <span className="wo-stat-value">{totals.packages}</span>
+          <span className="wo-stat-label">Packages</span>
+        </div>
+        <div className="wo-stat-item">
+          <span className="wo-stat-value" style={{ color: totals.vulns > 0 ? SEVERITY_COLORS[data.repos.find(r => r.max_severity)?.max_severity ?? ""] ?? "#ff4d4d" : "#28a745" }}>
+            {totals.vulns}
+          </span>
+          <span className="wo-stat-label">Vulns</span>
+        </div>
+        <div className="wo-stat-item">
+          <span className="wo-stat-value">{uniqueCveCount}</span>
+          <span className="wo-stat-label">CVEs</span>
+        </div>
+      </div>
+
+      {/* Severity bar */}
+      <SevBar {...totals} />
+      <div className="wo-sev-stats">
+        {SEV_ORDER.map((sev) => {
+          const count = totals[sev.toLowerCase() as keyof typeof totals] as number;
+          return count > 0 ? (
+            <span key={sev} className="wo-sev-stat" style={{ color: SEVERITY_COLORS[sev] }}>{count} {sev}</span>
+          ) : null;
+        })}
+        {totals.safe > 0 && <span className="wo-sev-stat" style={{ color: SEVERITY_COLORS.None }}>{totals.safe} Safe</span>}
+      </div>
+
+      {/* Format heatmap */}
+      {Object.keys(totals.formats).length > 0 && (
+        <>
+          <div className="wo-cve-section-label">
+            Package Formats
+            {formatFilter.size > 0 && (
+              <button className="wo-filter-clear-btn" onClick={() => onFormatFilter(new Set())} title="Clear format filters">
+                {formatFilter.size} active ×
+              </button>
+            )}
+          </div>
+          <FormatCards formats={totals.formats} activeFormats={formatFilter} onToggle={toggleFormat} />
+        </>
+      )}
+
+      {/* Search bar */}
+      <div className="wo-cve-section-label">
+        Search
+        {searchResults !== null && (
+          <span className="wo-cve-count-badge">{searchResults.length} repo{searchResults.length !== 1 ? "s" : ""}</span>
+        )}
+      </div>
+      <div className="wo-search-row">
+        <input
+          className="wo-search-input"
+          type="text"
+          placeholder="CVE ID, package or repo name…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && <button className="wo-search-clear" onClick={() => setQuery("")}>×</button>}
+      </div>
+
+      {/* Search results (repo-centric) */}
+      {searchResults !== null ? (
+        <div className="wo-cve-list">
+          {searchResults.length === 0 ? (
+            <div className="wo-cve-empty">No repos match "{query}"</div>
+          ) : (
+            searchResults.map((r) => {
+              const color = r.maxSev ? SEVERITY_COLORS[r.maxSev] ?? "#555577" : "#555577";
+              return (
+                <button key={r.slug} className="wo-search-result-row" onClick={() => onRepoSelect(r.slug, query.trim() || undefined)}>
+                  <div className="wo-search-result-header">
+                    <span className="wo-repo-sev-dot" style={{ background: color }} />
+                    <span className="wo-search-result-name"><Hl text={r.name} query={query} /></span>
+                  </div>
+                  {r.matchedCves.length > 0 && (
+                    <div className="wo-search-result-tags">
+                      {r.matchedCves.slice(0, 6).map((id) => (
+                        <span key={id} className="wo-pkg-tag"><Hl text={id} query={query} /></span>
+                      ))}
+                      {r.matchedCves.length > 6 && <span className="wo-tag-overflow">+{r.matchedCves.length - 6}</span>}
+                    </div>
+                  )}
+                  {r.matchedPkgs.length > 0 && (
+                    <div className="wo-search-result-tags">
+                      {r.matchedPkgs.slice(0, 4).map((p) => (
+                        <span key={p} className="wo-repo-tag"><Hl text={p} query={query} /></span>
+                      ))}
+                      {r.matchedPkgs.length > 4 && <span className="wo-tag-overflow">+{r.matchedPkgs.length - 4}</span>}
+                    </div>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* Default repo list */
+        <>
+          <div className="wo-cve-section-label">Repositories</div>
+          <div className="wo-repo-list">
+            {[...data.repos].sort((a, b) => b.vuln_count - a.vuln_count).map((repo) => (
+              <button key={repo.slug} className="wo-repo-row" onClick={() => onRepoSelect(repo.slug)}>
+                <span className="wo-repo-sev-dot" style={{ background: repo.max_severity ? SEVERITY_COLORS[repo.max_severity] ?? "#555577" : "#555577" }} />
+                <span className="wo-repo-row-name">{repo.name}</span>
+                <span className="wo-repo-row-count">{repo.package_count} pkg{repo.package_count !== 1 ? "s" : ""}</span>
+                {(repo.critical + repo.high + repo.medium + repo.low) > 0 && (
+                  <span className="wo-repo-row-vulns" style={{ color: SEVERITY_COLORS[repo.max_severity ?? ""] ?? "#ff4d4d" }}>
+                    {repo.vuln_count} vuln{repo.vuln_count !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
