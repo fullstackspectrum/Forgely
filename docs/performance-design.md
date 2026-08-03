@@ -166,6 +166,14 @@ Everything downstream is validated against numbers this branch produces. Land it
 - In the `pkg_metas` construction loop ([main.py:171-184](../backend/main.py#L171-L184)), add a `scannable` flag derived from `pkg["security_scan_status"]`, mirroring [main.py:653-660](../backend/main.py#L653-L660).
 - Submit **only** scannable metas to the ThreadPoolExecutor ([main.py:194-198](../backend/main.py#L194-L198)). Seed `vuln_results[node_id] = (None, 0, [])` for the rest, so the node-building loop at [main.py:200](../backend/main.py#L200) is untouched.
 
+> ### 🛑 Unscannable packages must still appear in the graph
+>
+> **`pkg_metas` must not be filtered.** `_build_graph` iterates it twice — once to submit vulnerability fetches ([main.py:194-198](../backend/main.py#L194-L198)) and once to build nodes ([main.py:200](../backend/main.py#L200)). This branch narrows **only the first**. Every package keeps its node and its `repo_package` edge.
+>
+> **Do not copy the filter shape from [`_fetch_repo_vuln_summary`](../backend/main.py#L653-L660).** That function `continue`s out of its loop, which is correct there because it only accumulates counters — but in `_build_graph` the same `continue` would delete the node. This is the likely implementation error; reviewers should check for it specifically.
+>
+> Rendering path, unchanged by this branch: `max_severity: null` → `sev = "Unknown"` ([GraphCanvas.tsx:448](../frontend/src/components/GraphCanvas.tsx#L448)) → grey node, visible by default. Users can opt to hide them via the `hideUnsupported` toggle, which defaults to `false` ([App.tsx:47](../frontend/src/App.tsx#L47)). Stats accounting is also unchanged — `None` is not a key in `stats`, so these packages continue to fall through to `stats["Safe"]`.
+
 **⚠ Behaviour decision required.** The two skip conditions are not equivalent:
 
 | Status | Skipping is | Rationale |
@@ -176,6 +184,8 @@ Everything downstream is validated against numbers this branch produces. Land it
 Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separately by introducing a distinct *pending* node state (amber/hatched) rather than silently colouring it green — a security tool should not present "not yet scanned" as "clean". That is a UX change and belongs in its own branch.
 
 **Acceptance criteria**
+- **`total_nodes` and `total_edges` unchanged from `main`** on a repository containing unsupported formats. This is the primary gate — if node count drops, the branch is wrong.
+- Every unsupported-format package still renders as a grey node with `hideUnsupported` off.
 - Request count for `vulnerabilities` bucket drops by the proportion of unsupported-format packages.
 - Graph output byte-identical to `main` on a repository with mixed formats (diff the JSON).
 
