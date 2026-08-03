@@ -344,6 +344,8 @@ Convert `/api/graph` to NDJSON over `StreamingResponse`: emit the repo node and 
 
 **This does not make the load faster — it makes it *feel* dramatically faster.** First paint in ~2s instead of a multi-minute spinner. Defer the layout run until the node set is complete, or use the Tier 3 worker supervisor so nodes visibly settle as they arrive.
 
+**Optional: risk-first ordering via `vulnerability_policy_violated`.** Per open question #1, a single query returns every package breaching the org's vulnerability policy. Issue that query up front and scan those packages first, so the highest-risk nodes resolve within seconds rather than at a random point in the stream. Strictly a *scheduling* optimisation — the remaining packages must still be scanned exhaustively, because the predicate reflects only the configured policy threshold and returns nothing where no policy exists. Never use it to decide what to skip.
+
 **Acceptance criteria:** first nodes painted within 3s on a 5k-package repository; progress indicator monotonic; abort on navigation cancels the backend build.
 
 ---
@@ -442,7 +444,17 @@ Every branch reports, against the Tier 0 baseline, on the **same three repositor
 
 ## 9. Open questions
 
-1. **Does the Cloudsmith package-list API expose a bulk vulnerability filter?** The query syntax used by [`/api/search`](../backend/main.py#L386-L410) may support severity or vulnerability predicates. If a single query can return all vulnerable packages in a repo, that collapses Tier 1 almost entirely and should be investigated *before* implementing `perf/01`–`perf/03`. **Worth an hour against the API docs before writing any code.**
+1. ~~**Does the Cloudsmith package-list API expose a bulk vulnerability filter?**~~ — **RESOLVED: No.** ✅
+
+   Checked against [Search, filter and sort packages](https://docs.cloudsmith.com/artifact-management/search-filter-sort-packages) (2026-08-03). The query syntax supports `name`, `filename`, `tag`, `version`, `prerelease`, `architecture`, `distribution`, `format`, `status`, `checksum`, `downloads`, `type`, `size`, `uploaded`, `last_downloaded`, `token`, `dependency`, `repository`, format-specific terms (`deb_component`, `docker_image_digest`, `docker_layer_digest`, `maven_group_id`), and four policy predicates. **There is no filter for severity, CVE identifier, vulnerability count, or security scan status.**
+
+   Two clarifications that matter for this plan:
+   - `status:` is *package* status (e.g. `in_progress`) — upload/sync state, not `security_scan_status`. It cannot substitute for the filter in `perf/01`.
+   - `dependency:log4j` searches for packages *having* a given dependency. It does not bulk-return a package's dependency list, so it does not help `perf/02`.
+
+   **Consequence: Tier 1 stands as designed.** No branches are invalidated; there is no bulk shortcut to collapse `perf/01`–`perf/03`. Proceed as written.
+
+   **One salvageable lead** — `vulnerability_policy_violated:true` returns, in a single query, every package tripping the org's configured vulnerability policy. This is *not* a severity filter and cannot replace per-package scanning: it only catches packages breaching the configured threshold, so a Critical-only policy would miss all High/Medium/Low findings, and it returns nothing at all where no policy is configured. It is therefore useless for completeness — but it is an excellent **prioritisation** signal. See `perf/09`.
 2. **What is the actual rate limit for the target accounts?** Determines whether Tier 4 has any value. Answered by Tier 0.
 3. **Should `"awaiting"` packages render distinctly?** See the behaviour decision in `perf/01`. Currently they would silently become green.
 4. **Is the CVE-as-node model (option A in `perf/04`) desirable as a product change**, independent of performance?
