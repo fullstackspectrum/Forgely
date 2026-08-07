@@ -10,6 +10,8 @@ import time
 import requests
 from requests.adapters import HTTPAdapter
 
+from perfstats import RequestStats, bucket_for, get_stats
+
 log = logging.getLogger("forgely.cloudsmith")
 
 def _read_app_version() -> str:
@@ -45,21 +47,41 @@ def create_session(api_key: str) -> requests.Session:
     )
     s.mount("https://", adapter)
     s.mount("http://", adapter)
+    # Per-build request counters (see perfstats.py). Each build creates its own
+    # session, so this scopes cleanly without global state.
+    s.forgely_stats = RequestStats()
     return s
 
 
 def _api_get(session: requests.Session, url: str, params: dict | None = None) -> dict | list:
+    stats = get_stats(session)
+    bucket = bucket_for(url) if stats else ""
     delay = RETRY_BACKOFF
     for attempt in range(1, MAX_RETRIES + 1):
-        resp = session.get(url, params=params, timeout=30)
+        t0 = time.perf_counter()
+        try:
+            resp = session.get(url, params=params, timeout=30)
+        except requests.RequestException:
+            if stats:
+                stats.record_call(bucket, time.perf_counter() - t0, 0)
+                stats.record_failure()
+            raise
+        if stats:
+            stats.record_call(bucket, time.perf_counter() - t0, resp.status_code)
+            stats.record_rate_limit_headers(resp.headers)
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", delay))
             log.warning("Rate-limited – waiting %ds (attempt %d/%d)", retry_after, attempt, MAX_RETRIES)
+            if stats:
+                stats.record_throttle(retry_after)
+                stats.record_retry()
             time.sleep(retry_after)
             delay *= 2
             continue
         resp.raise_for_status()
         return resp.json()
+    if stats:
+        stats.record_failure()
     raise RuntimeError(f"Max retries exceeded for {url}")
 
 
@@ -238,13 +260,27 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list
     return all_packages
 
 
-def fetch_dependencies(session: requests.Session, owner: str, repo: str, slug: str) -> list[dict]:
+def fetch_dependencies(
+    session: requests.Session, owner: str, repo: str, slug: str, fmt: str = ""
+) -> list[dict]:
+    """Fetch a package's dependencies.
+
+    *fmt* is used only for instrumentation — it records which package formats
+    actually return dependency data, which is the input to the
+    DEPENDENCY_FORMATS constant in perf/02-gate-dependency-fetch.
+    """
     url = f"{BASE_URL}/packages/{owner}/{repo}/{slug}/dependencies/"
+    stats = get_stats(session)
     try:
         data = _api_get(session, url)
-        return data.get("dependencies", []) if isinstance(data, dict) else data
+        deps = data.get("dependencies", []) if isinstance(data, dict) else data
+        if stats:
+            stats.record_dependency_result(fmt, bool(deps))
+        return deps
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else None
+        if stats:
+            stats.record_dependency_result(fmt, False)
         log.warning("fetch_dependencies failed for %s (HTTP %s) – skipping", slug, status)
         return []
 
