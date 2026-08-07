@@ -131,13 +131,55 @@ graph TD
 
 ### Tier 0 — Measurement
 
-#### `perf/00-instrumentation-baseline`
+#### `perf/00-instrumentation-baseline` — ✅ implemented
 
 **Base:** `main` · **Depends on:** — · **Size:** S · **Risk:** None
 
 Everything downstream is validated against numbers this branch produces. Land it first and keep it.
 
-**Files:** [`backend/cloudsmith.py`](../backend/cloudsmith.py), [`backend/main.py`](../backend/main.py)
+**Files:** new [`backend/perfstats.py`](../backend/perfstats.py), [`backend/cloudsmith.py`](../backend/cloudsmith.py), [`backend/main.py`](../backend/main.py)
+
+##### How to use it
+
+Counters are always on and cost nothing measurable — one dict update per HTTP call. A stats block is written to the `forgely.perf` logger at the end of every graph, org-graph, and workspace-overview build:
+
+```
+PERF graph acme/big-repo — 428.7s wall, 12342 API calls
+  result:    packages=4200, nodes=5310, edges=214880, cves=918
+  throttle:  2 x 429, 90.0s slept, 2 retries, 0 failures
+  ratelimit: limit=5000 remaining=12 reset=1754320000
+  endpoint                   calls      mean    total  statuses
+  vulns.scans                 4200      180ms   756.0s  200:4200
+  packages.dependencies       4200       90ms   378.0s  404:4200
+  vulns.details               3900      210ms   819.0s  200:3900
+  packages.list                 42      300ms    12.6s  200:42
+  deps:      3100 calls returned nothing; formats with data: npm
+    docker                 3100 calls       0 non-empty
+    npm                    1100 calls    1100 non-empty
+```
+
+Payload size requires a second full serialisation, so it is opt-in — set `FORGELY_PERF_PAYLOAD=1` for the baseline runs that populate §8, and leave it off otherwise.
+
+The same block is available as JSON via `GET /api/graph?owner=…&repo=…&debug=1`, which returns `{graph, cached, perf}`. Returning a `Response` directly bypasses `response_model`, so normal traffic keeps its schema unchanged.
+
+##### How to read it, and what each line decides
+
+| Line | Feeds |
+|---|---|
+| `vulns.scans` vs `vulns.details` — a near-1:1 ratio is the N+1 | `perf/03` — the ratio is the size of the prize |
+| `packages.dependencies` with a high `404:` count | `perf/02` — every 404 is a wasted round-trip |
+| `deps:` per-format breakdown — formats with `0 non-empty` | `perf/02` — populates `DEPENDENCY_FORMATS` empirically |
+| `edges=` vs `nodes=` | `perf/04` — quantifies clique blowup |
+| `throttle:` seconds slept, and `ratelimit: remaining` | **Open question #2.** High sleep / near-zero remaining ⇒ limit-bound, and `perf/12` is pointless. Low sleep with high mean latency ⇒ concurrency-bound, and `perf/12` pays. |
+
+##### Implementation notes
+
+- Counters hang off the `requests.Session` (`session.forgely_stats`). Each build already creates its own session in [`create_session`](../backend/cloudsmith.py#L34-L52), so attribution is per-build with no global state and no cross-request bleed.
+- `RequestStats` takes a lock on every mutation — it is written from up to 20 worker threads. Verified: 20 threads × 500 increments retains all 10,000.
+- Bucketing lives in `bucket_for()` and splits **`vulns.scans` from `vulns.details`** deliberately; collapsing them would hide the exact quantity `perf/03` exists to remove.
+- `fetch_dependencies` gained an optional `fmt` argument used *only* for instrumentation. It has a default, so no call site is forced to change.
+- The `forgely.perf` logger is set to INFO explicitly because the root logger sits at WARNING ([main.py:54-58](../backend/main.py#L54-L58)). Records propagate to the root handler, so the block appears without making everything else verbose.
+- Perf snapshots are held in `_last_perf`, deliberately **outside** `_cache`, so cached graph payloads never carry stale timing data.
 
 **Changes**
 - Attach a thread-safe counter to the session object in [`create_session`](../backend/cloudsmith.py#L34-L48). Each build already constructs its own session, so per-build attribution is free.
@@ -147,10 +189,11 @@ Everything downstream is validated against numbers this branch produces. Land it
 - Add a `?debug=1` query param on `/api/graph` returning the stats block alongside the graph.
 
 **Acceptance criteria**
-- One log line per build with the full stats block.
-- Baseline recorded for at least one small (<200 pkg), one medium (~1k), and one large (5k+) repository. **Commit these numbers to this document in §8.**
+- ✅ One log record per build with the full stats block.
+- ✅ Zero behaviour change — instrumentation only observes; control flow in `_api_get` is identical.
+- ⬜ Baseline recorded for at least one small (<200 pkg), one medium (~1k), and one large (5k+) repository. **Commit these numbers to §8.** ← *outstanding: needs a real API key against real workspaces.*
 
-**Also records** the data needed to build the format list in `perf/02` — log which package formats ever return a non-empty dependency array.
+**Also records** the data needed to build the format list in `perf/02` — which package formats ever return a non-empty dependency array.
 
 ---
 
@@ -432,13 +475,35 @@ Every branch reports, against the Tier 0 baseline, on the **same three repositor
 
 ## 8. Measurements
 
-*To be populated by `perf/00-instrumentation-baseline` and updated by each branch.*
+Instrumentation is in place (`perf/00`); **the numbers below still need capturing against real workspaces.**
 
-| Repo | Packages | Baseline time | Baseline calls | Baseline edges | Baseline bytes |
-|---|---|---|---|---|---|
-| _small_ | | | | | |
-| _medium_ | | | | | |
-| _large_ | | | | | |
+To take a baseline:
+
+```bash
+FORGELY_PERF_PAYLOAD=1 ./start.sh
+# load each repo once with a cold cache, then copy the PERF block from the backend log
+```
+
+Use a cold cache for each run — restart the backend, or wait out `CACHE_TTL`, or the numbers will describe a cache hit rather than a build.
+
+| Repo | Packages | Wall time | API calls | `vulns.scans` | `vulns.details` | Wasted dep calls | Nodes | Edges | Bytes |
+|---|---|---|---|---|---|---|---|---|---|
+| _small (<200)_ | | | | | | | | | |
+| _medium (~1k)_ | | | | | | | | | |
+| _large (5k+)_ | | | | | | | | | |
+
+**Rate-limit findings** (resolves open question #2 — decides whether `perf/12` is worth building):
+
+| | Value |
+|---|---|
+| `X-RateLimit-Limit` | |
+| Lowest `remaining` observed | |
+| 429s per large build | |
+| Seconds slept | |
+
+**Formats returning no dependency data** (populates `DEPENDENCY_FORMATS` in `perf/02`):
+
+> _paste the `deps:` breakdown from a large-repo run_
 
 ---
 

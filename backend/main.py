@@ -8,13 +8,15 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from cloudsmith import (
     APP_VERSION,
@@ -46,6 +48,7 @@ from models import (
     WorkspaceOverviewResponse,
     WorkspaceRepoSummary,
 )
+from perfstats import BuildTimer, format_report, get_stats, payload_bytes_enabled
 
 # Load .env from the project root (one level up)
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
@@ -57,6 +60,33 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("forgely.api")
+
+# Performance baselining (docs/performance-design.md, Tier 0). Given its own
+# logger at INFO so the stats block is visible without turning on INFO for
+# everything else — the root logger stays at WARNING.
+perf_log = logging.getLogger("forgely.perf")
+perf_log.setLevel(logging.INFO)
+
+# Snapshot of the most recent build per cache key, exposed via ?debug=1.
+# Deliberately kept out of _cache so cached graph payloads never carry stale
+# timing data.
+_last_perf: dict[str, dict] = {}
+_perf_lock = threading.Lock()
+
+
+def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict) -> dict | None:
+    """Log the stats block for one build and retain it for ?debug=1."""
+    stats = get_stats(session)
+    if stats is None:
+        return None
+    perf_log.info(format_report(label, stats, timer.elapsed, extra))
+    snapshot = stats.snapshot()
+    snapshot["wall_seconds"] = round(timer.elapsed, 2)
+    snapshot["result"] = extra
+    with _perf_lock:
+        _last_perf[key] = snapshot
+    return snapshot
+
 
 app = FastAPI(title="Forgely API", version=APP_VERSION)
 
@@ -150,6 +180,7 @@ def list_repos(owner: str, request: Request):
 
 def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     """Fetch Cloudsmith data and build the graph response."""
+    timer = BuildTimer()
     session = create_session(api_key)
     packages = fetch_all_packages(session, owner, repo)
 
@@ -170,11 +201,13 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
 
     # De-duplicate packages and prepare metadata before parallel fetch
     pkg_metas: list[dict] = []
+    slug_to_fmt: dict[str, str] = {}  # instrumentation only (see perf/02)
     for pkg in packages:
         slug = pkg["slug_perm"]
         name = pkg.get("name") or pkg.get("slug_perm") or ""
         version = pkg.get("version") or ""
         node_id = f"{name}@{version}" if version else (name or slug)
+        slug_to_fmt[slug] = pkg.get("format", "") or ""
 
         if node_id in seen_ids:
             slug_to_id.setdefault(slug, node_id)
@@ -316,7 +349,7 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     # --- Parallel dependency fetching ---
     def _fetch_dep(item: tuple[str, str]) -> tuple[str, list[dict]]:
         slug, src_id = item
-        return (src_id, fetch_dependencies(session, owner, repo, slug))
+        return (src_id, fetch_dependencies(session, owner, repo, slug, slug_to_fmt.get(slug, "")))
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         dep_futures = [pool.submit(_fetch_dep, item) for item in slug_to_id.items()]
@@ -343,11 +376,32 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         total_edges=len(edges),
     )
 
-    return GraphResponse(owner=owner, repo=repo, nodes=nodes, edges=edges, stats=graph_stats)
+    result = GraphResponse(owner=owner, repo=repo, nodes=nodes, edges=edges, stats=graph_stats)
+
+    timer.stop()
+    _record_perf(
+        f"{owner}/{repo}",
+        f"graph {owner}/{repo}",
+        session,
+        timer,
+        {
+            "packages": len(pkg_metas),
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "cves": total_cves,
+            "bytes": len(result.model_dump_json()) if payload_bytes_enabled() else None,
+        },
+    )
+    return result
 
 
 @app.get("/api/graph", response_model=GraphResponse)
-def get_graph(request: Request, owner: str | None = None, repo: str | None = None):
+def get_graph(
+    request: Request,
+    owner: str | None = None,
+    repo: str | None = None,
+    debug: bool = False,
+):
     api_key = _get_api_key(request)
     default_owner, default_repo = _get_defaults()
     owner = owner or default_owner
@@ -357,13 +411,25 @@ def get_graph(request: Request, owner: str | None = None, repo: str | None = Non
 
     cache_key = f"{owner}/{repo}"
 
-    if cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+    cached = cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL
+    if cached:
         log.info("Returning cached graph for %s", cache_key)
-        return _cache[cache_key]["data"]
+        result = _cache[cache_key]["data"]
+    else:
+        log.info("Building graph for %s/%s", owner, repo)
+        result = _build_graph(api_key, owner, repo)
+        _cache[cache_key] = {"data": result, "ts": time.time()}
 
-    log.info("Building graph for %s/%s", owner, repo)
-    result = _build_graph(api_key, owner, repo)
-    _cache[cache_key] = {"data": result, "ts": time.time()}
+    if debug:
+        # Returning a Response directly bypasses response_model validation,
+        # so the normal path keeps its schema while debug gets the extra block.
+        with _perf_lock:
+            perf = _last_perf.get(cache_key)
+        return JSONResponse({
+            "graph": jsonable_encoder(result),
+            "cached": cached,
+            "perf": perf,
+        })
     return result
 
 
@@ -728,6 +794,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
         log.info("Returning cached workspace overview for %s", owner)
         return _cache[overview_key]["data"]
 
+    timer = BuildTimer()
     session = create_session(api_key)
     raw_repos = fetch_repos(session, owner)
     if not raw_repos:
@@ -756,6 +823,20 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
     summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
     result = WorkspaceOverviewResponse(owner=owner, repos=summaries)
     _cache[overview_key] = {"data": result, "ts": time.time()}
+
+    timer.stop()
+    _record_perf(
+        overview_key,
+        f"workspace-overview {owner}",
+        session,
+        timer,
+        {
+            "repos": len(summaries),
+            "packages": sum(s.package_count for s in summaries),
+            "cves": sum(s.vuln_count for s in summaries),
+            "bytes": len(result.model_dump_json()) if payload_bytes_enabled() else None,
+        },
+    )
     return result
 
 
@@ -765,6 +846,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
 
 def _build_org_graph(api_key: str, owner: str) -> dict:
     """Build an org-level access graph: repos, members, services, entitlements."""
+    timer = BuildTimer()
     session = create_session(api_key)
 
     repos = fetch_repos(session, owner)
@@ -1096,7 +1178,23 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         "total_edges": len(edges),
     }
 
-    return {"owner": owner, "nodes": nodes, "edges": edges, "stats": stats}
+    result = {"owner": owner, "nodes": nodes, "edges": edges, "stats": stats}
+
+    timer.stop()
+    _record_perf(
+        f"org:{owner}",
+        f"org-graph {owner}",
+        session,
+        timer,
+        {
+            "repos": len(repo_slugs),
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "shared_upstream_edges": sum(1 for e in edges if e["type"] == "shared_upstream"),
+            "bytes": len(json.dumps(result)) if payload_bytes_enabled() else None,
+        },
+    )
+    return result
 
 
 @app.get("/api/org-graph")
