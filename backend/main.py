@@ -222,7 +222,23 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             _stats.record_scan_status(pkg.get("security_scan_status") or "")
         seen_ids.add(node_id)
         slug_to_id[slug] = node_id
-        pkg_metas.append({"pkg": pkg, "slug": slug, "name": name, "version": version, "node_id": node_id})
+
+        # perf/01: packages whose format cannot be scanned return an empty scan
+        # list, so the call is pure waste — 74.8% of packages on neuro-packages
+        # (docs/performance-design.md §8.4). Flagged here but NOT acted on yet;
+        # pkg_metas must stay complete so every package still becomes a node.
+        #
+        # Only "not supported" is treated as skippable. "Awaiting" is
+        # deliberately excluded: skipping it would fall through to the
+        # "Scanned (Clean)" branch below and colour a pending package green,
+        # and §8.4 measured zero packages in that state anyway.
+        raw_status = (pkg.get("security_scan_status") or "").lower()
+        scannable = "not supported" not in raw_status
+
+        pkg_metas.append({
+            "pkg": pkg, "slug": slug, "name": name, "version": version,
+            "node_id": node_id, "scannable": scannable,
+        })
 
     # --- Parallel vulnerability scanning ---
     MAX_WORKERS = 20
