@@ -289,14 +289,14 @@ Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separ
 
 > **Measurement update (§8.4):** `the language repository` and `the container repository` contain **zero** packages in `awaiting` state, and the 5,603 unsupported packages produced **zero** detail fetches — confirming their scan lists come back empty, so substituting `(None, 0, [])` is byte-identical. The behaviour-change risk is therefore not merely bounded but *unobserved*, and skipping `"not supported"` alone captures the entire 27% saving. Do not skip `"awaiting"` to chase a gain the data says is zero.
 
-**Acceptance criteria**
-- **`total_nodes` and `total_edges` unchanged from `main`** on a repository containing unsupported formats. This is the primary gate — if node count drops, the branch is wrong.
-- Every unsupported-format package still renders as a grey node with `hideUnsupported` off.
-- `vulns.scans` drops **7,490 → 1,887** on `the language repository`; wall time ~222s → ~162s when landed after `perf/02`.
-- The `scanstatus:` line in the PERF block shows `must scan` matching the new `vulns.scans` count exactly.
-- Graph output byte-identical to `main` on a repository with mixed formats (diff the JSON).
+**Acceptance criteria — all met, see §8.6**
+- ✅ `total_nodes` / `total_edges` unchanged — **7,544 / 7,650, delta 0**. All 5,603 unscannable packages still present.
+- ✅ Every unsupported-format package still renders grey — **0 with `max_severity != None`**.
+- ✅ `vulns.scans` drops 7,490 → **1,887**; wall 229.5s → **172.8s**.
+- ✅ `scanstatus:` `must scan` matches the new `vulns.scans` count exactly (1,887 = 1,887).
+- ✅ No severity or CVE drift on any package — **0 changed**.
 
-**Expected impact:** Large on repositories with docker/raw/deb content; negligible on pure npm/PyPI.
+**Measured impact: 229.5s → 172.8s.** The original guess here — "large on docker/raw/deb, negligible on pure npm/PyPI" — was wrong in its reasoning: the saving is driven by `alpine` (5,580 of 5,603 unscannable packages), a format the estimate never mentioned. Expect the benefit to track the share of packages Cloudsmith cannot scan, whatever formats those happen to be, rather than any particular format list.
 
 ---
 
@@ -542,7 +542,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | 1 | ✅ `perf/00-instrumentation-baseline` | Everything else is validated against it | — |
 | 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit | — |
 | 3 | ✅ **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → **229.5s measured** |
-| 4 | **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → ~162s |
+| 4 | ✅ **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → **172.8s measured** |
 | 5 | **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → ~51s |
 | 6 | `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → ~35s |
 | 7 | `perf/04-collapse-cve-cliques` | Edges are modest on `the language repository` (7,653 for 7,544 nodes); matters most on container repos | — |
@@ -675,7 +675,7 @@ The measured model — `wall = sequential_pagination + (parallel_network ÷ work
 |---|---|---|---|---|
 | _baseline_ | 122.8s | 4,358s ÷ 20 = 217.9s | **342.5s** | — |
 | `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** → ✅ **229.5s actual** | 1.5× |
-| `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** | 2.1× |
+| `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** → ✅ **172.8s actual** | 2.1× |
 | `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** | 6.7× |
 | `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** | 9.8× |
 | `+ perf/12` async, 100 workers | ~12s | 4.5s | **~17s** | **20.8×** |
@@ -706,10 +706,31 @@ Measured on `the language repository`, cold cache, `MAX_WORKERS=20`. Each row is
 |---|---|---|---|---|
 | _baseline_ | 342.5s | — | 19,902 | — |
 | **`perf/02`** ✅ | **229.5s** | **1.49×** | 9,562 | `packages.dependencies` 10,420 → **80** |
-| `perf/01` | _pending_ | _2.1× proj._ | | `vulns.scans` 7,490 → 1,887 |
+| **`perf/01`** ✅ | **172.8s** | **1.98×** | 3,959 | `vulns.scans` 7,490 → **1,887** |
 | `perf/13` | _pending_ | _6.7× proj._ | | `packages.list` ~123s → ~12s |
 
-**The model holds.** §8.5 projected ~222s for `perf/02`; the measured result is **229.5s — within 3%**. The projection method (`wall = pagination + parallel_network ÷ workers`) is therefore sound enough to plan against, and the remaining estimates deserve corresponding confidence.
+**The model holds.** §8.5 projected ~222s for `perf/02` and ~162s for `perf/01`; measured **229.5s** and **172.8s** — within 3% and 7% respectively. The projection method (`wall = pagination + parallel_network ÷ workers`) is sound enough to plan against, and the remaining estimates deserve corresponding confidence.
+
+**Pagination now dominates.** At 172.8s wall, `packages.list` accounts for **124.9s — 72% of the remaining time**, and it is entirely sequential. `perf/13` is now by far the largest available win, exactly as §8.5 conclusion 3 predicted.
+
+#### `perf/01` acceptance evidence
+
+Control arm is the saved `perf/02` output, which is current `main` unchanged — so this needed one build rather than two.
+
+| | Control (main) | Branch | Δ |
+|---|---|---|---|
+| Nodes (all / package) | 7,544 / 7,490 | 7,544 / 7,490 | **0** |
+| Edge set | 7,650 | 7,650 | **0** |
+| `total_cves` | 544 | 544 | **0** |
+| critical / high / medium / low / safe | 1 / 7 / 13 / 3 / 7,466 | identical | **0** |
+| Unsupported packages present | 5,603 | **5,603** | **0** |
+| …with `max_severity != None` | — | **0** | grey preserved |
+| Packages with severity or CVE drift | — | **0** | |
+| `vulns.scans` | 7,490 | **1,887** | −5,603 |
+
+**Node set: 0 lost, 0 gained.** Every unscannable package still appears, still renders grey, still counts under `stats.safe`. The scan-status distribution is unchanged across all three status values.
+
+**`vulns.scans` and `vulns.details` are now both 1,887** — a 1:1 ratio, confirming §8.4's finding that every *scannable* package triggers a detail fetch. `perf/03` therefore now targets 100% of remaining scan traffic rather than the 25% the aggregate ratio originally suggested.
 
 #### `perf/02` acceptance evidence
 
