@@ -202,6 +202,7 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     # De-duplicate packages and prepare metadata before parallel fetch
     pkg_metas: list[dict] = []
     slug_to_fmt: dict[str, str] = {}  # instrumentation only (see perf/02)
+    _stats = get_stats(session)
     for pkg in packages:
         slug = pkg["slug_perm"]
         name = pkg.get("name") or pkg.get("slug_perm") or ""
@@ -212,6 +213,11 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         if node_id in seen_ids:
             slug_to_id.setdefault(slug, node_id)
             continue
+
+        # Recorded post-dedup so the histogram totals match the packages that
+        # actually receive a scan call (see perf/01).
+        if _stats:
+            _stats.record_scan_status(pkg.get("security_scan_status") or "")
         seen_ids.add(node_id)
         slug_to_id[slug] = node_id
         pkg_metas.append({"pkg": pkg, "slug": slug, "name": name, "version": version, "node_id": node_id})
@@ -703,6 +709,7 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
     seen_ids: set[str] = set()
     stats: dict[str, int] = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Safe": 0}
     formats: dict[str, int] = {}
+    _ws_stats = get_stats(session)
 
     for pkg in packages:
         p_slug = pkg["slug_perm"]
@@ -715,6 +722,9 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
 
         fmt = (pkg.get("format", "") or "").lower().strip() or "unknown"
         formats[fmt] = formats.get(fmt, 0) + 1
+
+        if _ws_stats:
+            _ws_stats.record_scan_status(pkg.get("security_scan_status") or "")
 
         raw_status = (pkg.get("security_scan_status") or "").lower()
         if "not supported" in raw_status:

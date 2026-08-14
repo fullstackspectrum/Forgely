@@ -71,7 +71,10 @@ class RequestStats:
     """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        # Reentrant: snapshot() holds the lock while calling
+        # scan_status_breakdown(), which takes it again. A plain Lock would
+        # deadlock there.
+        self._lock = threading.RLock()
         self.calls: dict[str, int] = {}
         self.seconds: dict[str, float] = {}
         self.statuses: dict[str, dict[int, int]] = {}
@@ -88,6 +91,10 @@ class RequestStats:
         # Which package formats actually return dependency data. Feeds the
         # DEPENDENCY_FORMATS constant in perf/02-gate-dependency-fetch.
         self.dep_formats: dict[str, dict[str, int]] = {}
+        # Distribution of security_scan_status across packages. Sizes
+        # perf/01-skip-unscannable-packages: only packages that are neither
+        # "not supported" nor "awaiting" genuinely need a scan call.
+        self.scan_statuses: dict[str, int] = {}
 
     def record_call(self, bucket: str, elapsed: float, status: int) -> None:
         with self._lock:
@@ -132,6 +139,47 @@ class RequestStats:
             if non_empty:
                 entry["nonempty"] += 1
 
+    def record_scan_status(self, status: str) -> None:
+        """Track one package's security_scan_status (input to perf/01)."""
+        key = (status or "").strip() or "(empty)"
+        with self._lock:
+            self.scan_statuses[key] = self.scan_statuses.get(key, 0) + 1
+
+    def scan_status_breakdown(self) -> dict:
+        """Classify statuses exactly as perf/01 would, to size that branch.
+
+        The two skip conditions are not equivalent and must be reported
+        separately — see the behaviour decision in the design doc:
+
+        * "not supported" — skipping is behaviour-neutral; the scan call
+          already returns nothing, and the node stays grey either way.
+        * "awaiting"      — skipping changes behaviour; such a package would
+          fall through to "Scanned (Clean)" and render green.
+        """
+        with self._lock:
+            statuses = dict(self.scan_statuses)
+
+        unsupported = awaiting = must_scan = 0
+        for status, count in statuses.items():
+            lowered = status.lower()
+            if "not supported" in lowered:
+                unsupported += count
+            elif "awaiting" in lowered:
+                awaiting += count
+            else:
+                must_scan += count
+
+        total = unsupported + awaiting + must_scan
+        return {
+            "total": total,
+            "skippable_safe": unsupported,
+            "skippable_behaviour_change": awaiting,
+            "must_scan": must_scan,
+            "pct_removable_safely": round(100 * unsupported / total, 1) if total else 0.0,
+            "pct_removable_total": round(100 * (unsupported + awaiting) / total, 1) if total else 0.0,
+            "histogram": dict(sorted(statuses.items(), key=lambda kv: -kv[1])),
+        }
+
     def total_calls(self) -> int:
         with self._lock:
             return sum(self.calls.values())
@@ -161,6 +209,7 @@ class RequestStats:
                     "reset": self.rl_reset,
                 },
                 "dependency_formats": dict(sorted(self.dep_formats.items())),
+                "scan_status": self.scan_status_breakdown(),
             }
 
 
@@ -210,6 +259,25 @@ def format_report(label: str, stats: RequestStats, wall_seconds: float, extra: d
             lines.append(
                 f"  {name:<24} {b['calls']:>7} {b['mean_ms']:>8.0f}ms {b['seconds']:>7.1f}s  {statuses}"
             )
+
+    scan = snap.get("scan_status", {})
+    if scan.get("total"):
+        saved = scan["skippable_safe"]
+        scans_made = snap["buckets"].get("vulns.scans", {}).get("calls", 0)
+        lines.append(
+            f"  scanstatus: {scan['total']} packages — "
+            f"{saved} skippable safely ({scan['pct_removable_safely']}%), "
+            f"{scan['skippable_behaviour_change']} awaiting "
+            f"(skippable but changes colour), "
+            f"{scan['must_scan']} must scan"
+        )
+        if scans_made:
+            lines.append(
+                f"              perf/01 would cut vulns.scans "
+                f"{scans_made} -> {max(0, scans_made - saved)}"
+            )
+        for status, count in scan["histogram"].items():
+            lines.append(f"    {status:<36} {count:>6}")
 
     deps = snap["dependency_formats"]
     if deps:
