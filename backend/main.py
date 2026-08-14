@@ -248,8 +248,24 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         return (meta, *get_package_vulnerabilities(session, owner, repo, slug))
 
     vuln_results: dict[str, tuple[str | None, int, list[dict]]] = {}
+
+    # Seed unscannable packages with the exact tuple the API produces for them:
+    # their scan list comes back empty, so get_package_vulnerabilities
+    # early-returns (None, 0, []). Substituting it directly is therefore
+    # byte-identical — verified in §8.4, where all 5,603 unsupported packages
+    # triggered zero detail fetches, which only happens on that early return.
+    #
+    # Note this narrows only what is submitted. pkg_metas is iterated in full
+    # below, so every package still becomes a node.
+    scannable_metas: list[dict] = []
+    for meta in pkg_metas:
+        if meta["scannable"]:
+            scannable_metas.append(meta)
+        else:
+            vuln_results[meta["node_id"]] = (None, 0, [])
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(_scan_vuln, m): m for m in pkg_metas}
+        futures = {pool.submit(_scan_vuln, m): m for m in scannable_metas}
         for fut in as_completed(futures):
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
