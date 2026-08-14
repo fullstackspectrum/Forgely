@@ -22,6 +22,7 @@ from cloudsmith import (
     APP_VERSION,
     SEVERITY_RANK,
     create_session,
+    dependency_denylist,
     fetch_all_packages,
     fetch_dependencies,
     fetch_namespaces,
@@ -353,12 +354,23 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
                     seen_pairs.add(pair)
 
     # --- Parallel dependency fetching ---
+    # Skip formats measured never to return dependency data (perf/02). Resolved
+    # once per build rather than per package — dependency_denylist() reads the
+    # environment on every call. Packages with an unknown or empty format are
+    # NOT skipped, so the failure mode is a wasted call, never a missing edge.
+    denylist = dependency_denylist()
+    dep_items = [
+        (slug, src_id)
+        for slug, src_id in slug_to_id.items()
+        if slug_to_fmt.get(slug, "").lower() not in denylist
+    ]
+
     def _fetch_dep(item: tuple[str, str]) -> tuple[str, list[dict]]:
         slug, src_id = item
         return (src_id, fetch_dependencies(session, owner, repo, slug, slug_to_fmt.get(slug, "")))
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        dep_futures = [pool.submit(_fetch_dep, item) for item in slug_to_id.items()]
+        dep_futures = [pool.submit(_fetch_dep, item) for item in dep_items]
         for fut in as_completed(dep_futures):
             src_id, deps = fut.result()
             for dep in deps:
