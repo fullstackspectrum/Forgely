@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import pathlib
 import time
 
@@ -31,6 +32,49 @@ RETRY_BACKOFF = 2
 CONNECTION_POOL_SIZE = 64
 
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+
+# ──────────────────────────────────────────────────────────────
+#  Dependency-fetch gating (perf/02)
+# ──────────────────────────────────────────────────────────────
+# Package formats observed never to return dependency data. Measured
+# 2026-08-14 on full-stack-spectrum/neuro-packages: 10,376 of 10,420
+# dependency calls returned nothing — 99.6% waste, and 53% of the entire
+# build's network time. See docs/performance-design.md §8.3.
+#
+# Deliberately a DENYLIST, not an allowlist. Only conda/maven/rpm/ruby were
+# observed returning data, but npm came back empty across 1,822 calls and
+# python across 17 — and both formats *can* carry dependency metadata. An
+# allowlist derived from a single workspace would silently drop edges
+# elsewhere; denying only what was measured empty at volume keeps unknown and
+# newly-added formats fetching by default.
+DEPENDENCY_DENYLIST_DEFAULT = frozenset({
+    "alpine",   # 8,504 calls, 0 non-empty
+    "npm",      # 1,822 calls, 0 non-empty
+    "docker",   #     3 calls, 0 non-empty — no dependency concept
+    "generic",  #     3 calls, 0 non-empty — no dependency concept
+    "raw",      #     2 calls, 0 non-empty — no dependency concept
+})
+
+DEPENDENCY_DENYLIST_ENV = "FORGELY_DEPENDENCY_DENYLIST"
+
+
+def dependency_denylist() -> frozenset[str]:
+    """Package formats to skip when fetching dependencies.
+
+    Resolved lazily on every call, never at import time: ``main`` imports this
+    module before it calls ``load_dotenv()``, so a module-level ``getenv``
+    would read the environment before ``.env`` is applied and silently miss
+    any override. Callers should resolve this once per build, not per package.
+
+    Override with ``FORGELY_DEPENDENCY_DENYLIST`` as a comma-separated list of
+    formats. Set it to an empty string to disable gating entirely and restore
+    pre-perf/02 behaviour without a redeploy — the escape hatch if a workspace
+    turns out to carry dependency data for a denied format.
+    """
+    raw = os.getenv(DEPENDENCY_DENYLIST_ENV)
+    if raw is None:
+        return DEPENDENCY_DENYLIST_DEFAULT
+    return frozenset(f.strip().lower() for f in raw.split(",") if f.strip())
 
 
 def create_session(api_key: str) -> requests.Session:

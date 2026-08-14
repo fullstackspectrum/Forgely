@@ -32,7 +32,7 @@ Parent: Tier 0: Request instrumentation baseline",complete,1,"performance,commit
 PERF-00B,Tier 0: Scan-status histogram (sizes perf/01),"BRANCH: perf/00-scan-status-histogram
 TIER: Tier 0 - Measurement
 
-Adds a security_scan_status histogram so perf/01 can be sized from data rather than assumption. RESULT: 74.8% of packages on neuro-packages are 'Security Scanning Not Supported' (5,603 of 7,490) - perf/01 is worth 27% of total network time.
+MERGED (PR #40). Adds a security_scan_status histogram so perf/01 can be sized from data rather than assumption. RESULT: 74.8% of packages on neuro-packages are 'Security Scanning Not Supported' (5,603 of 7,490) - perf/01 is worth 27% of total network time.
 
 FILES
 backend/perfstats.py, backend/main.py
@@ -43,7 +43,7 @@ Histogram totals match the packages that receive a scan call; snapshot() must no
 Full spec: docs/performance-design.md
 
 Create with:
-  git checkout main && git pull && git checkout -b perf/00-scan-status-histogram",in progress,1,"performance,Tier 0 - Measurement",,3,perf/00-scan-status-histogram
+  git checkout main && git pull && git checkout -b perf/00-scan-status-histogram",complete,1,"performance,Tier 0 - Measurement",,3,perf/00-scan-status-histogram
 PERF-00B-01,Add scan_statuses counter and record_scan_status(),"Commit on perf/00-scan-status-histogram
 
 Parent: Tier 0: Scan-status histogram (sizes perf/01)",complete,1,"performance,commit",PERF-00B,,perf/00-scan-status-histogram
@@ -61,7 +61,7 @@ PERF-00B-05,Wire call sites in _build_graph and _fetch_repo_vuln_summary,"Commit
 Parent: Tier 0: Scan-status histogram (sizes perf/01)",complete,1,"performance,commit",PERF-00B,,perf/00-scan-status-histogram
 PERF-00B-06,"Commit, push, open PR","Commit on perf/00-scan-status-histogram
 
-Parent: Tier 0: Scan-status histogram (sizes perf/01)",to do,1,"performance,commit",PERF-00B,,perf/00-scan-status-histogram
+Parent: Tier 0: Scan-status histogram (sizes perf/01)",complete,1,"performance,commit",PERF-00B,,perf/00-scan-status-histogram
 PERF-11,"Canvas render quick wins (2 lines, zero risk)","BRANCH: perf/11-canvas-render-quick-wins
 TIER: Tier 3 - Frontend
 
