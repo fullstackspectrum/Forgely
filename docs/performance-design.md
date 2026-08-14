@@ -217,6 +217,8 @@ The same block is available as JSON via `GET /api/graph?owner=…&repo=…&debug
 >
 > Rendering path, unchanged by this branch: `max_severity: null` → `sev = "Unknown"` ([GraphCanvas.tsx:448](../frontend/src/components/GraphCanvas.tsx#L448)) → grey node, visible by default. Users can opt to hide them via the `hideUnsupported` toggle, which defaults to `false` ([App.tsx:47](../frontend/src/App.tsx#L47)). Stats accounting is also unchanged — `None` is not a key in `stats`, so these packages continue to fall through to `stats["Safe"]`.
 
+**Measured impact (§8.4): removes 5,603 of 7,490 scan calls — 74.8%, ~1,210s of network time, 27% of the build.** Second-largest win in the plan.
+
 **⚠ Behaviour decision required.** The two skip conditions are not equivalent:
 
 | Status | Skipping is | Rationale |
@@ -226,10 +228,13 @@ The same block is available as JSON via `GET /api/graph?owner=…&repo=…&debug
 
 Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separately by introducing a distinct *pending* node state (amber/hatched) rather than silently colouring it green — a security tool should not present "not yet scanned" as "clean". That is a UX change and belongs in its own branch.
 
+> **Measurement update (§8.4):** `the language repository` and `the container repository` contain **zero** packages in `awaiting` state, and the 5,603 unsupported packages produced **zero** detail fetches — confirming their scan lists come back empty, so substituting `(None, 0, [])` is byte-identical. The behaviour-change risk is therefore not merely bounded but *unobserved*, and skipping `"not supported"` alone captures the entire 27% saving. Do not skip `"awaiting"` to chase a gain the data says is zero.
+
 **Acceptance criteria**
 - **`total_nodes` and `total_edges` unchanged from `main`** on a repository containing unsupported formats. This is the primary gate — if node count drops, the branch is wrong.
 - Every unsupported-format package still renders as a grey node with `hideUnsupported` off.
-- Request count for `vulnerabilities` bucket drops by the proportion of unsupported-format packages.
+- `vulns.scans` drops **7,490 → 1,887** on `the language repository`; wall time ~222s → ~162s when landed after `perf/02`.
+- The `scanstatus:` line in the PERF block shows `must scan` matching the new `vulns.scans` count exactly.
 - Graph output byte-identical to `main` on a repository with mixed formats (diff the JSON).
 
 **Expected impact:** Large on repositories with docker/raw/deb content; negligible on pure npm/PyPI.
@@ -247,13 +252,18 @@ Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separ
 - Gate the submission loop at [main.py:322](../backend/main.py#L322) on the package's `format`.
 - Deduplicate by `node_id` before submitting — `slug_to_id` holds one entry per `slug_perm`, so name@version collisions currently produce redundant fetches writing to the same `src_id`.
 
-> **Populate `DEPENDENCY_FORMATS` from the Tier 0 logs, not from assumption.** Start from the formats observed to return non-empty dependency arrays; treat the constant as a denylist-by-omission and note that adding a format is a one-line change. Formats that always 404 or return `[]` are pure waste today — each costs a round-trip and a warning log in [`fetch_dependencies`](../backend/cloudsmith.py#L241-L249).
+> **Populate `DEPENDENCY_FORMATS` from the Tier 0 logs, not from assumption.** Start from the formats observed to return non-empty dependency arrays; treat the constant as a denylist-by-omission and note that adding a format is a one-line change.
+>
+> **⚠ Measured 2026-08-14 (§8.3): 10,376 of 10,420 dependency calls returned nothing — 99.6% waste, 53% of all network time.** Only `conda`, `maven`, `rpm` and `ruby` ever returned data. But `npm` came back empty across 1,822 calls and `python` across 17, and both formats *can* carry dependency metadata — so an allowlist built from this one workspace risks silently dropping edges elsewhere. Gate on a **denylist** of formats observed empty at high volume (`alpine`, `npm`, `docker`, `raw`, `generic`), keep a `WARNING` when a gated format is skipped, and make the set overridable by env var so a wrong call is recoverable without a redeploy.
+
+**Also dedupe by `node_id`.** The endpoint is called once per `slug_perm` (10,420) though only 7,490 node IDs are unique — **2,930 calls are exact duplicates**, removable independently of any format gating.
 
 **Acceptance criteria**
-- `dependencies` request bucket drops to the count of dependency-bearing packages.
+- `packages.dependencies` bucket drops from 10,420 to under 200 on `the language repository`.
+- Wall time drops from 342.5s to ~222s (§8.4 projection).
 - No dependency edge present on `main` is missing after the change (diff edge sets on a multi-format repo).
 
-**Expected impact:** Up to one third of all requests eliminated.
+**Expected impact — measured, not estimated: 53% of all network time, 99.6% of it wasted.** The largest single win in the plan.
 
 ---
 
@@ -305,6 +315,32 @@ Note that the frontend already derives a `sharedCveNodes` set from edges at [Gra
 - All eight `shared_cve` call sites in `GraphCanvas.tsx` still behave correctly — the FilterBar toggle, search highlighting, and hide-edges toggle in particular.
 
 **Expected impact:** Potentially the single largest payload and render win on vulnerability-dense repositories.
+
+---
+
+#### `perf/13-parallel-package-pagination`
+
+**Base:** `main` · **Depends on:** `perf/00` · **Size:** M · **Risk:** Low
+**Added after baselining — not in the original plan.**
+
+**Files:** [`backend/cloudsmith.py`](../backend/cloudsmith.py)
+
+[`fetch_all_packages`](../backend/cloudsmith.py#L246-L260) walks pages in a `while` loop, one at a time. On the large repo that is **105 sequential calls at a 1,169ms mean — 122.8s, or 36% of total wall time**, during which the 20-worker pool sits completely idle. It is the largest single block of un-parallelised time in the build.
+
+Note the mean latency: package-list pages are ~5× slower per call than any other endpoint, because each returns 100 full package records. This is why a modest page count still dominates.
+
+**Changes**
+- Read the total count from the list response headers on the first page — Cloudsmith returns pagination metadata (`X-Pagination-Count` / `X-Pagination-Pagetotal`); **confirm the exact header name against a live response before relying on it**.
+- With a known page total, fetch pages 2..N through a `ThreadPoolExecutor`.
+- If no count header is available, fall back to speculative batching: request pages in blocks of ~10 concurrently, stopping at the first short/empty page. Slightly over-fetches at the boundary; still far better than fully sequential.
+- Apply to [`fetch_repos`](../backend/cloudsmith.py#L86-L99), [`fetch_org_members`](../backend/cloudsmith.py#L102-L115) and [`fetch_org_services`](../backend/cloudsmith.py#L118-L131), which share the identical loop shape.
+
+**Acceptance criteria**
+- `packages.list` wall-clock contribution drops from ~123s to under 20s on `the language repository`.
+- Package set identical to `main` — same count, same slugs, no duplicates from boundary over-fetch.
+- Ordering changes are acceptable (the graph builder de-duplicates by `node_id`), but verify `total_nodes` is unchanged.
+
+**Expected impact:** ~110s off the large-repo build on its own; proportionally larger once `perf/02` shrinks the parallel phase.
 
 ---
 
@@ -440,22 +476,27 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 
 ## 6. Suggested merge order
 
-| # | Branch | Why here |
-|---|---|---|
-| 1 | `perf/00-instrumentation-baseline` | Everything else is validated against it |
-| 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit |
-| 3 | `perf/01-skip-unscannable-packages` | Largest safe request cut |
-| 4 | `perf/02-gate-dependency-fetch` | Independent, low risk |
-| 5 | `perf/03-short-circuit-scan-details` | Highest reward, needs the most careful verification |
-| 6 | `perf/04-collapse-cve-cliques` | Payload and render |
-| — | **Re-measure. Reassess the remaining tiers against real numbers.** | |
-| 7 | `perf/07-rate-limit-resilience` | Removes the total-failure mode |
-| 8 | `perf/05-persistent-scan-cache` | Warm loads |
-| 9 | `perf/06-inflight-coalescing` | Small, depends on cache |
-| 10 | `perf/08-compression-payload-slim` | Transport |
-| 11 | `perf/10-fa2-worker-layout` | Can land any time; parallel track |
-| 12 | `perf/09-stream-graph-response` | Largest UX gain, benefits from everything above |
-| 13 | `perf/12-async-http-client` | Only if data justifies it |
+**Revised 2026-08-14 against the §8 baseline.** The original ordering was written from call-structure analysis; three items moved once measured.
+
+| # | Branch | Why here | Projected wall |
+|---|---|---|---|
+| 1 | ✅ `perf/00-instrumentation-baseline` | Everything else is validated against it | — |
+| 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit | — |
+| 3 | **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → ~222s |
+| 4 | **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → ~162s |
+| 5 | **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → ~51s |
+| 6 | `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → ~35s |
+| 7 | `perf/04-collapse-cve-cliques` | Edges are modest on `the language repository` (7,653 for 7,544 nodes); matters most on container repos | — |
+| — | **Re-measure before continuing.** | | |
+| 8 | **`perf/12-async-http-client`** ⬆⬆ | Was "only if data justifies it" — **it does.** Pool saturated at 19.8×, zero 429s, 68% of budget unused | → ~29s |
+| 9 | `perf/05-persistent-scan-cache` | Warm loads | → seconds |
+| 10 | `perf/06-inflight-coalescing` | Small, depends on cache | — |
+| 11 | `perf/08-compression-payload-slim` | Concentrated on CVE-dense container repos (25 MB / 214 pkgs) | — |
+| 12 | `perf/07-rate-limit-resilience` ⬇ | Still worth doing for the partial-failure guarantee, but the throttling it defends against **was never observed** | — |
+| 13 | `perf/10-fa2-worker-layout` | Can land any time; parallel track | — |
+| 14 | `perf/09-stream-graph-response` | Largest UX gain, benefits from everything above | — |
+
+Legend: ⬆ promoted · ⬇ demoted · 🆕 added after baselining
 
 ---
 
@@ -475,35 +516,130 @@ Every branch reports, against the Tier 0 baseline, on the **same three repositor
 
 ## 8. Measurements
 
-Instrumentation is in place (`perf/00`); **the numbers below still need capturing against real workspaces.**
+**Captured 2026-08-14** against `the measured workspace`, cold cache, `FORGELY_PERF_PAYLOAD=1`, `MAX_WORKERS=20`.
 
-To take a baseline:
+To reproduce:
 
 ```bash
 FORGELY_PERF_PAYLOAD=1 ./start.sh
 # load each repo once with a cold cache, then copy the PERF block from the backend log
 ```
 
-Use a cold cache for each run — restart the backend, or wait out `CACHE_TTL`, or the numbers will describe a cache hit rather than a build.
+Use a cold cache for each run — restart the backend, or wait out `CACHE_TTL`, or the numbers describe a cache hit rather than a build.
 
 | Repo | Packages | Wall time | API calls | `vulns.scans` | `vulns.details` | Wasted dep calls | Nodes | Edges | Bytes |
 |---|---|---|---|---|---|---|---|---|---|
-| _small (<200)_ | | | | | | | | | |
-| _medium (~1k)_ | | | | | | | | | |
-| _large (5k+)_ | | | | | | | | | |
+| `the container repository-build` | 18 | 5.2s | 39 | 18 | 2 | 18 / 18 | 19 | 19 | 2.8 MB |
+| `the container repository` | 214 | 11.9s | 490 | 214 | 59 | 214 / 214 | 215 | 1,294 | 25.2 MB |
+| `the language repository` | 7,490 unique<br>(10,420 listed) | **342.5s** | 19,902 | 7,490 | 1,887 | 10,376 / 10,420 | 7,544 | 7,653 | 4.2 MB |
 
-**Rate-limit findings** (resolves open question #2 — decides whether `perf/12` is worth building):
+### 8.1 Where the 342.5 seconds actually go
+
+Large-repo breakdown. "Network time" is summed across all threads; wall time is what the user waits.
+
+| Endpoint | Calls | Mean | Network time | Share |
+|---|---|---|---|---|
+| `packages.dependencies` | 10,420 | 228ms | 2,376.1s | **53.0%** |
+| `vulns.scans` | 7,490 | 216ms | 1,613.9s | 36.0% |
+| `vulns.details` | 1,887 | 195ms | 368.0s | 8.2% |
+| `packages.list` | 105 | **1,169ms** | 122.8s | 2.7% |
+| | | | **4,480.8s** | |
+
+Decomposing the wall clock:
+
+| Phase | Wall | Note |
+|---|---|---|
+| Package pagination | **122.8s (36%)** | 105 pages fetched **sequentially** — nothing else runs during this |
+| Everything parallel | 219.7s | 4,358s of network ÷ 219.7s = **19.8× parallelism** |
+
+**The parallel phases run at 19.8× against `MAX_WORKERS = 20`.** The thread pool is perfectly saturated, so wall time is a direct function of call count ÷ worker count. This is the single most useful number in the whole baseline: it means every call removed converts to wall time at a fixed 1/20 rate, and raising worker count converts just as directly.
+
+### 8.2 Rate limits — open question #2, resolved
 
 | | Value |
 |---|---|
-| `X-RateLimit-Limit` | |
-| Lowest `remaining` observed | |
-| 429s per large build | |
-| Seconds slept | |
+| `X-RateLimit-Limit` | 50,000 |
+| Remaining after the 19,902-call build | 34,050 |
+| 429s across all three builds | **0** |
+| Seconds slept | **0.0** |
+| `X-RateLimit-Reset` | ≈2s after the build ended |
 
-**Formats returning no dependency data** (populates `DEPENDENCY_FORMATS` in `perf/02`):
+**Not rate-limit-bound — not even close.** The largest build consumed under a third of the budget and never once got throttled. §2.4 described a throttling collapse; it is not what is happening here. The binding constraint is worker count, and there is ample headroom to raise it.
 
-> _paste the `deps:` breakdown from a large-repo run_
+### 8.3 Dependency formats — populates `DEPENDENCY_FORMATS` for `perf/02`
+
+Of 10,420 dependency calls on the large repo, **10,376 returned nothing — 99.6% waste.**
+
+| Returns data | Always empty |
+|---|---|
+| `conda` (4/4), `maven` (6/8), `rpm` (6/6), `ruby` (26/26) | `alpine` (0/8,504), `npm` (0/1,822), `python` (0/17), `go` (0/8), `nuget` (0/7), `helm` (0/4), `docker` (0/3), `generic` (0/3), `deb` (0/2), `raw` (0/2), `cargo`, `composer`, `dart`, `terraform` (0/1 each) |
+
+> **⚠ Do not turn this straight into an allowlist.** `npm` returned empty across 1,822 calls and `python` across 17 — but both formats *can* carry dependency metadata, so this may be a property of these particular repos rather than of Cloudsmith. Gating on the observed-positive set alone risks silently dropping dependency edges in another workspace. Prefer a denylist of formats that structurally cannot have dependencies, and log when a gated format is skipped so the assumption stays visible. See the revised `perf/02` note.
+
+Separately: **2,930 dependency calls were pure duplicates** — the endpoint is called once per `slug_perm` (10,420) but there are only 7,490 unique `node_id`s. Deduplication alone removes 28% of these calls before any format gating.
+
+### 8.4 Scan-status distribution — sizes `perf/01`
+
+Added by `perf/00-scan-status-histogram`. Measured on `the language repository` (7,490 unique packages):
+
+| `security_scan_status` | Count | % |
+|---|---|---|
+| `Security Scanning Not Supported` | 5,603 | **74.8%** |
+| `Scan Detected No Vulnerabilities` | 1,863 | 24.9% |
+| `Scan Detected Vulnerabilities` | 24 | 0.3% |
+| `Awaiting Security Scan` | **0** | 0% |
+
+**`perf/01` removes 5,603 of 7,490 scan calls — 74.8%, worth ~1,210s of network time (27% of the total).** It is the second-largest win in the plan, not the blocked afterthought §8.4 previously made it.
+
+Three things fall out:
+
+**Behaviour-neutrality is now evidenced, not assumed.** The 5,603 unsupported packages produced **zero** `vulns.details` calls. That only happens when the scan list returns empty and [`get_package_vulnerabilities`](../backend/cloudsmith.py#L330-L332) early-returns `(None, 0, [])` — precisely the value `perf/01` would substitute. Skipping the call returns identical data.
+
+**The `"awaiting"` dilemma is unobserved here.** Zero packages carry that status, so the green-vs-grey behaviour change §5 warns about cannot occur on this workspace. Keep the guidance — freshly-uploaded packages can transit through `awaiting` — but it is not a blocker for landing `perf/01`.
+
+**⚠ This corrects §8.4's claim that `perf/03` was overestimated.** The aggregate details:scans ratio of 0.25 was *diluted by unsupported packages*. Among packages that actually get scanned it is **1.0**:
+
+| Repo | Scannable packages | `vulns.details` | Ratio |
+|---|---|---|---|
+| `the container repository` | 59 | 59 | **1.00** |
+| `the language repository` | 1,887 | 1,887 | **1.00** |
+
+So the original §2 analysis was right about the mechanism — every scannable package does trigger a detail fetch — and wrong only about how many packages are scannable. `perf/03`'s absolute saving is unchanged at ~368s, but it becomes proportionally much larger *after* `perf/01` lands, since it then targets 100% of the remaining scan traffic.
+
+**One format dominates everything.** `alpine` accounts for 5,580 of the 5,603 unsupported packages *and* 8,504 of the empty dependency calls. `perf/01` and `perf/02` together essentially delete alpine's entire cost from the build.
+
+### 8.5 What the baseline changes
+
+The measured model — `wall = sequential_pagination + (parallel_network ÷ workers)` — reproduces the observed 342.5s to within 0.5%, so it can be used to project. Assuming per-call latency holds as concurrency rises (it will degrade somewhat at the top end):
+
+| After | Pagination | Parallel network | Projected wall | vs. baseline |
+|---|---|---|---|---|
+| _baseline_ | 122.8s | 4,358s ÷ 20 = 217.9s | **342.5s** | — |
+| `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** | 1.5× |
+| `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** | 2.1× |
+| `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** | 6.7× |
+| `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** | 9.8× |
+| `+ perf/12` async, 100 workers | ~12s | 4.5s | **~17s** | **20.8×** |
+
+Ranked by network time removed:
+
+| Branch | Saves | Share of network time |
+|---|---|---|
+| `perf/02` gate dependency fetch | ~2,366s | **52.8%** |
+| `perf/01` skip unsupported scans | ~1,210s | **27.0%** |
+| `perf/03` short-circuit details | ~331s | 7.4% |
+| `perf/13` parallel pagination | ~110s wall | 36% of *wall*, un-parallelised |
+
+Four conclusions, three of which contradict the original plan:
+
+1. **`perf/02` is the single biggest win, by a wide margin** — 53% of all network time, 99.6% of it wasted. It was ranked 4th in the merge order; it should be 1st among the substantive branches.
+2. **`perf/01` is second, at 27%** — and behaviour-neutral, with the `"awaiting"` risk unobserved on this data (§8.4). Together `perf/01` + `perf/02` remove 80% of all network time.
+3. **`perf/13` (new — parallel pagination) did not exist in this plan and is worth ~110s.** Sequential pagination is 36% of wall time and blocks everything else. See §5. Its *relative* importance grows as the other branches land — once `perf/01` and `perf/02` are in, pagination is 76% of what remains.
+4. **`perf/12` (async) flips from "probably pointless" to the largest remaining lever.** §2.4 assumed throttling was the ceiling; measurement shows zero 429s and 68% of the rate-limit budget unused, with the pool saturated at exactly 19.8×. Concurrency is the binding constraint and there is room to raise it.
+
+**On payload size (`perf/08`):** the large repo serialised to only 4.2 MB, but the 214-package container repo produced **25.2 MB** — roughly 117 KB per node. Payload cost tracks CVE volume, not package count, so it is a problem for vulnerability-dense container repos specifically rather than for large repos generally. Keep the branch; expect its benefit to be concentrated on `the container repository`-shaped workloads.
+
+**Instrumentation gap — `perf/01` cannot yet be justified from data.** The counters track dependency formats but not the distribution of `security_scan_status`, which is exactly what determines how many scan calls that branch would remove. All 7,490 unique packages received a scan call; how many were `"not supported"` is unknown. Add a scan-status histogram to `perfstats.py` before committing to `perf/01`, or it is being sized on assumption.
 
 ---
 
@@ -520,39 +656,65 @@ Use a cold cache for each run — restart the backend, or wait out `CACHE_TTL`, 
    **Consequence: Tier 1 stands as designed.** No branches are invalidated; there is no bulk shortcut to collapse `perf/01`–`perf/03`. Proceed as written.
 
    **One salvageable lead** — `vulnerability_policy_violated:true` returns, in a single query, every package tripping the org's configured vulnerability policy. This is *not* a severity filter and cannot replace per-package scanning: it only catches packages breaching the configured threshold, so a Critical-only policy would miss all High/Medium/Low findings, and it returns nothing at all where no policy is configured. It is therefore useless for completeness — but it is an excellent **prioritisation** signal. See `perf/09`.
-2. **What is the actual rate limit for the target accounts?** Determines whether Tier 4 has any value. Answered by Tier 0.
+2. ~~**What is the actual rate limit for the target accounts?**~~ — **RESOLVED: 50,000, and not the constraint.** ✅
+
+   Measured 2026-08-14 (§8.2): the 19,902-call build left 34,050 remaining, triggered **zero** 429s and slept **zero** seconds. The parallel phases ran at 19.8× against `MAX_WORKERS = 20` — the pool is saturated and concurrency, not throttling, sets the wall time.
+
+   **Consequence: `perf/12` is promoted from "deferred, probably pointless" to the largest remaining lever** (projected 95s → 29s). Conversely `perf/07` is demoted: it is still worth doing for the partial-failure guarantee, but the throttling collapse it defends against was never observed. Note this workspace may not be representative — re-check `remaining` on any account with a smaller quota before raising worker counts in anger.
 3. **Should `"awaiting"` packages render distinctly?** See the behaviour decision in `perf/01`. Currently they would silently become green.
 4. **Is the CVE-as-node model (option A in `perf/04`) desirable as a product change**, independent of performance?
 5. **Multi-worker deployment?** `start.sh` runs a single uvicorn process. A persistent cache (`perf/05`) is a prerequisite for scaling out, since `_cache` is per-process.
 
 ---
 
-## Appendix — branch creation
+## Appendix A — ClickUp import
+
+[`clickup-import.csv`](clickup-import.csv) contains the whole plan as **15 branch tasks with 66 commit subtasks**, priorities and statuses matching §6.
+
+**Import:** Space → `...` → Import/Export → Import → CSV, then map columns:
+
+| CSV column | Map to |
+|---|---|
+| `Task ID` | Task ID *(required for subtask linking)* |
+| `Task Name` | Task Name |
+| `Task Content` | Description |
+| `Status` | Status |
+| `Priority` | Priority — 1 Urgent, 2 High, 3 Normal, 4 Low |
+| `Tags` | Tags |
+| `Parent ID` | Parent ID / Subtask of |
+| `Time Estimated` | Time Estimate (hours) |
+| `Branch` | custom field, or leave unmapped |
+
+**Before importing:** create the statuses `to do`, `in progress`, `complete` in the target List, or ClickUp will drop rows whose status it cannot resolve. `Task ID` **must** be mapped or the 66 subtasks import as flat top-level tasks.
+
+Regenerate after editing this document — the plan is the source of truth, the CSV is derived.
+
+---
+
+## Appendix B — branch creation
 
 ```bash
-# Tier 0
-git checkout main && git pull
-git checkout -b perf/00-instrumentation-baseline
+# Tier 0 — done
+# perf/00-instrumentation-baseline   (merged, PR #39)
+# perf/00-scan-status-histogram      (in progress)
 
-# Tier 1
-git checkout main && git checkout -b perf/01-skip-unscannable-packages
+# In §6 merge order
+git checkout main && git pull && git checkout -b perf/11-canvas-render-quick-wins
 git checkout main && git checkout -b perf/02-gate-dependency-fetch
+git checkout main && git checkout -b perf/01-skip-unscannable-packages
+git checkout main && git checkout -b perf/13-parallel-package-pagination
 git checkout main && git checkout -b perf/03-short-circuit-scan-details
 git checkout main && git checkout -b perf/04-collapse-cve-cliques
 
-# Tier 2
+# Re-measure here before continuing
+
+git checkout main && git checkout -b perf/12-async-http-client
 git checkout main && git checkout -b perf/05-persistent-scan-cache
 git checkout main && git checkout -b perf/06-inflight-coalescing
-git checkout main && git checkout -b perf/07-rate-limit-resilience
 git checkout main && git checkout -b perf/08-compression-payload-slim
-git checkout main && git checkout -b perf/09-stream-graph-response
-
-# Tier 3
+git checkout main && git checkout -b perf/07-rate-limit-resilience
 git checkout main && git checkout -b perf/10-fa2-worker-layout
-git checkout main && git checkout -b perf/11-canvas-render-quick-wins
-
-# Tier 4
-git checkout main && git checkout -b perf/12-async-http-client
+git checkout main && git checkout -b perf/09-stream-graph-response
 ```
 
 Branches with stated dependencies should be rebased onto their parent once it merges, rather than branched from `main` at creation time.
