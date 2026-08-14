@@ -34,8 +34,9 @@ BRANCHES = [
     (
         "PERF-00B", "perf/00-scan-status-histogram",
         "Tier 0: Scan-status histogram (sizes perf/01)",
-        "Tier 0 - Measurement", URGENT, "in progress", 3,
-        "Adds a security_scan_status histogram so perf/01 can be sized from data rather than assumption. "
+        "Tier 0 - Measurement", URGENT, "complete", 3,
+        "MERGED (PR #40). Adds a security_scan_status histogram so perf/01 can be sized from data "
+        "rather than assumption. "
         "RESULT: 74.8% of packages on neuro-packages are 'Security Scanning Not Supported' "
         "(5,603 of 7,490) - perf/01 is worth 27% of total network time.",
         "backend/perfstats.py, backend/main.py",
@@ -47,7 +48,7 @@ BRANCHES = [
             ("Switch Lock -> RLock (snapshot() re-enters via breakdown)", "complete"),
             ("Render scanstatus block with perf/01 projection in report", "complete"),
             ("Wire call sites in _build_graph and _fetch_repo_vuln_summary", "complete"),
-            ("Commit, push, open PR", "to do"),
+            ("Commit, push, open PR", "complete"),
         ],
     ),
     (
