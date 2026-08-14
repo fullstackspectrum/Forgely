@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, Response
 
 from cloudsmith import (
     APP_VERSION,
+    DEPENDENCY_DENYLIST_ENV,
     SEVERITY_RANK,
     create_session,
     dependency_denylist,
@@ -366,13 +367,31 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     denylist = dependency_denylist()
     seen_src: set[str] = set()
     dep_items: list[tuple[str, str]] = []
+    skipped_by_fmt: dict[str, int] = {}
     for slug, src_id in slug_to_id.items():
-        if slug_to_fmt.get(slug, "").lower() in denylist:
+        fmt = slug_to_fmt.get(slug, "").lower()
+        if fmt in denylist:
+            skipped_by_fmt[fmt] = skipped_by_fmt.get(fmt, 0) + 1
             continue
         if src_id in seen_src:
             continue
         seen_src.add(src_id)
         dep_items.append((slug, src_id))
+
+    # Keep the gating assumption visible. Aggregated to one record per build —
+    # per-package logging would emit >10k lines on a large repo. WARNING rather
+    # than INFO because the root logger sits at WARNING, so anything quieter is
+    # invisible by default, and a denylist that is silently wrong loses
+    # dependency edges without trace.
+    if skipped_by_fmt:
+        log.warning(
+            "Dependency fetch skipped for %d package(s) by format denylist "
+            "[%s]; %d fetch(es) queued. Override with %s (empty disables gating).",
+            sum(skipped_by_fmt.values()),
+            ", ".join(f"{f}={n}" for f, n in sorted(skipped_by_fmt.items(), key=lambda kv: -kv[1])),
+            len(dep_items),
+            DEPENDENCY_DENYLIST_ENV,
+        )
 
     def _fetch_dep(item: tuple[str, str]) -> tuple[str, list[dict]]:
         slug, src_id = item
