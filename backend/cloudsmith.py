@@ -7,6 +7,7 @@ import logging
 import os
 import pathlib
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -97,7 +98,15 @@ def create_session(api_key: str) -> requests.Session:
     return s
 
 
-def _api_get(session: requests.Session, url: str, params: dict | None = None) -> dict | list:
+def _api_get_full(
+    session: requests.Session, url: str, params: dict | None = None
+) -> tuple[dict | list, dict]:
+    """GET with retries, returning both the decoded body and the headers.
+
+    The retry, throttle and instrumentation logic lives here so the two entry
+    points cannot drift. ``_api_get`` is a thin wrapper that discards headers;
+    callers that need pagination metadata use this directly.
+    """
     stats = get_stats(session)
     bucket = bucket_for(url) if stats else ""
     delay = RETRY_BACKOFF
@@ -123,10 +132,15 @@ def _api_get(session: requests.Session, url: str, params: dict | None = None) ->
             delay *= 2
             continue
         resp.raise_for_status()
-        return resp.json()
+        return resp.json(), resp.headers
     if stats:
         stats.record_failure()
     raise RuntimeError(f"Max retries exceeded for {url}")
+
+
+def _api_get(session: requests.Session, url: str, params: dict | None = None) -> dict | list:
+    data, _ = _api_get_full(session, url, params=params)
+    return data
 
 
 def _api_get_page(session: requests.Session, url: str, params: dict | None = None) -> list:
@@ -287,20 +301,92 @@ def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str, fmt: 
     return upstreams
 
 
+PAGE_SIZE = 100
+# Pagination runs before the main worker pool starts, so it has the connection
+# pool to itself. Kept below CONNECTION_POOL_SIZE and modest because list pages
+# are the heaviest call in the API (~1.1s each, 100 full records per page).
+PAGINATION_WORKERS = 10
+
+
+def _page_total(headers) -> int | None:
+    """Total page count from Cloudsmith's pagination headers, if present.
+
+    Cloudsmith returns X-Pagination-PageTotal on every list response (verified
+    against a live response 2026-08-14, alongside X-Pagination-Count and a Link
+    header with rel="last"). Returns None if the header is missing or
+    unparseable, so callers can fall back to sequential walking.
+    """
+    raw = headers.get("X-Pagination-PageTotal")
+    if raw is None:
+        return None
+    try:
+        total = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return total if total > 0 else None
+
+
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
+    """Fetch every package in a repo, parallelising pagination where possible.
+
+    Sequential paging was 36% of total wall time on a 10k-package repo — 105
+    calls at a ~1.1s mean, during which the vulnerability worker pool sat idle
+    (docs/performance-design.md §8.1). Page 1 is fetched first to learn the page
+    count, then the remainder are fetched concurrently.
+
+    Page order is preserved. This is not cosmetic: _build_graph keeps the FIRST
+    package it sees for a given name@version and discards later duplicates, so
+    the order pages are concatenated in decides which package's metadata
+    (format, size, licence, uploaded_at) ends up on the node.
+    """
     url = f"{BASE_URL}/packages/{owner}/{repo}/"
-    page = 1
-    all_packages: list[dict] = []
-    while True:
-        log.info("Fetching packages – page %d (%d so far)", page, len(all_packages))
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        all_packages.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    log.info("Fetched %d packages from %s/%s", len(all_packages), owner, repo)
+
+    try:
+        first, headers = _api_get_full(session, url, params={"page": 1, "page_size": PAGE_SIZE})
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return []
+        raise
+
+    if not isinstance(first, list) or not first:
+        return []
+    if len(first) < PAGE_SIZE:
+        log.info("Fetched %d packages from %s/%s (single page)", len(first), owner, repo)
+        return first
+
+    total_pages = _page_total(headers)
+
+    if total_pages is None:
+        # No usable header — walk sequentially from page 2, as before.
+        log.warning("No X-Pagination-PageTotal for %s/%s – paginating sequentially", owner, repo)
+        all_packages = list(first)
+        page = 2
+        while True:
+            data = _api_get_page(session, url, params={"page": page, "page_size": PAGE_SIZE})
+            if not data:
+                break
+            all_packages.extend(data)
+            if len(data) < PAGE_SIZE:
+                break
+            page += 1
+        log.info("Fetched %d packages from %s/%s", len(all_packages), owner, repo)
+        return all_packages
+
+    def _fetch_page(page: int) -> tuple[int, list]:
+        return page, _api_get_page(session, url, params={"page": page, "page_size": PAGE_SIZE})
+
+    pages: dict[int, list] = {1: first}
+    with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+        futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
+        for fut in as_completed(futures):
+            page, data = fut.result()
+            pages[page] = data
+
+    all_packages = [pkg for page in sorted(pages) for pkg in pages[page]]
+    log.info(
+        "Fetched %d packages from %s/%s (%d pages, %d in parallel)",
+        len(all_packages), owner, repo, total_pages, max(0, total_pages - 1),
+    )
     return all_packages
 
 
