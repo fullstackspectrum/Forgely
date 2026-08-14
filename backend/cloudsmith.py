@@ -326,6 +326,50 @@ def _page_total(headers) -> int | None:
     return total if total > 0 else None
 
 
+# Safety stop for speculative pagination: 1,000 pages is 100k packages, well
+# beyond anything observed. Guards against an API that never returns a short
+# page, which would otherwise loop forever.
+MAX_SPECULATIVE_PAGES = 1000
+
+
+def _paginate_speculatively(first: list, fetch_page) -> dict[int, list]:
+    """Fetch pages in concurrent batches, stopping at the first short page.
+
+    Used only when the page-total header is missing or unparseable. Pagination
+    is monotonic — a page shorter than PAGE_SIZE is the last one — so a batch
+    can be dispatched blind and truncated at whichever page terminates it.
+    Costs up to PAGINATION_WORKERS-1 wasted calls at the boundary, which is far
+    cheaper than walking one page at a time.
+    """
+    pages: dict[int, list] = {1: first}
+    next_page = 2
+
+    while next_page <= MAX_SPECULATIVE_PAGES:
+        batch = list(range(next_page, next_page + PAGINATION_WORKERS))
+        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+            futures = [pool.submit(fetch_page, p) for p in batch]
+            for fut in as_completed(futures):
+                page, data = fut.result()
+                pages[page] = data
+
+        # First short or empty page in the batch ends the walk. Keep it (it is
+        # the genuine last page) and discard everything speculated beyond it.
+        terminator = next((p for p in batch if len(pages.get(p, [])) < PAGE_SIZE), None)
+        if terminator is not None:
+            for page in batch:
+                if page > terminator:
+                    pages.pop(page, None)
+            return pages
+
+        next_page += PAGINATION_WORKERS
+
+    log.warning(
+        "Speculative pagination hit the %d-page safety cap – results may be truncated",
+        MAX_SPECULATIVE_PAGES,
+    )
+    return pages
+
+
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
     """Fetch every package in a repo, parallelising pagination where possible.
 
@@ -354,40 +398,33 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list
         log.info("Fetched %d packages from %s/%s (single page)", len(first), owner, repo)
         return first
 
-    total_pages = _page_total(headers)
-
-    if total_pages is None:
-        # No usable header — walk sequentially from page 2, as before.
-        log.warning("No X-Pagination-PageTotal for %s/%s – paginating sequentially", owner, repo)
-        all_packages = list(first)
-        page = 2
-        while True:
-            data = _api_get_page(session, url, params={"page": page, "page_size": PAGE_SIZE})
-            if not data:
-                break
-            all_packages.extend(data)
-            if len(data) < PAGE_SIZE:
-                break
-            page += 1
-        log.info("Fetched %d packages from %s/%s", len(all_packages), owner, repo)
-        return all_packages
-
     def _fetch_page(page: int) -> tuple[int, list]:
         return page, _api_get_page(session, url, params={"page": page, "page_size": PAGE_SIZE})
 
-    pages: dict[int, list] = {1: first}
-    with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
-        futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
-        for fut in as_completed(futures):
-            page, data = fut.result()
-            pages[page] = data
+    total_pages = _page_total(headers)
+    if total_pages is not None:
+        pages: dict[int, list] = {1: first}
+        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+            futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
+            for fut in as_completed(futures):
+                page, data = fut.result()
+                pages[page] = data
+        log.info(
+            "Fetched %d packages from %s/%s (%d pages, %d in parallel)",
+            sum(len(v) for v in pages.values()), owner, repo, total_pages, total_pages - 1,
+        )
+    else:
+        log.warning(
+            "No X-Pagination-PageTotal for %s/%s – falling back to speculative batching",
+            owner, repo,
+        )
+        pages = _paginate_speculatively(first, _fetch_page)
+        log.info(
+            "Fetched %d packages from %s/%s (%d pages, speculative)",
+            sum(len(v) for v in pages.values()), owner, repo, len(pages),
+        )
 
-    all_packages = [pkg for page in sorted(pages) for pkg in pages[page]]
-    log.info(
-        "Fetched %d packages from %s/%s (%d pages, %d in parallel)",
-        len(all_packages), owner, repo, total_pages, max(0, total_pages - 1),
-    )
-    return all_packages
+    return [pkg for page in sorted(pages) for pkg in pages[page]]
 
 
 def fetch_dependencies(
