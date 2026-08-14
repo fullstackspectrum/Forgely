@@ -10,6 +10,65 @@
 
 ---
 
+## How to read this plan
+
+**Three different orderings are in play, and they deliberately do not line up.**
+
+| Axis | Means | Where | Example |
+|---|---|---|---|
+| **Tier** | *What kind* of work it is | §4, §5 | Tier 1 = request-volume reduction |
+| **Branch number** | Stable identifier, assigned at planning time | §5 | `perf/02` is always `perf/02` |
+| **Merge order** | *When* to do it — re-derived from measurement | §6 | `perf/02` is merged **3rd** |
+
+Branch numbers were assigned before anything was measured, so they encode the *original* tier grouping. The §8 baseline then reshuffled the execution order. **Treat the numbers as names, not as sequence** — `perf/11` is Tier 3 but merges 2nd because it is two lines; `perf/12` is Tier 4 but merges 8th because measurement promoted it.
+
+### Hierarchy — Tier → Branch → Commits
+
+```
+Tier 0 — Measurement (11 commits)
+├── perf/00-instrumentation-baseline ......... 5   ✅ merged (PR #39)
+└── perf/00-scan-status-histogram ............ 6   ✅ merged (PR #40)
+
+Tier 1 — Request volume (25 commits)
+├── perf/02-gate-dependency-fetch ............ 6   ← biggest win, 53% of network time
+├── perf/01-skip-unscannable-packages ........ 5   ← 27%
+├── perf/13-parallel-package-pagination ...... 5   🆕 added after baselining
+├── perf/03-short-circuit-scan-details ....... 5   ⚠ highest correctness risk
+└── perf/04-collapse-cve-cliques ............. 4
+
+Tier 2 — Caching / resilience / transport / UX (20 commits)
+├── perf/05-persistent-scan-cache ............ 5
+├── perf/06-inflight-coalescing .............. 2
+├── perf/07-rate-limit-resilience ............ 4
+├── perf/08-compression-payload-slim ......... 4
+└── perf/09-stream-graph-response ............ 5
+
+Tier 3 — Frontend rendering (5 commits)
+├── perf/10-fa2-worker-layout ................ 3
+└── perf/11-canvas-render-quick-wins ......... 2   ← 2 lines, merge first
+
+Tier 4 — Concurrency (5 commits)
+└── perf/12-async-http-client ................ 5   ⬆ promoted by measurement
+```
+
+**15 branches, 66 commits.** Tiers group work by theme; they are *not* a sequence. For the order you actually work through, see **§6**.
+
+### Where to look
+
+| You want | Go to |
+|---|---|
+| Why the load is slow | §2 |
+| What each branch changes, file by file | §5 |
+| What to do first | **§6** |
+| Real measured numbers | §8 |
+| What measurement changed about the plan | §8.5 |
+| Tasks for ClickUp | Appendix A |
+| `git checkout -b` commands | Appendix B |
+
+In ClickUp each branch is a task and each commit a subtask; the tier lives on `Tags`, so tier and priority views are both recoverable.
+
+---
+
 ## 1. Problem
 
 On large Cloudsmith workspaces — repositories with several thousand packages — initial graph load takes **5–10 minutes**. During this window the UI shows only a spinner, and a single rate-limit exhaustion can fail the entire request, discarding all completed work.
