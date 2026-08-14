@@ -271,10 +271,18 @@ def format_report(label: str, stats: RequestStats, wall_seconds: float, extra: d
             f"(skippable but changes colour), "
             f"{scan['must_scan']} must scan"
         )
-        if scans_made:
+        # Only project a saving that is still available. Once perf/01 is
+        # applied, vulns.scans already excludes unscannable packages, and the
+        # old arithmetic (scans_made - saved) clamped to zero — reporting a
+        # further 1,887 calls as removable when none remain.
+        if scans_made > scan["must_scan"]:
             lines.append(
                 f"              perf/01 would cut vulns.scans "
-                f"{scans_made} -> {max(0, scans_made - saved)}"
+                f"{scans_made} -> {scan['must_scan']}"
+            )
+        elif scans_made:
+            lines.append(
+                f"              perf/01 applied: {saved} scan call(s) skipped"
             )
         for status, count in scan["histogram"].items():
             lines.append(f"    {status:<36} {count:>6}")
