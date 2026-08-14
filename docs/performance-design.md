@@ -317,10 +317,10 @@ Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separ
 
 **Also dedupe by `node_id`.** The endpoint is called once per `slug_perm` (10,420) though only 7,490 node IDs are unique — **2,930 calls are exact duplicates**, removable independently of any format gating.
 
-**Acceptance criteria**
-- `packages.dependencies` bucket drops from 10,420 to under 200 on `neuro-packages`.
-- Wall time drops from 342.5s to ~222s (§8.4 projection).
-- No dependency edge present on `main` is missing after the change (diff edge sets on a multi-format repo).
+**Acceptance criteria — all met, see §8.6**
+- ✅ `packages.dependencies` bucket drops from 10,420 to under 200 — **measured 80**.
+- ✅ Wall time drops from 342.5s to ~222s — **measured 229.5s**, within 3% of projection.
+- ✅ No dependency edge present on `main` is missing — **edge set diff: 0 lost, 0 gained**.
 
 **Expected impact — measured, not estimated: 53% of all network time, 99.6% of it wasted.** The largest single win in the plan.
 
@@ -541,7 +541,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 |---|---|---|---|
 | 1 | ✅ `perf/00-instrumentation-baseline` | Everything else is validated against it | — |
 | 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit | — |
-| 3 | **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → ~222s |
+| 3 | ✅ **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → **229.5s measured** |
 | 4 | **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → ~162s |
 | 5 | **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → ~51s |
 | 6 | `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → ~35s |
@@ -674,7 +674,7 @@ The measured model — `wall = sequential_pagination + (parallel_network ÷ work
 | After | Pagination | Parallel network | Projected wall | vs. baseline |
 |---|---|---|---|---|
 | _baseline_ | 122.8s | 4,358s ÷ 20 = 217.9s | **342.5s** | — |
-| `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** | 1.5× |
+| `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** → ✅ **229.5s actual** | 1.5× |
 | `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** | 2.1× |
 | `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** | 6.7× |
 | `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** | 9.8× |
@@ -697,6 +697,40 @@ Four conclusions, three of which contradict the original plan:
 4. **`perf/12` (async) flips from "probably pointless" to the largest remaining lever.** §2.4 assumed throttling was the ceiling; measurement shows zero 429s and 68% of the rate-limit budget unused, with the pool saturated at exactly 19.8×. Concurrency is the binding constraint and there is room to raise it.
 
 **On payload size (`perf/08`):** the large repo serialised to only 4.2 MB, but the 214-package container repo produced **25.2 MB** — roughly 117 KB per node. Payload cost tracks CVE volume, not package count, so it is a problem for vulnerability-dense container repos specifically rather than for large repos generally. Keep the branch; expect its benefit to be concentrated on `neuro-containers`-shaped workloads.
+
+### 8.6 Results by branch
+
+Measured on `neuro-packages`, cold cache, `MAX_WORKERS=20`. Each row is the state *after* that branch lands, so effects are cumulative.
+
+| Branch | Wall | vs. baseline | API calls | Key movement |
+|---|---|---|---|---|
+| _baseline_ | 342.5s | — | 19,902 | — |
+| **`perf/02`** ✅ | **229.5s** | **1.49×** | 9,562 | `packages.dependencies` 10,420 → **80** |
+| `perf/01` | _pending_ | _2.1× proj._ | | `vulns.scans` 7,490 → 1,887 |
+| `perf/13` | _pending_ | _6.7× proj._ | | `packages.list` ~123s → ~12s |
+
+**The model holds.** §8.5 projected ~222s for `perf/02`; the measured result is **229.5s — within 3%**. The projection method (`wall = pagination + parallel_network ÷ workers`) is therefore sound enough to plan against, and the remaining estimates deserve corresponding confidence.
+
+#### `perf/02` acceptance evidence
+
+A/B run on identical code, with `FORGELY_DEPENDENCY_DENYLIST=""` to disable gating for the control arm — this reproduces the pre-branch fetch set without a checkout, so the only variable is the denylist.
+
+| | Ungated (control) | Gated | Δ |
+|---|---|---|---|
+| Nodes | 7,544 | 7,544 | 0 |
+| **Edges (set)** | **7,650** | **7,650** | **0** |
+| Dependency edges | 158 | 158 | 0 |
+| `total_cves` | 544 | 544 | 0 |
+| Packages with severity drift | — | — | 0 |
+| Wall | 309.7s | 229.5s | −80.2s |
+| `packages.dependencies` | 7,490 | 80 | −7,410 |
+
+**Edges lost: 0. Edges gained: 0.** Gating removes 10,334 calls without dropping a single edge.
+
+Two notes for anyone re-deriving these numbers:
+
+- **Both arms show 7,650 edges, not the baseline's 7,653.** De-duplication is not env-gated, so the control arm is "baseline + dedupe" rather than pure baseline. The −3 is the `rpm` group `cloudsmith-redhat-example@1.0.4.1-1`, whose 3 dependencies were fetched via 2 slugs and appended twice. All six duplicate `node_id` groups were verified to return **identical** dependency sets before deduping, so the edge *set* is unchanged and only genuine duplicates disappear.
+- **The control arm is 309.7s, not 342.5s**, for the same reason — dedupe alone removes 2,930 dependency calls. Attribute 342.5 → 309.7 to dedupe and 309.7 → 229.5 to format gating.
 
 **Instrumentation gap — `perf/01` cannot yet be justified from data.** The counters track dependency formats but not the distribution of `security_scan_status`, which is exactly what determines how many scan calls that branch would remove. All 7,490 unique packages received a scan call; how many were `"not supported"` is unknown. Add a scan-status histogram to `perfstats.py` before committing to `perf/01`, or it is being sized on assumption.
 
