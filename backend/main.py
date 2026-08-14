@@ -358,12 +358,21 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
     # once per build rather than per package — dependency_denylist() reads the
     # environment on every call. Packages with an unknown or empty format are
     # NOT skipped, so the failure mode is a wasted call, never a missing edge.
+    # Also de-duplicate by node_id. slug_to_id holds one entry per slug_perm,
+    # but several slugs can share a name@version (e.g. the same package built
+    # for multiple architectures). Fetching each of them separately not only
+    # wastes calls, it appends the *same* dependency edge once per sibling —
+    # the edge list below has no dedup of its own.
     denylist = dependency_denylist()
-    dep_items = [
-        (slug, src_id)
-        for slug, src_id in slug_to_id.items()
-        if slug_to_fmt.get(slug, "").lower() not in denylist
-    ]
+    seen_src: set[str] = set()
+    dep_items: list[tuple[str, str]] = []
+    for slug, src_id in slug_to_id.items():
+        if slug_to_fmt.get(slug, "").lower() in denylist:
+            continue
+        if src_id in seen_src:
+            continue
+        seen_src.add(src_id)
+        dep_items.append((slug, src_id))
 
     def _fetch_dep(item: tuple[str, str]) -> tuple[str, list[dict]]:
         slug, src_id = item
