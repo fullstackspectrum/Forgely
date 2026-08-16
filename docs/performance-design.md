@@ -338,7 +338,7 @@ Recommendation: skip `"not supported"` in this branch. Handle `"awaiting"` separ
 
 **Risk.** If the Cloudsmith list endpoint does not reliably populate `num_vulnerabilities`, early return would mask real vulnerabilities — a false-negative in a security tool. This must be validated, not assumed.
 
-**Acceptance criteria** *(stricter than other branches — this one can hide findings)*
+**Acceptance criteria — all met, see §8.6** *(stricter than other branches — this one can hide findings)*
 - On a repository with known vulnerable packages, the full graph JSON is **byte-identical** to `main` for all `max_severity`, `vuln_count`, and `cves` fields.
 - Explicitly verify at least one package where the list response reports `num_vulnerabilities > 0` but embeds no vuln array — confirm the detail fetch still fires.
 - Log a `WARNING` when a scan reports `num_vulnerabilities == 0` but a detail fetch would have returned vulns; run with the short-circuit disabled via env flag for one cycle to confirm the count is zero.
@@ -545,7 +545,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | 3 | ✅ **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → **229.5s measured** |
 | 4 | ✅ **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → **172.8s measured** |
 | 5 | ✅ **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → **64.6s measured** |
-| 6 | `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → ~35s |
+| 6 | ✅ `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → **45.4s measured** |
 | 7 | `perf/04-collapse-cve-cliques` | Edges are modest on `the language repository` (7,653 for 7,544 nodes); matters most on container repos | — |
 | — | **Re-measure before continuing.** | | |
 | 8 | **`perf/12-async-http-client`** ⬆⬆ | Was "only if data justifies it" — **it does.** Pool saturated at 19.8×, zero 429s, 68% of budget unused | → ~29s |
@@ -678,7 +678,7 @@ The measured model — `wall = sequential_pagination + (parallel_network ÷ work
 | `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** → ✅ **229.5s actual** | 1.5× |
 | `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** → ✅ **172.8s actual** | 2.1× |
 | `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** → ✅ **64.6s actual** | 6.7× |
-| `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** | 9.8× |
+| `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** → ✅ **45.4s actual** | 9.8× |
 | `+ perf/12` async, 100 workers | ~12s | 4.5s | **~17s** | **20.8×** |
 
 Ranked by network time removed:
@@ -709,6 +709,7 @@ Measured on `the language repository`, cold cache, `MAX_WORKERS=20`. Each row is
 | **`perf/02`** ✅ | **229.5s** | **1.49×** | 9,562 | `packages.dependencies` 10,420 → **80** |
 | **`perf/01`** ✅ | **172.8s** | **1.98×** | 3,959 | `vulns.scans` 7,490 → **1,887** |
 | **`perf/13`** ✅ | **64.6s** | **5.30×** | 3,959 | `packages.list` 124.9s → **~17s** wall |
+| **`perf/03`** ✅ | **45.4s** | **7.54×** | 2,096 | `vulns.details` 1,887 → **24** |
 
 **The model holds.** §8.5 projected ~222s for `perf/02` and ~162s for `perf/01`; measured **229.5s** and **172.8s** — within 3% and 7% respectively. The projection method (`wall = pagination + parallel_network ÷ workers`) is sound enough to plan against, and the remaining estimates deserve corresponding confidence.
 
@@ -741,7 +742,45 @@ API call count is **unchanged at 3,959** — this branch alters timing, not volu
 | `packages.list` (parallelised) | ~17s | 26% |
 | `packages.dependencies` | ~1.4s | 2% |
 
-`vulns.details` is now the largest single removable item — **`perf/03` is next**, and it targets 100% of that 19.5s.
+`vulns.details` was the largest single removable item — **`perf/03` addressed it.**
+
+#### `perf/03` acceptance evidence
+
+This branch was flagged as the highest correctness risk in the plan, so the safety question was settled **before** any code was written: both the scan list *and* the detail were fetched for all 1,887 scannable packages, looking for a single counterexample.
+
+| Pre-implementation validation | |
+|---|---|
+| Scannable packages probed (list **and** detail) | 1,887 |
+| Would be short-circuited | **1,863 (98.7%)** |
+| **Skipped but detail actually had vulns** | **0** |
+| Of the 24 kept, how many returned findings | **24 (100%)** |
+| Packages with >1 scan | **0** — older-scan fallback unreachable |
+
+Post-implementation diff against `main`:
+
+| | Control | Branch | Δ |
+|---|---|---|---|
+| Nodes / edges / CVEs | 7,544 / 7,650 / 544 | identical | **0** |
+| All 12 node metadata fields | — | identical across 7,490 | **0** |
+| **CVE lists per package** | — | **0 differing** | **0** |
+| critical / high / safe | 1 / 7 / 7,466 | identical | **0** |
+| `vulns.details` | 1,887 | **24** | −1,863 |
+| Cross-check suspects raised | — | **0** | |
+
+The plan estimated ~90% of detail calls removable; actual is **98.7%**.
+
+**Where the 45.4s now goes:**
+
+| Phase | Wall | Share |
+|---|---|---|
+| `vulns.scans` (491.6s ÷ 20) | ~24.6s | 54% |
+| `packages.list` (147.9s ÷ 10) | ~15s | 33% |
+| `packages.dependencies` | ~1.3s | 3% |
+| `vulns.details` | ~0.3s | <1% |
+
+**`vulns.scans` is now irreducible by request-shaping** — 1,887 calls, one per scannable package, all returning data that is used. Removing it needs either caching (`perf/05`) or more concurrency (`perf/12`). Tier 1 is effectively finished.
+
+Note `PAGINATION_WORKERS` is 10 while the main pool is 20. At `perf/12`'s projected 100 workers, pagination would become the dominant phase again — worth raising that constant as part of that branch rather than leaving it at 10.
 
 #### `perf/01` acceptance evidence
 
