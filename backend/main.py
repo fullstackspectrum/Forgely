@@ -51,6 +51,7 @@ from models import (
     WorkspaceOverviewResponse,
     WorkspaceRepoSummary,
 )
+from cache import ScanCache, cache_enabled
 from perfstats import BuildTimer, format_report, get_stats, payload_bytes_enabled
 
 # Load .env from the project root (one level up)
@@ -75,6 +76,29 @@ perf_log.setLevel(logging.INFO)
 # timing data.
 _last_perf: dict[str, dict] = {}
 _perf_lock = threading.Lock()
+
+# Persistent scan cache (perf/05). Lazily created so cache_enabled() and the
+# path override are read *after* load_dotenv, and shared across builds so the
+# SQLite connection is opened once rather than per request.
+_scan_cache: ScanCache | None = None
+_scan_cache_lock = threading.Lock()
+
+
+def _get_scan_cache() -> ScanCache | None:
+    global _scan_cache
+    if not cache_enabled():
+        return None
+    if _scan_cache is None:
+        with _scan_cache_lock:
+            if _scan_cache is None:
+                try:
+                    _scan_cache = ScanCache()
+                    log.info("Scan cache at %s (%d entries)",
+                             _scan_cache.path, _scan_cache.entry_count())
+                except Exception as exc:  # a broken cache must never fail a build
+                    log.warning("Scan cache unavailable (%s) – continuing without it", exc)
+                    return None
+    return _scan_cache
 
 
 def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict) -> dict | None:
@@ -239,14 +263,27 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         pkg_metas.append({
             "pkg": pkg, "slug": slug, "name": name, "version": version,
             "node_id": node_id, "scannable": scannable,
+            # perf/05 cache key. Moves when Cloudsmith re-scans, so a changed
+            # scan invalidates itself without any TTL.
+            "scan_completed_at": pkg.get("security_scan_completed_at") or "",
         })
 
     # --- Parallel vulnerability scanning ---
     MAX_WORKERS = 20
 
+    scan_cache = _get_scan_cache()
+
     def _scan_vuln(meta: dict) -> tuple[dict, str | None, int, list[dict]]:
         slug = meta["slug"]
-        return (meta, *get_package_vulnerabilities(session, owner, repo, slug))
+        completed_at = meta["scan_completed_at"]
+        if scan_cache is not None:
+            cached = scan_cache.get(owner, repo, slug, completed_at)
+            if cached is not None:
+                return (meta, *cached)
+        result = get_package_vulnerabilities(session, owner, repo, slug)
+        if scan_cache is not None:
+            scan_cache.put(owner, repo, slug, completed_at, result)
+        return (meta, *result)
 
     vuln_results: dict[str, tuple[str | None, int, list[dict]]] = {}
 
@@ -270,6 +307,9 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         for fut in as_completed(futures):
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
+
+    if scan_cache is not None:
+        scan_cache.commit()
 
     shortcircuit_suspects: list[str] = []
     for meta in pkg_metas:
