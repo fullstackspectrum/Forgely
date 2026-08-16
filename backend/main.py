@@ -101,13 +101,15 @@ def _get_scan_cache() -> ScanCache | None:
     return _scan_cache
 
 
-def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict) -> dict | None:
+def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict,
+                 cache: dict | None = None) -> dict | None:
     """Log the stats block for one build and retain it for ?debug=1."""
     stats = get_stats(session)
     if stats is None:
         return None
-    perf_log.info(format_report(label, stats, timer.elapsed, extra))
+    perf_log.info(format_report(label, stats, timer.elapsed, extra, cache))
     snapshot = stats.snapshot()
+    snapshot["cache"] = cache
     snapshot["wall_seconds"] = round(timer.elapsed, 2)
     snapshot["result"] = extra
     with _perf_lock:
@@ -312,6 +314,9 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> 
     MAX_WORKERS = 20
 
     scan_cache = _get_scan_cache()
+    # Counters are cumulative on the shared cache, so snapshot here and diff
+    # at the end — otherwise the block would report every build ever run.
+    _cache_before = scan_cache.stats() if scan_cache else None
 
     def _scan_vuln(meta: dict) -> tuple[dict, str | None, int, list[dict]]:
         slug = meta["slug"]
@@ -348,8 +353,22 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> 
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
 
+    cache_delta: dict | None = None
     if scan_cache is not None:
         scan_cache.commit()
+        after = scan_cache.stats()
+        hits = after["hits"] - _cache_before["hits"]
+        misses = after["misses"] - _cache_before["misses"]
+        looked_up = hits + misses
+        cache_delta = {
+            "hits": hits,
+            "misses": misses,
+            "writes": after["writes"] - _cache_before["writes"],
+            "unkeyable": after["unkeyable"] - _cache_before["unkeyable"],
+            "hit_rate": round(100 * hits / looked_up, 1) if looked_up else 0.0,
+            "entries": scan_cache.entry_count(),
+            "size_mb": round(scan_cache.size_bytes() / 1024 / 1024, 1),
+        }
 
     shortcircuit_suspects: list[str] = []
     for meta in pkg_metas:
@@ -579,6 +598,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> 
             "cves": total_cves,
             "bytes": len(result.model_dump_json()) if payload_bytes_enabled() else None,
         },
+        cache=cache_delta,
     )
     return result
 

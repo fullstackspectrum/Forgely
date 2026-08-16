@@ -227,8 +227,19 @@ def payload_bytes_enabled() -> bool:
     return os.getenv("FORGELY_PERF_PAYLOAD", "").lower() in ("1", "true", "yes")
 
 
-def format_report(label: str, stats: RequestStats, wall_seconds: float, extra: dict | None = None) -> str:
-    """Render a single multi-line log record for one build."""
+def format_report(
+    label: str,
+    stats: RequestStats,
+    wall_seconds: float,
+    extra: dict | None = None,
+    cache: dict | None = None,
+) -> str:
+    """Render a single multi-line log record for one build.
+
+    *cache* is the per-build delta from the persistent scan cache (perf/05),
+    passed in rather than tracked on RequestStats — that class counts HTTP
+    requests, and the cache is a different concern that merely explains them.
+    """
     snap = stats.snapshot()
     extra = extra or {}
 
@@ -245,6 +256,15 @@ def format_report(label: str, stats: RequestStats, wall_seconds: float, extra: d
         f"{snap['throttle_seconds']}s slept, "
         f"{snap['retries']} retries, {snap['failures']} failures"
     )
+
+    if cache:
+        line = (f"  cache:     {cache['hits']} hit / {cache['misses']} miss "
+                f"({cache['hit_rate']}% hit rate), {cache['writes']} written")
+        if cache.get("unkeyable"):
+            line += f", {cache['unkeyable']} unkeyable"
+        lines.append(line)
+        if cache.get("entries") is not None:
+            lines.append(f"             store: {cache['entries']:,} entries, {cache['size_mb']} MB")
 
     rl = snap["rate_limit_headers"]
     if any(rl.values()):
