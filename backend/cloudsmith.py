@@ -163,50 +163,19 @@ def fetch_namespaces(session: requests.Session) -> list[dict]:
 
 def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all repositories within a namespace."""
-    url = f"{BASE_URL}/repos/{owner}/"
-    page = 1
-    repos: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        repos.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return repos
+    return _fetch_paginated(session, f"{BASE_URL}/repos/{owner}/", label=f"{owner} repos")
 
 
 def fetch_org_members(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all members of an organization."""
-    url = f"{BASE_URL}/orgs/{owner}/members/"
-    page = 1
-    members: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100, "is_active": True})
-        if not data:
-            break
-        members.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return members
+    return _fetch_paginated(
+        session, f"{BASE_URL}/orgs/{owner}/members/", {"is_active": True}, f"{owner} members"
+    )
 
 
 def fetch_org_services(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all service accounts within an organization."""
-    url = f"{BASE_URL}/orgs/{owner}/services/"
-    page = 1
-    services: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        services.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return services
+    return _fetch_paginated(session, f"{BASE_URL}/orgs/{owner}/services/", label=f"{owner} services")
 
 
 def fetch_org_teams(session: requests.Session, owner: str) -> list[dict]:
@@ -370,23 +339,33 @@ def _paginate_speculatively(first: list, fetch_page) -> dict[int, list]:
     return pages
 
 
-def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
-    """Fetch every package in a repo, parallelising pagination where possible.
+def _fetch_paginated(
+    session: requests.Session,
+    url: str,
+    extra_params: dict | None = None,
+    label: str = "",
+) -> list[dict]:
+    """Fetch every page of a paginated list endpoint, in parallel where possible.
 
     Sequential paging was 36% of total wall time on a 10k-package repo — 105
-    calls at a ~1.1s mean, during which the vulnerability worker pool sat idle
+    calls at a ~1.1s mean, during which the worker pool sat idle
     (docs/performance-design.md §8.1). Page 1 is fetched first to learn the page
-    count, then the remainder are fetched concurrently.
+    count from X-Pagination-PageTotal, then the remainder go out concurrently.
+    Falls back to speculative batching when that header is unusable.
 
-    Page order is preserved. This is not cosmetic: _build_graph keeps the FIRST
-    package it sees for a given name@version and discards later duplicates, so
-    the order pages are concatenated in decides which package's metadata
-    (format, size, licence, uploaded_at) ends up on the node.
+    Page order is always preserved. This is not cosmetic: _build_graph keeps the
+    FIRST package it sees for a given name@version and discards later
+    duplicates, so the order pages are concatenated in decides which package's
+    metadata (format, size, licence, uploaded_at) ends up on the node.
     """
-    url = f"{BASE_URL}/packages/{owner}/{repo}/"
+    def _params(page: int) -> dict:
+        p = {"page": page, "page_size": PAGE_SIZE}
+        if extra_params:
+            p.update(extra_params)
+        return p
 
     try:
-        first, headers = _api_get_full(session, url, params={"page": 1, "page_size": PAGE_SIZE})
+        first, headers = _api_get_full(session, url, params=_params(1))
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 404:
             return []
@@ -395,11 +374,10 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list
     if not isinstance(first, list) or not first:
         return []
     if len(first) < PAGE_SIZE:
-        log.info("Fetched %d packages from %s/%s (single page)", len(first), owner, repo)
         return first
 
     def _fetch_page(page: int) -> tuple[int, list]:
-        return page, _api_get_page(session, url, params={"page": page, "page_size": PAGE_SIZE})
+        return page, _api_get_page(session, url, params=_params(page))
 
     total_pages = _page_total(headers)
     if total_pages is not None:
@@ -409,22 +387,23 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list
             for fut in as_completed(futures):
                 page, data = fut.result()
                 pages[page] = data
-        log.info(
-            "Fetched %d packages from %s/%s (%d pages, %d in parallel)",
-            sum(len(v) for v in pages.values()), owner, repo, total_pages, total_pages - 1,
-        )
+        log.info("Fetched %s: %d pages, %d in parallel", label or url, total_pages, total_pages - 1)
     else:
         log.warning(
-            "No X-Pagination-PageTotal for %s/%s – falling back to speculative batching",
-            owner, repo,
+            "No X-Pagination-PageTotal for %s – falling back to speculative batching",
+            label or url,
         )
         pages = _paginate_speculatively(first, _fetch_page)
-        log.info(
-            "Fetched %d packages from %s/%s (%d pages, speculative)",
-            sum(len(v) for v in pages.values()), owner, repo, len(pages),
-        )
 
-    return [pkg for page in sorted(pages) for pkg in pages[page]]
+    return [item for page in sorted(pages) for item in pages[page]]
+
+
+def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
+    packages = _fetch_paginated(
+        session, f"{BASE_URL}/packages/{owner}/{repo}/", label=f"{owner}/{repo} packages"
+    )
+    log.info("Fetched %d packages from %s/%s", len(packages), owner, repo)
+    return packages
 
 
 def fetch_dependencies(
