@@ -34,6 +34,12 @@ CONNECTION_POOL_SIZE = 64
 
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
+# How many prior scans to consult when the latest yields no findings. The walk
+# was unbounded before perf/03: a package retaining N scans could cost N-1
+# extra detail round-trips to resurface findings the latest scan reports as
+# resolved. One is enough to cover an API that lags on the newest record.
+HISTORICAL_SCAN_FALLBACK = 1
+
 # ──────────────────────────────────────────────────────────────
 #  Dependency-fetch gating (perf/02)
 # ──────────────────────────────────────────────────────────────
@@ -532,10 +538,23 @@ def get_package_vulnerabilities(
                 if not api_count:
                     api_count = details.get("num_vulnerabilities", 0)
 
+    # perf/03: bound the historical fallback. Previously unbounded — a package
+    # retaining N scans could issue up to N-1 extra detail calls, each a full
+    # round-trip, to surface findings the *latest* scan says are gone.
+    #
+    # Prior scans are now considered newest-first (the old loop walked the list
+    # in arbitrary API order) and capped at HISTORICAL_SCAN_FALLBACK.
+    #
+    # Every package on the language repository has exactly one scan, so this path does
+    # not execute there. This is a bound on worst-case behaviour for workspaces
+    # that do retain history, not a saving on the measured data.
     if not vulns and len(scans) > 1:
-        for s in scans:
-            if s is latest:
-                continue
+        prior = sorted(
+            (s for s in scans if s is not latest),
+            key=lambda s: s.get("created_at", ""),
+            reverse=True,
+        )
+        for s in prior[:HISTORICAL_SCAN_FALLBACK]:
             vulns = _extract_vulns(s)
             if vulns:
                 break
