@@ -130,6 +130,42 @@ _cache: dict[str, dict] = {}
 CACHE_TTL = 300          # 5 minutes (per-repo graphs)
 WORKSPACE_CACHE_TTL = 600  # 10 minutes (workspace overview)
 
+# Package-list cache (perf/05). With scan results cached persistently, the
+# package list is what a warm rebuild actually spends its time on: ~15s of the
+# ~16s on a 10k-package repo.
+#
+# It is deliberately LONGER-lived than the graph cache. A shorter TTL could
+# never help — any request that finds the graph cache expired would find this
+# expired too, so the windows would never line up. Longer means a rebuild just
+# past CACHE_TTL reuses the list and completes in ~1s instead of ~16s.
+#
+# The cost is staleness: a package uploaded within the window is not seen. That
+# is bounded, and already no worse than the graph cache users live with today.
+# An explicit refresh bypasses it entirely.
+PACKAGE_LIST_TTL = int(os.getenv("FORGELY_PACKAGE_LIST_TTL", "900"))
+_pkg_list_cache: dict[str, dict] = {}
+_pkg_list_lock = threading.Lock()
+
+
+def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False) -> list[dict]:
+    """fetch_all_packages, with a short-lived in-memory cache.
+
+    In-memory rather than SQLite on purpose: this is the one volatile input in
+    the build, and persisting it across restarts would trade away the freshness
+    that makes it safe to cache at all.
+    """
+    key = f"{owner}/{repo}"
+    if not refresh:
+        with _pkg_list_lock:
+            entry = _pkg_list_cache.get(key)
+        if entry and time.time() - entry["ts"] < PACKAGE_LIST_TTL:
+            log.info("Package list for %s served from cache (%d packages)", key, len(entry["data"]))
+            return entry["data"]
+    packages = fetch_all_packages(session, owner, repo)
+    with _pkg_list_lock:
+        _pkg_list_cache[key] = {"data": packages, "ts": time.time()}
+    return packages
+
 
 def _get_api_key(request: Request | None = None) -> str:
     # Prefer key from request header, fall back to .env
@@ -205,11 +241,15 @@ def list_repos(owner: str, request: Request):
     ]
 
 
-def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
-    """Fetch Cloudsmith data and build the graph response."""
+def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> GraphResponse:
+    """Fetch Cloudsmith data and build the graph response.
+
+    *refresh* forces a fresh package list; scan results are still reused, since
+    those are keyed on the scan timestamp and cannot go stale.
+    """
     timer = BuildTimer()
     session = create_session(api_key)
-    packages = fetch_all_packages(session, owner, repo)
+    packages = _fetch_packages_cached(session, owner, repo, refresh=refresh)
 
     if not packages:
         raise HTTPException(status_code=404, detail="No packages found – check owner/repo and API key.")
@@ -592,7 +632,7 @@ def refresh_graph(request: Request, owner: str | None = None, repo: str | None =
 
     cache_key = f"{owner}/{repo}"
     log.info("Force-refreshing graph for %s/%s", owner, repo)
-    result = _build_graph(api_key, owner, repo)
+    result = _build_graph(api_key, owner, repo, refresh=True)
     _cache[cache_key] = {"data": result, "ts": time.time()}
     return result
 
