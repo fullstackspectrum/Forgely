@@ -394,10 +394,11 @@ Note the mean latency: package-list pages are ~5× slower per call than any othe
 - If no count header is available, fall back to speculative batching: request pages in blocks of ~10 concurrently, stopping at the first short/empty page. Slightly over-fetches at the boundary; still far better than fully sequential.
 - Apply to [`fetch_repos`](../backend/cloudsmith.py#L86-L99), [`fetch_org_members`](../backend/cloudsmith.py#L102-L115) and [`fetch_org_services`](../backend/cloudsmith.py#L118-L131), which share the identical loop shape.
 
-**Acceptance criteria**
-- `packages.list` wall-clock contribution drops from ~123s to under 20s on `neuro-packages`.
-- Package set identical to `main` — same count, same slugs, no duplicates from boundary over-fetch.
-- Ordering changes are acceptable (the graph builder de-duplicates by `node_id`), but verify `total_nodes` is unchanged.
+**Acceptance criteria — all met, see §8.6**
+- ✅ `packages.list` wall contribution drops from ~123s to under 20s — **measured ~17s**; build 172.8s → **64.6s**.
+- ✅ Package set identical to `main` — **10,420 packages, no duplicate slugs**, verified across six boundary cases including exact-multiple-of-page-size.
+- ✅ All 12 node metadata fields identical across 7,490 packages; edge set unchanged.
+- **Page order MUST be preserved.** ⚠ *This corrects the original spec, which said ordering changes were acceptable "because the graph builder de-duplicates by `node_id`". That reasoning is wrong.* `_build_graph` keeps the **first** package it encounters for a given `name@version` and discards the rest ([main.py:212-217](../backend/main.py#L212-L217)), so concatenation order decides which package's `format`, `size`, `licence` and `uploaded_at` end up on the node. With 2,930 duplicate `node_id`s on `neuro-packages` (§8.3), out-of-order concatenation would silently alter up to 2,930 nodes' metadata while leaving every count identical — a diff on `total_nodes` would not catch it. Collect pages into a dict keyed by page number and concatenate in sorted order.
 
 **Expected impact:** ~110s off the large-repo build on its own; proportionally larger once `perf/02` shrinks the parallel phase.
 
@@ -543,7 +544,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit | — |
 | 3 | ✅ **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → **229.5s measured** |
 | 4 | ✅ **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → **172.8s measured** |
-| 5 | **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → ~51s |
+| 5 | ✅ **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → **64.6s measured** |
 | 6 | `perf/03-short-circuit-scan-details` | 7.4% of network time, but hits **100%** of post-`perf/01` scan traffic. Still the riskiest branch | → ~35s |
 | 7 | `perf/04-collapse-cve-cliques` | Edges are modest on `neuro-packages` (7,653 for 7,544 nodes); matters most on container repos | — |
 | — | **Re-measure before continuing.** | | |
@@ -676,7 +677,7 @@ The measured model — `wall = sequential_pagination + (parallel_network ÷ work
 | _baseline_ | 122.8s | 4,358s ÷ 20 = 217.9s | **342.5s** | — |
 | `perf/02` gate + dedupe deps | 122.8s | 1,992s ÷ 20 = 99.6s | **~222s** → ✅ **229.5s actual** | 1.5× |
 | `+ perf/01` skip unsupported scans | 122.8s | 786s ÷ 20 = 39.3s | **~162s** → ✅ **172.8s actual** | 2.1× |
-| `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** | 6.7× |
+| `+ perf/13` parallel pagination | ~12s | 39.3s | **~51s** → ✅ **64.6s actual** | 6.7× |
 | `+ perf/03` short-circuit details | ~12s | 455s ÷ 20 = 22.7s | **~35s** | 9.8× |
 | `+ perf/12` async, 100 workers | ~12s | 4.5s | **~17s** | **20.8×** |
 
@@ -707,11 +708,40 @@ Measured on `neuro-packages`, cold cache, `MAX_WORKERS=20`. Each row is the stat
 | _baseline_ | 342.5s | — | 19,902 | — |
 | **`perf/02`** ✅ | **229.5s** | **1.49×** | 9,562 | `packages.dependencies` 10,420 → **80** |
 | **`perf/01`** ✅ | **172.8s** | **1.98×** | 3,959 | `vulns.scans` 7,490 → **1,887** |
-| `perf/13` | _pending_ | _6.7× proj._ | | `packages.list` ~123s → ~12s |
+| **`perf/13`** ✅ | **64.6s** | **5.30×** | 3,959 | `packages.list` 124.9s → **~17s** wall |
 
 **The model holds.** §8.5 projected ~222s for `perf/02` and ~162s for `perf/01`; measured **229.5s** and **172.8s** — within 3% and 7% respectively. The projection method (`wall = pagination + parallel_network ÷ workers`) is sound enough to plan against, and the remaining estimates deserve corresponding confidence.
 
-**Pagination now dominates.** At 172.8s wall, `packages.list` accounts for **124.9s — 72% of the remaining time**, and it is entirely sequential. `perf/13` is now by far the largest available win, exactly as §8.5 conclusion 3 predicted.
+**Pagination dominated at the `perf/01` stage** — 124.9s of 172.8s wall, 72% of the remaining time — exactly as §8.5 conclusion 3 predicted. `perf/13` addressed it.
+
+#### `perf/13` acceptance evidence
+
+Control arm is the saved `perf/01` output, which is current `main` unchanged.
+
+| | Control (main) | Branch | Δ |
+|---|---|---|---|
+| Nodes (all / package) | 7,544 / 7,490 | 7,544 / 7,490 | **0** |
+| Edge set | 7,650 | 7,650 | **0** |
+| `total_cves` | 544 | 544 | **0** |
+| critical / high / safe | 1 / 7 / 7,466 | identical | **0** |
+| **All 12 node metadata fields** | — | **identical across 7,490 packages** | **0** |
+| CVE lists per package | — | **0 differing** | **0** |
+| API calls | 3,959 | 3,959 | **0** |
+
+**Counts alone prove nothing for this branch.** The failure mode is not a dropped node — it is a *silently changed* one. `_build_graph` keeps the first package it encounters per `name@version`, so out-of-order page concatenation makes a different duplicate win each contested id, altering `format` / `size` / `licence` / `uploaded_at` while every count stays identical. The load-bearing check is therefore the field-by-field comparison above, across all 2,930 duplicate-bearing ids.
+
+API call count is **unchanged at 3,959** — this branch alters timing, not volume, which is why it is the only one so far whose win does not show up in the call counters at all.
+
+**Where the 64.6s now goes:**
+
+| Phase | Wall | Share |
+|---|---|---|
+| `vulns.scans` (458.8s ÷ 20) | ~22.9s | 35% |
+| `vulns.details` (389.4s ÷ 20) | ~19.5s | 30% |
+| `packages.list` (parallelised) | ~17s | 26% |
+| `packages.dependencies` | ~1.4s | 2% |
+
+`vulns.details` is now the largest single removable item — **`perf/03` is next**, and it targets 100% of that 19.5s.
 
 #### `perf/01` acceptance evidence
 

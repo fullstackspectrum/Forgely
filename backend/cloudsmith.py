@@ -7,6 +7,7 @@ import logging
 import os
 import pathlib
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -97,7 +98,15 @@ def create_session(api_key: str) -> requests.Session:
     return s
 
 
-def _api_get(session: requests.Session, url: str, params: dict | None = None) -> dict | list:
+def _api_get_full(
+    session: requests.Session, url: str, params: dict | None = None
+) -> tuple[dict | list, dict]:
+    """GET with retries, returning both the decoded body and the headers.
+
+    The retry, throttle and instrumentation logic lives here so the two entry
+    points cannot drift. ``_api_get`` is a thin wrapper that discards headers;
+    callers that need pagination metadata use this directly.
+    """
     stats = get_stats(session)
     bucket = bucket_for(url) if stats else ""
     delay = RETRY_BACKOFF
@@ -123,10 +132,15 @@ def _api_get(session: requests.Session, url: str, params: dict | None = None) ->
             delay *= 2
             continue
         resp.raise_for_status()
-        return resp.json()
+        return resp.json(), resp.headers
     if stats:
         stats.record_failure()
     raise RuntimeError(f"Max retries exceeded for {url}")
+
+
+def _api_get(session: requests.Session, url: str, params: dict | None = None) -> dict | list:
+    data, _ = _api_get_full(session, url, params=params)
+    return data
 
 
 def _api_get_page(session: requests.Session, url: str, params: dict | None = None) -> list:
@@ -149,50 +163,19 @@ def fetch_namespaces(session: requests.Session) -> list[dict]:
 
 def fetch_repos(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all repositories within a namespace."""
-    url = f"{BASE_URL}/repos/{owner}/"
-    page = 1
-    repos: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        repos.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return repos
+    return _fetch_paginated(session, f"{BASE_URL}/repos/{owner}/", label=f"{owner} repos")
 
 
 def fetch_org_members(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all members of an organization."""
-    url = f"{BASE_URL}/orgs/{owner}/members/"
-    page = 1
-    members: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100, "is_active": True})
-        if not data:
-            break
-        members.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return members
+    return _fetch_paginated(
+        session, f"{BASE_URL}/orgs/{owner}/members/", {"is_active": True}, f"{owner} members"
+    )
 
 
 def fetch_org_services(session: requests.Session, owner: str) -> list[dict]:
     """Fetch all service accounts within an organization."""
-    url = f"{BASE_URL}/orgs/{owner}/services/"
-    page = 1
-    services: list[dict] = []
-    while True:
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        services.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    return services
+    return _fetch_paginated(session, f"{BASE_URL}/orgs/{owner}/services/", label=f"{owner} services")
 
 
 def fetch_org_teams(session: requests.Session, owner: str) -> list[dict]:
@@ -287,21 +270,140 @@ def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str, fmt: 
     return upstreams
 
 
+PAGE_SIZE = 100
+# Pagination runs before the main worker pool starts, so it has the connection
+# pool to itself. Kept below CONNECTION_POOL_SIZE and modest because list pages
+# are the heaviest call in the API (~1.1s each, 100 full records per page).
+PAGINATION_WORKERS = 10
+
+
+def _page_total(headers) -> int | None:
+    """Total page count from Cloudsmith's pagination headers, if present.
+
+    Cloudsmith returns X-Pagination-PageTotal on every list response (verified
+    against a live response 2026-08-14, alongside X-Pagination-Count and a Link
+    header with rel="last"). Returns None if the header is missing or
+    unparseable, so callers can fall back to sequential walking.
+    """
+    raw = headers.get("X-Pagination-PageTotal")
+    if raw is None:
+        return None
+    try:
+        total = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return total if total > 0 else None
+
+
+# Safety stop for speculative pagination: 1,000 pages is 100k packages, well
+# beyond anything observed. Guards against an API that never returns a short
+# page, which would otherwise loop forever.
+MAX_SPECULATIVE_PAGES = 1000
+
+
+def _paginate_speculatively(first: list, fetch_page) -> dict[int, list]:
+    """Fetch pages in concurrent batches, stopping at the first short page.
+
+    Used only when the page-total header is missing or unparseable. Pagination
+    is monotonic — a page shorter than PAGE_SIZE is the last one — so a batch
+    can be dispatched blind and truncated at whichever page terminates it.
+    Costs up to PAGINATION_WORKERS-1 wasted calls at the boundary, which is far
+    cheaper than walking one page at a time.
+    """
+    pages: dict[int, list] = {1: first}
+    next_page = 2
+
+    while next_page <= MAX_SPECULATIVE_PAGES:
+        batch = list(range(next_page, next_page + PAGINATION_WORKERS))
+        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+            futures = [pool.submit(fetch_page, p) for p in batch]
+            for fut in as_completed(futures):
+                page, data = fut.result()
+                pages[page] = data
+
+        # First short or empty page in the batch ends the walk. Keep it (it is
+        # the genuine last page) and discard everything speculated beyond it.
+        terminator = next((p for p in batch if len(pages.get(p, [])) < PAGE_SIZE), None)
+        if terminator is not None:
+            for page in batch:
+                if page > terminator:
+                    pages.pop(page, None)
+            return pages
+
+        next_page += PAGINATION_WORKERS
+
+    log.warning(
+        "Speculative pagination hit the %d-page safety cap – results may be truncated",
+        MAX_SPECULATIVE_PAGES,
+    )
+    return pages
+
+
+def _fetch_paginated(
+    session: requests.Session,
+    url: str,
+    extra_params: dict | None = None,
+    label: str = "",
+) -> list[dict]:
+    """Fetch every page of a paginated list endpoint, in parallel where possible.
+
+    Sequential paging was 36% of total wall time on a 10k-package repo — 105
+    calls at a ~1.1s mean, during which the worker pool sat idle
+    (docs/performance-design.md §8.1). Page 1 is fetched first to learn the page
+    count from X-Pagination-PageTotal, then the remainder go out concurrently.
+    Falls back to speculative batching when that header is unusable.
+
+    Page order is always preserved. This is not cosmetic: _build_graph keeps the
+    FIRST package it sees for a given name@version and discards later
+    duplicates, so the order pages are concatenated in decides which package's
+    metadata (format, size, licence, uploaded_at) ends up on the node.
+    """
+    def _params(page: int) -> dict:
+        p = {"page": page, "page_size": PAGE_SIZE}
+        if extra_params:
+            p.update(extra_params)
+        return p
+
+    try:
+        first, headers = _api_get_full(session, url, params=_params(1))
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return []
+        raise
+
+    if not isinstance(first, list) or not first:
+        return []
+    if len(first) < PAGE_SIZE:
+        return first
+
+    def _fetch_page(page: int) -> tuple[int, list]:
+        return page, _api_get_page(session, url, params=_params(page))
+
+    total_pages = _page_total(headers)
+    if total_pages is not None:
+        pages: dict[int, list] = {1: first}
+        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+            futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
+            for fut in as_completed(futures):
+                page, data = fut.result()
+                pages[page] = data
+        log.info("Fetched %s: %d pages, %d in parallel", label or url, total_pages, total_pages - 1)
+    else:
+        log.warning(
+            "No X-Pagination-PageTotal for %s – falling back to speculative batching",
+            label or url,
+        )
+        pages = _paginate_speculatively(first, _fetch_page)
+
+    return [item for page in sorted(pages) for item in pages[page]]
+
+
 def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
-    url = f"{BASE_URL}/packages/{owner}/{repo}/"
-    page = 1
-    all_packages: list[dict] = []
-    while True:
-        log.info("Fetching packages – page %d (%d so far)", page, len(all_packages))
-        data = _api_get_page(session, url, params={"page": page, "page_size": 100})
-        if not data:
-            break
-        all_packages.extend(data)
-        if len(data) < 100:
-            break
-        page += 1
-    log.info("Fetched %d packages from %s/%s", len(all_packages), owner, repo)
-    return all_packages
+    packages = _fetch_paginated(
+        session, f"{BASE_URL}/packages/{owner}/{repo}/", label=f"{owner}/{repo} packages"
+    )
+    log.info("Fetched %d packages from %s/%s", len(packages), owner, repo)
+    return packages
 
 
 def fetch_dependencies(
