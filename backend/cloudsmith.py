@@ -372,6 +372,7 @@ def _fetch_paginated(
     url: str,
     extra_params: dict | None = None,
     label: str = "",
+    on_page=None,
 ) -> list[dict]:
     """Fetch every page of a paginated list endpoint, in parallel where possible.
 
@@ -400,8 +401,14 @@ def _fetch_paginated(
         raise
 
     if not isinstance(first, list) or not first:
+        if on_page:
+            on_page(1, 1)
         return []
     if len(first) < PAGE_SIZE:
+        # Single page: still report, or a small repo emits no pagination phase
+        # at all and the client cannot distinguish it from a stalled build.
+        if on_page:
+            on_page(1, 1)
         return first
 
     def _fetch_page(page: int) -> tuple[int, list]:
@@ -410,11 +417,15 @@ def _fetch_paginated(
     total_pages = _page_total(headers)
     if total_pages is not None:
         pages: dict[int, list] = {1: first}
+        if on_page:
+            on_page(1, total_pages)
         with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
             futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
             for fut in as_completed(futures):
                 page, data = fut.result()
                 pages[page] = data
+                if on_page:
+                    on_page(len(pages), total_pages)
         log.info("Fetched %s: %d pages, %d in parallel", label or url, total_pages, total_pages - 1)
     else:
         log.warning(
@@ -426,9 +437,15 @@ def _fetch_paginated(
     return [item for page in sorted(pages) for item in pages[page]]
 
 
-def fetch_all_packages(session: requests.Session, owner: str, repo: str) -> list[dict]:
+def fetch_all_packages(session: requests.Session, owner: str, repo: str, on_page=None) -> list[dict]:
+    """Fetch every package. *on_page(done, total)* reports pagination progress.
+
+    Pagination is ~13s of a 44.6s cold build with nothing to show for it, so
+    the stream endpoint surfaces it rather than leaving the user on a spinner.
+    """
     packages = _fetch_paginated(
-        session, f"{BASE_URL}/packages/{owner}/{repo}/", label=f"{owner}/{repo} packages"
+        session, f"{BASE_URL}/packages/{owner}/{repo}/", label=f"{owner}/{repo} packages",
+        on_page=on_page,
     )
     log.info("Fetched %d packages from %s/%s", len(packages), owner, repo)
     return packages
