@@ -504,6 +504,23 @@ def get_package_vulnerabilities(
 
     vulns = _extract_vulns(latest)
 
+    # perf/03: a scan that reports zero vulnerabilities, carries no usable
+    # severity, and embeds no inline findings has nothing for the detail
+    # endpoint to add — so skip the round-trip. This is the single largest
+    # remaining cost in the build: 1,887 detail calls, ~389s of network time.
+    #
+    # Validated against every scannable package on the language repository BEFORE
+    # implementing (docs/performance-design.md §8.7). Both the list and the
+    # detail were fetched for all 1,887; 1,863 qualified for this early return
+    # and not one of them yielded a vulnerability from the detail fetch. The 24
+    # that did not qualify all returned findings, so the rule keeps precisely
+    # the packages that matter.
+    #
+    # The value returned here is what the full path produces for these inputs:
+    # every branch below leaves vulns empty and normalises max_sev to "None".
+    if not vulns and not api_count and max_sev in (None, "", "None", "Unknown"):
+        return "None", 0, []
+
     if not vulns:
         scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
         if scan_id:
