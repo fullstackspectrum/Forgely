@@ -34,6 +34,34 @@ CONNECTION_POOL_SIZE = 64
 
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
+# How many prior scans to consult when the latest yields no findings. The walk
+# was unbounded before perf/03: a package retaining N scans could cost N-1
+# extra detail round-trips to resurface findings the latest scan reports as
+# resolved. One is enough to cover an API that lags on the newest record.
+HISTORICAL_SCAN_FALLBACK = 1
+
+# Escape hatch for the perf/03 short-circuit. Set to 1/true/yes to restore the
+# pre-perf/03 behaviour of always fetching scan details.
+#
+# The short-circuit was validated exhaustively, but on a single workspace: all
+# 1,887 scannable packages on full-stack-spectrum, zero counterexamples
+# (docs/performance-design.md §8.7). Whether every Cloudsmith account populates
+# num_vulnerabilities as reliably is not something one workspace can establish.
+# Because a wrong answer here hides security findings rather than merely slowing
+# things down, the old path stays reachable without a redeploy — run a build
+# with this set, diff the graph, and the question is settled for that account.
+DISABLE_SHORTCIRCUIT_ENV = "FORGELY_DISABLE_SCAN_SHORTCIRCUIT"
+
+
+def scan_shortcircuit_enabled() -> bool:
+    """Whether the perf/03 detail-fetch short-circuit is active.
+
+    Read lazily on every call, never at import: ``main`` imports this module
+    before it calls ``load_dotenv()``, so a module-level getenv would miss a
+    value set in .env entirely.
+    """
+    return os.getenv(DISABLE_SHORTCIRCUIT_ENV, "").strip().lower() not in ("1", "true", "yes")
+
 # ──────────────────────────────────────────────────────────────
 #  Dependency-fetch gating (perf/02)
 # ──────────────────────────────────────────────────────────────
@@ -504,6 +532,28 @@ def get_package_vulnerabilities(
 
     vulns = _extract_vulns(latest)
 
+    # perf/03: a scan that reports zero vulnerabilities, carries no usable
+    # severity, and embeds no inline findings has nothing for the detail
+    # endpoint to add — so skip the round-trip. This is the single largest
+    # remaining cost in the build: 1,887 detail calls, ~389s of network time.
+    #
+    # Validated against every scannable package on neuro-packages BEFORE
+    # implementing (docs/performance-design.md §8.7). Both the list and the
+    # detail were fetched for all 1,887; 1,863 qualified for this early return
+    # and not one of them yielded a vulnerability from the detail fetch. The 24
+    # that did not qualify all returned findings, so the rule keeps precisely
+    # the packages that matter.
+    #
+    # The value returned here is what the full path produces for these inputs:
+    # every branch below leaves vulns empty and normalises max_sev to "None".
+    if (
+        not vulns
+        and not api_count
+        and max_sev in (None, "", "None", "Unknown")
+        and scan_shortcircuit_enabled()
+    ):
+        return "None", 0, []
+
     if not vulns:
         scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
         if scan_id:
@@ -515,10 +565,23 @@ def get_package_vulnerabilities(
                 if not api_count:
                     api_count = details.get("num_vulnerabilities", 0)
 
+    # perf/03: bound the historical fallback. Previously unbounded — a package
+    # retaining N scans could issue up to N-1 extra detail calls, each a full
+    # round-trip, to surface findings the *latest* scan says are gone.
+    #
+    # Prior scans are now considered newest-first (the old loop walked the list
+    # in arbitrary API order) and capped at HISTORICAL_SCAN_FALLBACK.
+    #
+    # Every package on neuro-packages has exactly one scan, so this path does
+    # not execute there. This is a bound on worst-case behaviour for workspaces
+    # that do retain history, not a saving on the measured data.
     if not vulns and len(scans) > 1:
-        for s in scans:
-            if s is latest:
-                continue
+        prior = sorted(
+            (s for s in scans if s is not latest),
+            key=lambda s: s.get("created_at", ""),
+            reverse=True,
+        )
+        for s in prior[:HISTORICAL_SCAN_FALLBACK]:
             vulns = _extract_vulns(s)
             if vulns:
                 break
