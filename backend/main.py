@@ -93,8 +93,13 @@ def _get_scan_cache() -> ScanCache | None:
             if _scan_cache is None:
                 try:
                     _scan_cache = ScanCache()
-                    log.info("Scan cache at %s (%d entries)",
-                             _scan_cache.path, _scan_cache.entry_count())
+                    # Delete-on-write keeps one row per package in steady
+                    # state; this clears anything orphaned by a crash between
+                    # the DELETE and the INSERT.
+                    pruned = _scan_cache.prune(max_age_days=CACHE_PRUNE_DAYS)
+                    log.info("Scan cache at %s (%d entries, %.1f MB, %d pruned)",
+                             _scan_cache.path, _scan_cache.entry_count(),
+                             _scan_cache.size_bytes() / 1024 / 1024, pruned)
                 except Exception as exc:  # a broken cache must never fail a build
                     log.warning("Scan cache unavailable (%s) – continuing without it", exc)
                     return None
@@ -145,6 +150,30 @@ WORKSPACE_CACHE_TTL = 600  # 10 minutes (workspace overview)
 # is bounded, and already no worse than the graph cache users live with today.
 # An explicit refresh bypasses it entirely.
 PACKAGE_LIST_TTL = int(os.getenv("FORGELY_PACKAGE_LIST_TTL", "900"))
+
+# Age-based sweep of the persistent cache on open, for rows orphaned by a crash.
+CACHE_PRUNE_DAYS = float(os.getenv("FORGELY_CACHE_PRUNE_DAYS", "90"))
+
+# The in-memory graph cache held every graph, workspace overview and org graph
+# ever requested, for the life of the process, with no eviction — a 10k-package
+# graph is ~4 MB, so browsing a workspace of repos leaked steadily. Entries are
+# unreadable past WORKSPACE_CACHE_TTL anyway, so sweep them on write and cap
+# the total.
+_MAX_CACHE_ENTRIES = 32
+
+
+def _cache_put(key: str, data) -> None:
+    """Store a built artefact, evicting expired and then oldest entries."""
+    now = time.time()
+    _cache[key] = {"data": data, "ts": now}
+    dead = [k for k, v in _cache.items() if now - v["ts"] > WORKSPACE_CACHE_TTL]
+    for k in dead:
+        _cache.pop(k, None)
+    if len(_cache) > _MAX_CACHE_ENTRIES:
+        for k, _v in sorted(_cache.items(), key=lambda kv: kv[1]["ts"])[
+            : len(_cache) - _MAX_CACHE_ENTRIES
+        ]:
+            _cache.pop(k, None)
 _pkg_list_cache: dict[str, dict] = {}
 _pkg_list_lock = threading.Lock()
 
@@ -164,8 +193,13 @@ def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False
             log.info("Package list for %s served from cache (%d packages)", key, len(entry["data"]))
             return entry["data"]
     packages = fetch_all_packages(session, owner, repo)
+    now = time.time()
     with _pkg_list_lock:
-        _pkg_list_cache[key] = {"data": packages, "ts": time.time()}
+        _pkg_list_cache[key] = {"data": packages, "ts": now}
+        # Bounded alongside the graph cache: package lists are large, and a
+        # workspace browse would otherwise retain one per repo visited.
+        for k in [k for k, v in _pkg_list_cache.items() if now - v["ts"] > PACKAGE_LIST_TTL]:
+            _pkg_list_cache.pop(k, None)
     return packages
 
 
@@ -626,7 +660,7 @@ def get_graph(
     else:
         log.info("Building graph for %s/%s", owner, repo)
         result = _build_graph(api_key, owner, repo)
-        _cache[cache_key] = {"data": result, "ts": time.time()}
+        _cache_put(cache_key, result)
 
     if debug:
         # Returning a Response directly bypasses response_model validation,
@@ -653,7 +687,7 @@ def refresh_graph(request: Request, owner: str | None = None, repo: str | None =
     cache_key = f"{owner}/{repo}"
     log.info("Force-refreshing graph for %s/%s", owner, repo)
     result = _build_graph(api_key, owner, repo, refresh=True)
-    _cache[cache_key] = {"data": result, "ts": time.time()}
+    _cache_put(cache_key, result)
     return result
 
 
@@ -1011,7 +1045,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
     raw_repos = fetch_repos(session, owner)
     if not raw_repos:
         result = WorkspaceOverviewResponse(owner=owner, repos=[])
-        _cache[overview_key] = {"data": result, "ts": time.time()}
+        _cache_put(overview_key, result)
         return result
 
     def _process_repo(r: dict) -> WorkspaceRepoSummary:
@@ -1034,7 +1068,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
 
     summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
     result = WorkspaceOverviewResponse(owner=owner, repos=summaries)
-    _cache[overview_key] = {"data": result, "ts": time.time()}
+    _cache_put(overview_key, result)
 
     timer.stop()
     _record_perf(
@@ -1420,5 +1454,5 @@ def get_org_graph(owner: str, request: Request, refresh: bool = False):
         return _cache[cache_key]["data"]
 
     result = _build_org_graph(api_key, owner)
-    _cache[cache_key] = {"data": result, "ts": time.time()}
+    _cache_put(cache_key, result)
     return result

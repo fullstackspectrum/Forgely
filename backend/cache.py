@@ -84,6 +84,7 @@ class ScanCache:
         self.misses = 0
         self.writes = 0
         self.skipped = 0  # entries we declined to key (no completion timestamp)
+        self.evicted = 0  # superseded rows removed on write
 
     # -- keying ----------------------------------------------------------
     @staticmethod
@@ -118,12 +119,33 @@ class ScanCache:
             return None
         return max_sev, vuln_count, vulns
 
+    @staticmethod
+    def _like_prefix(owner: str, repo: str, slug: str) -> str:
+        """LIKE pattern matching every scan of one package, any timestamp.
+
+        `_` and `%` are LIKE wildcards and can legitimately occur in owner or
+        repo names, so they are escaped rather than left to match anything.
+        """
+        prefix = f"{owner}/{repo}/{slug}@"
+        for ch in ("\\", "%", "_"):
+            prefix = prefix.replace(ch, "\\" + ch)
+        return prefix + "%"
+
     def put(self, owner: str, repo: str, slug: str, completed_at: str | None, result) -> None:
         if not completed_at:
             return
         k = self.key(owner, repo, slug, completed_at)
         payload = json.dumps(result)
         with self._lock:
+            # Drop superseded scans for this package before inserting. Nothing
+            # else ever removes them: a re-scan writes a new key and orphans
+            # the old row, which is never read again but never freed either.
+            # On a CVE-dense repo each orphan can be megabytes.
+            evicted = self._conn.execute(
+                "DELETE FROM scans WHERE key LIKE ? ESCAPE '\\' AND key != ?",
+                (self._like_prefix(owner, repo, slug), k),
+            ).rowcount
+            self.evicted += max(0, evicted)
             self._conn.execute(
                 "INSERT OR REPLACE INTO scans (key, payload, written_at, version) VALUES (?,?,?,?)",
                 (k, payload, time.time(), SCHEMA_VERSION),
@@ -145,18 +167,36 @@ class ScanCache:
         cutoff = time.time() - max_age_days * 86400
         with self._lock:
             cur = self._conn.execute("DELETE FROM scans WHERE written_at < ?", (cutoff,))
+            removed = cur.rowcount
             self._conn.commit()
-            return cur.rowcount
+            if removed:
+                # Deleting rows frees pages for reuse but does not shrink the
+                # file; on a CVE-dense repo that difference is large.
+                self._conn.execute("VACUUM")
+                # VACUUM rebuilds the database *into the WAL*, so without a
+                # truncating checkpoint the footprint grows rather than
+                # shrinks — the reclaimed space stays parked in -wal.
+                self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            return removed
 
     def entry_count(self) -> int:
         with self._lock:
             return self._conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
 
     def size_bytes(self) -> int:
-        try:
-            return self.path.stat().st_size
-        except OSError:
-            return 0
+        """Total on-disk footprint, including the write-ahead log.
+
+        In WAL mode recent writes live in ``-wal`` until a checkpoint, so
+        stat()-ing the main database alone reports far less than the cache
+        actually occupies — 4 KB for a store holding megabytes.
+        """
+        total = 0
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                total += pathlib.Path(str(self.path) + suffix).stat().st_size
+            except OSError:
+                pass
+        return total
 
     def stats(self) -> dict:
         with self._lock:
@@ -166,6 +206,7 @@ class ScanCache:
                 "misses": self.misses,
                 "writes": self.writes,
                 "unkeyable": self.skipped,
+                "evicted": self.evicted,
                 "hit_rate": round(100 * self.hits / looked_up, 1) if looked_up else 0.0,
             }
 
