@@ -192,9 +192,26 @@ function applyForceLayout(graph: Graph) {
     idx++;
   });
 
+  // Iteration budget, scaled *down* with size — not up.
+  //
+  // The previous `Math.min(800, 350 + total * 2)` gave larger graphs more
+  // iterations, but FA2 costs O(iterations x N log N): big graphs paid more
+  // per iteration AND ran more of them, while needing them least.
+  //
+  // Measured on full-stack-spectrum/neuro-packages (7,544 nodes): 800
+  // iterations took 17.4s and left every node within 0.07% of where 50
+  // iterations put it. That graph is a star — 97.9% of edges hang off the repo
+  // node, mean degree elsewhere 1.04 — so the radial pre-placement above
+  // already lands it near equilibrium and the remaining iterations refine
+  // nothing.
+  //
+  // Small, genuinely clustered graphs keep the full budget: neuro-containers
+  // (215 nodes, mean degree 11.1) is still improving at 780 iterations, and the
+  // entire run costs 175ms, so there is nothing worth saving there.
+  const iterations = Math.min(800, Math.max(50, Math.round(750000 / total)));
+
   forceAtlas2.assign(graph, {
-    // More iterations for larger graphs so the layout converges fully.
-    iterations: Math.min(800, 350 + total * 2),
+    iterations,
     settings: {
       gravity: 0.15,
       scalingRatio: 14,
