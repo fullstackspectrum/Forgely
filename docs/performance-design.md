@@ -43,15 +43,16 @@ Tier 2 — Caching / resilience / transport / UX (20 commits)
 ├── perf/08-compression-payload-slim ......... 4
 └── perf/09-stream-graph-response ............ 5
 
-Tier 3 — Frontend rendering (5 commits)
-├── perf/10-fa2-worker-layout ................ 3
-└── perf/11-canvas-render-quick-wins ......... 2   ← 2 lines, merge first
+Tier 3 — Frontend rendering (7 commits)
+├── perf/14-cap-fa2-iterations ............... 2   🆕 ✅ 18.9s → 2.1s, one line
+├── perf/10-fa2-worker-layout ................ 3   ⬇ demoted — little left to hide
+└── perf/11-canvas-render-quick-wins ......... 2   ← 2 lines, does not touch FA2
 
 Tier 4 — Concurrency (5 commits)
 └── perf/12-async-http-client ................ 5   ⬆ promoted by measurement
 ```
 
-**15 branches, 66 commits.** Tiers group work by theme; they are *not* a sequence. For the order you actually work through, see **§6**.
+**16 branches, 68 commits.** Tiers group work by theme; they are *not* a sequence. For the order you actually work through, see **§6**.
 
 ### Where to look
 
@@ -61,6 +62,7 @@ Tier 4 — Concurrency (5 commits)
 | What each branch changes, file by file | §5 |
 | What to do first | **§6** |
 | Real measured numbers | §8 |
+| **Frontend cost** (the 29% nobody measured) | **§8.7** |
 | What measurement changed about the plan | §8.5 |
 | Tasks for ClickUp | Appendix A |
 | `git checkout -b` commands | Appendix B |
@@ -128,7 +130,7 @@ After three retries `_api_get` raises `RuntimeError`, which propagates uncaught 
 
 ### 2.5 Frontend rendering
 
-- [GraphCanvas.tsx:195-208](../frontend/src/components/GraphCanvas.tsx#L195-L208) runs up to 800 FA2 iterations via `forceAtlas2.assign` — **synchronous, main thread**. The tab is frozen for the duration.
+- [GraphCanvas.tsx:195-208](../frontend/src/components/GraphCanvas.tsx#L195-L208) runs up to 800 FA2 iterations via `forceAtlas2.assign` — **synchronous, main thread**. The tab is frozen for the duration: **measured at 18.9s on a 7,544-node graph** (§8.7). Worse, the iteration count *scaled up* with graph size while FA2 costs `O(iterations x N log N)`, so large graphs ran the most iterations at the highest per-iteration cost — and needed them least.
 - [WorkspaceOverviewCanvas.tsx:52-55](../frontend/src/components/WorkspaceOverviewCanvas.tsx#L52-L55) omits `barnesHutOptimize`, making it `O(N²)` per iteration where the other canvases are `O(N log N)`.
 - No `hideEdgesOnMove` on the Sigma constructor ([GraphCanvas.tsx:542](../frontend/src/components/GraphCanvas.tsx#L542)) — pan/zoom is edge-bound on clique-heavy graphs.
 
@@ -518,6 +520,33 @@ Run for a bounded duration or until convergence, then `kill()`. Ensure the super
 
 Two lines, no behavioural risk. Could reasonably be the first thing merged.
 
+**Note (§8.7): this does not address the 18.9s FA2 freeze.** `GraphCanvas` already sets `barnesHutOptimize: total > 150`. These two lines help the workspace-overview canvas and pan/zoom smoothness only.
+
+---
+
+#### `perf/14-cap-fa2-iterations` — ✅ implemented
+
+**Base:** `main` · **Depends on:** — · **Size:** XS · **Risk:** Low — visual
+**Added after measuring the frontend — not in the original plan.**
+
+**Files:** [`frontend/src/components/GraphCanvas.tsx`](../frontend/src/components/GraphCanvas.tsx)
+
+**The largest single win in the plan after `perf/02`, and it is one line.** FA2 blocked the main thread for **18.9s** on a 7,544-node graph (§8.7) — 29% of total user wait, entirely unmeasured through six branches of backend work.
+
+The iteration count scaled *up* with graph size (`Math.min(800, 350 + total * 2)`) while FA2 costs `O(iterations x N log N)`. Large graphs therefore ran the most iterations at the highest per-iteration cost, and needed them least. Replaced with an inverse budget so cost stays bounded:
+
+```js
+Math.min(800, Math.max(50, Math.round(750000 / total)))
+```
+
+**Acceptance criteria — all met, see §8.7**
+- ✅ Large-graph layout time drops materially — **20,255ms → 2,146ms, −18.1s**.
+- ✅ No regression on small, genuinely clustered graphs — `neuro-containers` 177ms → 184ms, iterations 780 → 800.
+- ✅ Layout quality preserved — every node within 0.07% of its 800-iteration position on `neuro-packages`; renders at 800/200/100/50 are indistinguishable.
+- ✅ `GraphCanvas.tsx` typechecks clean (the 13 `tsc` errors are pre-existing in `OrgSidePanel.tsx`).
+
+> **Verify the constant against a clustered graph before changing it.** A flat cap was the obvious fix and would have been wrong: `neuro-containers` is still improving at 780 iterations and has not converged even at 2,000. It is small enough that the whole run costs 175ms, so it should keep the full budget — which the inverse formula gives it.
+
 ---
 
 ### Tier 4 — Deferred
@@ -541,7 +570,8 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | # | Branch | Why here | Projected wall |
 |---|---|---|---|
 | 1 | ✅ `perf/00-instrumentation-baseline` | Everything else is validated against it | — |
-| 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk, immediate benefit | — |
+| 2 | `perf/11-canvas-render-quick-wins` | Two lines, zero risk — but does **not** touch the FA2 freeze (§8.7) | — |
+| — | ✅ **`perf/14-cap-fa2-iterations`** 🆕 | **Frontend blocking 18.9s → ~2.1s.** One line; found only by measuring the client | −18.1s |
 | 3 | ✅ **`perf/02-gate-dependency-fetch`** ⬆ | **53% of network time, 99.6% of it wasted.** Was 4th | 342s → **229.5s measured** |
 | 4 | ✅ **`perf/01-skip-unscannable-packages`** ⬆ | **27% of network time.** 74.8% of packages are unscannable; behaviour-neutrality now evidenced (§8.4) | → **172.8s measured** |
 | 5 | ✅ **`perf/13-parallel-package-pagination`** 🆕 | 36% of wall time, entirely un-parallelised — and 76% of what remains after #3–4 | → **64.6s measured** |
@@ -553,7 +583,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | 10 | `perf/06-inflight-coalescing` | Small, depends on cache | — |
 | 11 | `perf/08-compression-payload-slim` | Concentrated on CVE-dense container repos (25 MB / 214 pkgs) | — |
 | 12 | `perf/07-rate-limit-resilience` ⬇ | Still worth doing for the partial-failure guarantee, but the throttling it defends against **was never observed** | — |
-| 13 | `perf/10-fa2-worker-layout` | Can land any time; parallel track | — |
+| 13 | `perf/10-fa2-worker-layout` ⬇ | Demoted by §8.7 — only ~2s of blocking left to hide after `perf/14` | — |
 | 14 | `perf/09-stream-graph-response` | Largest UX gain, benefits from everything above | — |
 
 Legend: ⬆ promoted · ⬇ demoted · 🆕 added after baselining
@@ -701,7 +731,15 @@ Four conclusions, three of which contradict the original plan:
 
 ### 8.6 Results by branch
 
-Measured on `neuro-packages`, cold cache, `MAX_WORKERS=20`. Each row is the state *after* that branch lands, so effects are cumulative.
+**End-to-end, what a user actually waits:**
+
+| | Start | Now |
+|---|---|---|
+| Backend | 342.5s | **45.4s** |
+| Frontend blocking (§8.7) | 18.9s | **~2.1s** |
+| **Total** | **~361s** | **~47.5s** — 7.6× |
+
+Backend rows below are measured on `neuro-packages`, cold cache, `MAX_WORKERS=20`. Each is the state *after* that branch lands, so effects are cumulative.
 
 | Branch | Wall | vs. baseline | API calls | Key movement |
 |---|---|---|---|---|
@@ -825,6 +863,60 @@ Two notes for anyone re-deriving these numbers:
 **Instrumentation gap — `perf/01` cannot yet be justified from data.** The counters track dependency formats but not the distribution of `security_scan_status`, which is exactly what determines how many scan calls that branch would remove. All 7,490 unique packages received a scan call; how many were `"not supported"` is unknown. Add a scan-status histogram to `perfstats.py` before committing to `perf/01`, or it is being sized on assumption.
 
 ---
+
+### 8.7 Frontend — the 29% nobody was measuring
+
+Every figure above §8.7 is backend. The client was never measured, and it turned out to hold the single largest remaining cost in the whole plan.
+
+Measured by running the real payload through the actual FA2 settings from `applyForceLayout`. Node and the browser both run V8, so this is representative of main-thread blocking. Sigma's WebGL draw is *not* included.
+
+| Phase | Time | Share |
+|---|---|---|
+| `JSON.parse` (4.0 MB) | 9ms | 0% |
+| graph construction | 10ms | 0% |
+| radial pre-placement | 6ms | 0% |
+| **ForceAtlas2 (blocking)** | **18,879ms** | **99.9%** |
+
+At the time this was taken the backend was 45.4s, so the true user wait was **~64s — of which 29% was a frozen tab that no instrumentation could see.**
+
+#### Iteration count was the entire lever
+
+Cost is linear in iterations; `adjustSizes` — which looked like the expensive setting — turned out to be free (18,510ms with it, 19,025ms without; noise). Barnes-Hut is already absorbing that cost.
+
+Convergence against a 2,000-iteration reference, positions normalised so 1.0 = graph radius:
+
+| iterations | `neuro-packages` ms | its mean move | `neuro-containers` ms | its mean move |
+|---|---|---|---|---|
+| 800 / 780 *(old formula)* | 17,419 | 0.0011 | 175 | 0.0781 |
+| 200 | 4,381 | 0.0017 | 43 | 0.1065 |
+| 50 | 1,099 | 0.0018 | 11 | 0.1132 |
+
+*(`neuro-packages` has 7,544 nodes, `neuro-containers` 215.)*
+
+**The two graphs want opposite things, and the old formula got both wrong.**
+
+`neuro-packages` is a **star**: 97.9% of its 7,650 edges hang off the repo node, mean degree elsewhere 1.04. There is no cluster structure to resolve, so the radial pre-placement already lands it at equilibrium — 800 iterations bought a 0.0007 improvement for 16 seconds. Rendered at 800, 200, 100 and 50 iterations the images are indistinguishable.
+
+`neuro-containers` is genuinely clustered: mean degree 11.09, with 1,080 `shared_cve` edges. It is **still improving at 780 iterations** and has not converged even at 2,000 — but the entire run costs 175ms, so there is nothing to save.
+
+`Math.min(800, 350 + total * 2)` scaled iterations *up* with size, so the graph that needed them least ran the most, at the highest cost per iteration, while the one that would benefit hit the same ceiling. Replaced with an inverse budget:
+
+```js
+Math.min(800, Math.max(50, Math.round(750000 / total)))
+```
+
+| Graph | Nodes | Iterations | Time | |
+|---|---|---|---|---|
+| `neuro-packages` | 7,544 | 800 → **99** | 20,255 → **2,146ms** | **−18.1s** |
+| `neuro-containers` | 215 | 780 → **800** | 177 → 184ms | unchanged |
+
+Graphs up to ~937 nodes keep the full budget, so nothing small regresses.
+
+#### Consequences for the plan
+
+1. **`perf/10` (FA2 worker) is demoted.** Its purpose was to hide 18.9s of blocking; ~2s remains to hide. Still worth doing, no longer urgent.
+2. **`perf/11` does not address this.** `GraphCanvas` already sets `barnesHutOptimize: total > 150`. Its two lines help the workspace-overview canvas and pan/zoom, not initial render.
+3. **Measure the client before optimising it.** This cost more than every Tier 1 branch except `perf/02`, and sat unexamined through six branches of backend work because no one had put a number on it.
 
 ## 9. Open questions
 
