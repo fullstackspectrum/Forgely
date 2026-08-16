@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse, Response
 from cloudsmith import (
     APP_VERSION,
     DEPENDENCY_DENYLIST_ENV,
+    DISABLE_SHORTCIRCUIT_ENV,
     SEVERITY_RANK,
     create_session,
     dependency_denylist,
@@ -270,6 +271,7 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
 
+    shortcircuit_suspects: list[str] = []
     for meta in pkg_metas:
         pkg = meta["pkg"]
         slug = meta["slug"]
@@ -281,6 +283,24 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         scan_status = pkg.get("security_scan_status", "Unknown")
 
         max_sev, vuln_count, vulns = vuln_results[node_id]
+
+        # perf/03 guard. The short-circuit trusts the scan's
+        # num_vulnerabilities; the package's own security_scan_status is an
+        # independent signal for the same fact. When the package says
+        # vulnerabilities were detected but the scan resolved to clean, the
+        # short-circuit may have hidden a finding — the one failure mode the
+        # escape hatch exists to rule out.
+        #
+        # Note what this can and cannot do: it cannot prove a skipped fetch
+        # would have returned nothing (that would require making the call), but
+        # it catches the disagreement for free, on every build, across every
+        # package — which sampling could not.
+        if (
+            "detected vulnerabilities" in (pkg.get("security_scan_status") or "").lower()
+            and vuln_count == 0
+            and max_sev in (None, "None")
+        ):
+            shortcircuit_suspects.append(node_id)
 
         # Normalise: the Cloudsmith API may return "Unknown" as max_severity
         # even when the scan completed cleanly with 0 vulnerabilities.
@@ -372,6 +392,16 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             stats[max_sev] += 1
         else:
             stats["Safe"] += 1
+
+    if shortcircuit_suspects:
+        log.warning(
+            "%d package(s) report 'Scan Detected Vulnerabilities' but resolved to clean — "
+            "the scan-detail short-circuit may be hiding findings. Re-run with %s=1 and diff "
+            "the graph to confirm. First few: %s",
+            len(shortcircuit_suspects),
+            DISABLE_SHORTCIRCUIT_ENV,
+            ", ".join(shortcircuit_suspects[:5]),
+        )
 
     # Shared-CVE edges
     seen_pairs: set[tuple[str, str]] = set()
