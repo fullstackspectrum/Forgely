@@ -40,6 +40,28 @@ SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 # resolved. One is enough to cover an API that lags on the newest record.
 HISTORICAL_SCAN_FALLBACK = 1
 
+# Escape hatch for the perf/03 short-circuit. Set to 1/true/yes to restore the
+# pre-perf/03 behaviour of always fetching scan details.
+#
+# The short-circuit was validated exhaustively, but on a single workspace: all
+# 1,887 scannable packages on full-stack-spectrum, zero counterexamples
+# (docs/performance-design.md §8.7). Whether every Cloudsmith account populates
+# num_vulnerabilities as reliably is not something one workspace can establish.
+# Because a wrong answer here hides security findings rather than merely slowing
+# things down, the old path stays reachable without a redeploy — run a build
+# with this set, diff the graph, and the question is settled for that account.
+DISABLE_SHORTCIRCUIT_ENV = "FORGELY_DISABLE_SCAN_SHORTCIRCUIT"
+
+
+def scan_shortcircuit_enabled() -> bool:
+    """Whether the perf/03 detail-fetch short-circuit is active.
+
+    Read lazily on every call, never at import: ``main`` imports this module
+    before it calls ``load_dotenv()``, so a module-level getenv would miss a
+    value set in .env entirely.
+    """
+    return os.getenv(DISABLE_SHORTCIRCUIT_ENV, "").strip().lower() not in ("1", "true", "yes")
+
 # ──────────────────────────────────────────────────────────────
 #  Dependency-fetch gating (perf/02)
 # ──────────────────────────────────────────────────────────────
@@ -524,7 +546,12 @@ def get_package_vulnerabilities(
     #
     # The value returned here is what the full path produces for these inputs:
     # every branch below leaves vulns empty and normalises max_sev to "None".
-    if not vulns and not api_count and max_sev in (None, "", "None", "Unknown"):
+    if (
+        not vulns
+        and not api_count
+        and max_sev in (None, "", "None", "Unknown")
+        and scan_shortcircuit_enabled()
+    ):
         return "None", 0, []
 
     if not vulns:
