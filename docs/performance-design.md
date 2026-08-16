@@ -7,6 +7,7 @@
 | **Date** | 2026-08-03 |
 | **Baseline version** | `1.0.0-beta.11` |
 | **Target** | Large workspaces load in < 60s cold, < 5s warm |
+| **Status vs target** | ✅ **both met** — 44.6s cold, 1.5s warm (§8.8) |
 
 ---
 
@@ -63,6 +64,7 @@ Tier 4 — Concurrency (5 commits)
 | What to do first | **§6** |
 | Real measured numbers | §8 |
 | **Frontend cost** (the 29% nobody measured) | **§8.7** |
+| Cold vs warm, and why the cache key changed | §8.8 |
 | What measurement changed about the plan | §8.5 |
 | Tasks for ClickUp | Appendix A |
 | `git checkout -b` commands | Appendix B |
@@ -579,7 +581,7 @@ Convert `cloudsmith.py` from `requests` to `httpx.AsyncClient` with an `asyncio.
 | 7 | `perf/04-collapse-cve-cliques` | Edges are modest on `the language repository` (7,653 for 7,544 nodes); matters most on container repos | — |
 | — | **Re-measure before continuing.** | | |
 | 8 | **`perf/12-async-http-client`** ⬆⬆ | Was "only if data justifies it" — **it does.** Pool saturated at 19.8×, zero 429s, 68% of budget unused | → ~29s |
-| 9 | `perf/05-persistent-scan-cache` | Warm loads | → seconds |
+| 9 | ✅ `perf/05-persistent-scan-cache` | Warm loads | → **1.5s measured** |
 | 10 | `perf/06-inflight-coalescing` | Small, depends on cache | — |
 | 11 | `perf/08-compression-payload-slim` | Concentrated on CVE-dense container repos (25 MB / 214 pkgs) | — |
 | 12 | `perf/07-rate-limit-resilience` ⬇ | Still worth doing for the partial-failure guarantee, but the throttling it defends against **was never observed** | — |
@@ -735,9 +737,11 @@ Four conclusions, three of which contradict the original plan:
 
 | | Start | Now |
 |---|---|---|
-| Backend | 342.5s | **45.4s** |
+| Backend — cold | 342.5s | **44.6s** |
+| Backend — warm (§8.8) | 342.5s | **1.5s** |
 | Frontend blocking (§8.7) | 18.9s | **~2.1s** |
-| **Total** | **~361s** | **~47.5s** — 7.6× |
+| **Total — cold** | **~361s** | **~46.7s** — 7.7× |
+| **Total — warm** | **~361s** | **~3.6s** — 100× |
 
 Backend rows below are measured on `the language repository`, cold cache, `MAX_WORKERS=20`. Each is the state *after* that branch lands, so effects are cumulative.
 
@@ -748,6 +752,7 @@ Backend rows below are measured on `the language repository`, cold cache, `MAX_W
 | **`perf/01`** ✅ | **172.8s** | **1.98×** | 3,959 | `vulns.scans` 7,490 → **1,887** |
 | **`perf/13`** ✅ | **64.6s** | **5.30×** | 3,959 | `packages.list` 124.9s → **~17s** wall |
 | **`perf/03`** ✅ | **45.4s** | **7.54×** | 2,096 | `vulns.details` 1,887 → **24** |
+| **`perf/05`** ✅ | 44.6s cold<br>**1.5s warm** | **7.7× / 241×** | 2,096 → **80** | `vulns.scans` 1,887 → **0** when warm |
 
 **The model holds.** §8.5 projected ~222s for `perf/02` and ~162s for `perf/01`; measured **229.5s** and **172.8s** — within 3% and 7% respectively. The projection method (`wall = pagination + parallel_network ÷ workers`) is sound enough to plan against, and the remaining estimates deserve corresponding confidence.
 
@@ -917,6 +922,58 @@ Graphs up to ~937 nodes keep the full budget, so nothing small regresses.
 1. **`perf/10` (FA2 worker) is demoted.** Its purpose was to hide 18.9s of blocking; ~2s remains to hide. Still worth doing, no longer urgent.
 2. **`perf/11` does not address this.** `GraphCanvas` already sets `barnesHutOptimize: total > 150`. Its two lines help the workspace-overview canvas and pan/zoom, not initial render.
 3. **Measure the client before optimising it.** This cost more than every Tier 1 branch except `perf/02`, and sat unexamined through six branches of backend work because no one had put a number on it.
+
+### 8.8 Persistent scan cache — `perf/05`
+
+Measured on `the language repository`, calling `_build_graph` directly so the in-memory graph cache cannot mask what is being measured.
+
+| Scenario | Wall | API calls | Cache |
+|---|---|---|---|
+| 1. Cold — no cache at all | 44.6s | 2,096 | 0 hit / 1,887 miss |
+| 2. Warm scans + warm package list | **3.1s** | 80 | 1,887 hit |
+| 3. Warm scans, fresh package list | 18.6s | 185 | 1,887 hit |
+| 4. **After process restart** — SQLite reused | 17.9s | 185 | 1,887 hit |
+| 5. Everything warm | **1.5s** | 80 | 1,887 hit |
+
+All five produce an identical graph. **Both halves of the target are now met: 44.6s cold, 1.5s warm.**
+
+Row 4 is the one that matters most: the cache survives a restart, so a redeploy no longer costs a full rebuild. Rows 3 and 4 are ~18s because the package list is re-fetched — 105 sequential-ish calls at ~1.3s each, still the floor whenever the list is not cached.
+
+#### The key had to change
+
+The doc originally specified `(owner, repo, slug_perm, scan_identifier)`. **That cannot work.** The identifier is only obtainable from the scan-list call, so keying on it could only ever avoid the *detail* fetch — which `perf/03` had already reduced to 24 calls. The branch would have saved ~0.25s.
+
+The workable key is **`security_scan_completed_at`**, which arrives on the package-list response the build already makes:
+
+- **Immutable** — a completed scan's findings never change, so no TTL is needed.
+- **Self-invalidating** — a re-scan moves the timestamp, the key changes, the old entry is never read again.
+- **Available without the call it replaces** — which is the whole point.
+
+Packages with no completion timestamp are never cached: without it there is no way to distinguish a stale entry from a fresh one, and guessing would risk serving a superseded scan result.
+
+#### Cache size is driven by CVE volume, not package count
+
+| Repo | Packages | Entries | Store |
+|---|---|---|---|
+| `the language repository` | 7,490 | 1,887 | **1.5 MB** |
+| `the container repository-build` | 18 | **2** | **10.1 MB** |
+
+Two container images outweigh seven thousand packages by 7×: one image carries 1,932 CVE records at ~1,451 bytes each. Expect a `the container repository`-scale repo (20,102 CVEs) to sit around 30 MB. Bounded by eviction, but worth knowing before pointing this at a large estate.
+
+#### Three unbounded stores were closed
+
+1. **Superseded scans** — nothing removed the old row when a package was re-scanned. Now deleted on write, with `LIKE` wildcards escaped so a package named similarly to another is not evicted alongside it.
+2. **Crash orphans** — an age-based `prune()` on open.
+3. **The in-memory `_cache`** — retained every graph, workspace overview and org graph for the process lifetime with no eviction, ~4 MB per large graph. Now swept on write and capped at 32 entries.
+
+Two bugs surfaced only because the tests asserted on the resulting file size rather than trusting the operation:
+
+- `size_bytes()` stat-ed only the main database, so it **under-reported by ~350×** while writes sat in the write-ahead log — 4 KB for a store holding 1.4 MB.
+- `VACUUM` in WAL mode rebuilds the database *into* the WAL, so pruning **grew** the footprint (1,433,576 → 1,470,656 bytes) until a truncating checkpoint was added. With it: 1,726,096 → 45,056, 97% reclaimed.
+
+#### What remains in a warm build
+
+The 80 calls left are dependency fetches. At ~1s of wall time they are not worth caching yet — and unlike scan results they have no equivalent invalidation signal, so a cache for them would need a TTL and the freshness argument that goes with it.
 
 ## 9. Open questions
 
