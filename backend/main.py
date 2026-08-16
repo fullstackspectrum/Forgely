@@ -51,6 +51,7 @@ from models import (
     WorkspaceOverviewResponse,
     WorkspaceRepoSummary,
 )
+from cache import ScanCache, cache_enabled
 from perfstats import BuildTimer, format_report, get_stats, payload_bytes_enabled
 
 # Load .env from the project root (one level up)
@@ -76,14 +77,44 @@ perf_log.setLevel(logging.INFO)
 _last_perf: dict[str, dict] = {}
 _perf_lock = threading.Lock()
 
+# Persistent scan cache (perf/05). Lazily created so cache_enabled() and the
+# path override are read *after* load_dotenv, and shared across builds so the
+# SQLite connection is opened once rather than per request.
+_scan_cache: ScanCache | None = None
+_scan_cache_lock = threading.Lock()
 
-def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict) -> dict | None:
+
+def _get_scan_cache() -> ScanCache | None:
+    global _scan_cache
+    if not cache_enabled():
+        return None
+    if _scan_cache is None:
+        with _scan_cache_lock:
+            if _scan_cache is None:
+                try:
+                    _scan_cache = ScanCache()
+                    # Delete-on-write keeps one row per package in steady
+                    # state; this clears anything orphaned by a crash between
+                    # the DELETE and the INSERT.
+                    pruned = _scan_cache.prune(max_age_days=CACHE_PRUNE_DAYS)
+                    log.info("Scan cache at %s (%d entries, %.1f MB, %d pruned)",
+                             _scan_cache.path, _scan_cache.entry_count(),
+                             _scan_cache.size_bytes() / 1024 / 1024, pruned)
+                except Exception as exc:  # a broken cache must never fail a build
+                    log.warning("Scan cache unavailable (%s) – continuing without it", exc)
+                    return None
+    return _scan_cache
+
+
+def _record_perf(key: str, label: str, session, timer: BuildTimer, extra: dict,
+                 cache: dict | None = None) -> dict | None:
     """Log the stats block for one build and retain it for ?debug=1."""
     stats = get_stats(session)
     if stats is None:
         return None
-    perf_log.info(format_report(label, stats, timer.elapsed, extra))
+    perf_log.info(format_report(label, stats, timer.elapsed, extra, cache))
     snapshot = stats.snapshot()
+    snapshot["cache"] = cache
     snapshot["wall_seconds"] = round(timer.elapsed, 2)
     snapshot["result"] = extra
     with _perf_lock:
@@ -105,6 +136,71 @@ app.add_middleware(
 _cache: dict[str, dict] = {}
 CACHE_TTL = 300          # 5 minutes (per-repo graphs)
 WORKSPACE_CACHE_TTL = 600  # 10 minutes (workspace overview)
+
+# Package-list cache (perf/05). With scan results cached persistently, the
+# package list is what a warm rebuild actually spends its time on: ~15s of the
+# ~16s on a 10k-package repo.
+#
+# It is deliberately LONGER-lived than the graph cache. A shorter TTL could
+# never help — any request that finds the graph cache expired would find this
+# expired too, so the windows would never line up. Longer means a rebuild just
+# past CACHE_TTL reuses the list and completes in ~1s instead of ~16s.
+#
+# The cost is staleness: a package uploaded within the window is not seen. That
+# is bounded, and already no worse than the graph cache users live with today.
+# An explicit refresh bypasses it entirely.
+PACKAGE_LIST_TTL = int(os.getenv("FORGELY_PACKAGE_LIST_TTL", "900"))
+
+# Age-based sweep of the persistent cache on open, for rows orphaned by a crash.
+CACHE_PRUNE_DAYS = float(os.getenv("FORGELY_CACHE_PRUNE_DAYS", "90"))
+
+# The in-memory graph cache held every graph, workspace overview and org graph
+# ever requested, for the life of the process, with no eviction — a 10k-package
+# graph is ~4 MB, so browsing a workspace of repos leaked steadily. Entries are
+# unreadable past WORKSPACE_CACHE_TTL anyway, so sweep them on write and cap
+# the total.
+_MAX_CACHE_ENTRIES = 32
+
+
+def _cache_put(key: str, data) -> None:
+    """Store a built artefact, evicting expired and then oldest entries."""
+    now = time.time()
+    _cache[key] = {"data": data, "ts": now}
+    dead = [k for k, v in _cache.items() if now - v["ts"] > WORKSPACE_CACHE_TTL]
+    for k in dead:
+        _cache.pop(k, None)
+    if len(_cache) > _MAX_CACHE_ENTRIES:
+        for k, _v in sorted(_cache.items(), key=lambda kv: kv[1]["ts"])[
+            : len(_cache) - _MAX_CACHE_ENTRIES
+        ]:
+            _cache.pop(k, None)
+_pkg_list_cache: dict[str, dict] = {}
+_pkg_list_lock = threading.Lock()
+
+
+def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False) -> list[dict]:
+    """fetch_all_packages, with a short-lived in-memory cache.
+
+    In-memory rather than SQLite on purpose: this is the one volatile input in
+    the build, and persisting it across restarts would trade away the freshness
+    that makes it safe to cache at all.
+    """
+    key = f"{owner}/{repo}"
+    if not refresh:
+        with _pkg_list_lock:
+            entry = _pkg_list_cache.get(key)
+        if entry and time.time() - entry["ts"] < PACKAGE_LIST_TTL:
+            log.info("Package list for %s served from cache (%d packages)", key, len(entry["data"]))
+            return entry["data"]
+    packages = fetch_all_packages(session, owner, repo)
+    now = time.time()
+    with _pkg_list_lock:
+        _pkg_list_cache[key] = {"data": packages, "ts": now}
+        # Bounded alongside the graph cache: package lists are large, and a
+        # workspace browse would otherwise retain one per repo visited.
+        for k in [k for k, v in _pkg_list_cache.items() if now - v["ts"] > PACKAGE_LIST_TTL]:
+            _pkg_list_cache.pop(k, None)
+    return packages
 
 
 def _get_api_key(request: Request | None = None) -> str:
@@ -181,11 +277,15 @@ def list_repos(owner: str, request: Request):
     ]
 
 
-def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
-    """Fetch Cloudsmith data and build the graph response."""
+def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> GraphResponse:
+    """Fetch Cloudsmith data and build the graph response.
+
+    *refresh* forces a fresh package list; scan results are still reused, since
+    those are keyed on the scan timestamp and cannot go stale.
+    """
     timer = BuildTimer()
     session = create_session(api_key)
-    packages = fetch_all_packages(session, owner, repo)
+    packages = _fetch_packages_cached(session, owner, repo, refresh=refresh)
 
     if not packages:
         raise HTTPException(status_code=404, detail="No packages found – check owner/repo and API key.")
@@ -239,14 +339,30 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         pkg_metas.append({
             "pkg": pkg, "slug": slug, "name": name, "version": version,
             "node_id": node_id, "scannable": scannable,
+            # perf/05 cache key. Moves when Cloudsmith re-scans, so a changed
+            # scan invalidates itself without any TTL.
+            "scan_completed_at": pkg.get("security_scan_completed_at") or "",
         })
 
     # --- Parallel vulnerability scanning ---
     MAX_WORKERS = 20
 
+    scan_cache = _get_scan_cache()
+    # Counters are cumulative on the shared cache, so snapshot here and diff
+    # at the end — otherwise the block would report every build ever run.
+    _cache_before = scan_cache.stats() if scan_cache else None
+
     def _scan_vuln(meta: dict) -> tuple[dict, str | None, int, list[dict]]:
         slug = meta["slug"]
-        return (meta, *get_package_vulnerabilities(session, owner, repo, slug))
+        completed_at = meta["scan_completed_at"]
+        if scan_cache is not None:
+            cached = scan_cache.get(owner, repo, slug, completed_at)
+            if cached is not None:
+                return (meta, *cached)
+        result = get_package_vulnerabilities(session, owner, repo, slug)
+        if scan_cache is not None:
+            scan_cache.put(owner, repo, slug, completed_at, result)
+        return (meta, *result)
 
     vuln_results: dict[str, tuple[str | None, int, list[dict]]] = {}
 
@@ -270,6 +386,23 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
         for fut in as_completed(futures):
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
+
+    cache_delta: dict | None = None
+    if scan_cache is not None:
+        scan_cache.commit()
+        after = scan_cache.stats()
+        hits = after["hits"] - _cache_before["hits"]
+        misses = after["misses"] - _cache_before["misses"]
+        looked_up = hits + misses
+        cache_delta = {
+            "hits": hits,
+            "misses": misses,
+            "writes": after["writes"] - _cache_before["writes"],
+            "unkeyable": after["unkeyable"] - _cache_before["unkeyable"],
+            "hit_rate": round(100 * hits / looked_up, 1) if looked_up else 0.0,
+            "entries": scan_cache.entry_count(),
+            "size_mb": round(scan_cache.size_bytes() / 1024 / 1024, 1),
+        }
 
     shortcircuit_suspects: list[str] = []
     for meta in pkg_metas:
@@ -499,6 +632,7 @@ def _build_graph(api_key: str, owner: str, repo: str) -> GraphResponse:
             "cves": total_cves,
             "bytes": len(result.model_dump_json()) if payload_bytes_enabled() else None,
         },
+        cache=cache_delta,
     )
     return result
 
@@ -526,7 +660,7 @@ def get_graph(
     else:
         log.info("Building graph for %s/%s", owner, repo)
         result = _build_graph(api_key, owner, repo)
-        _cache[cache_key] = {"data": result, "ts": time.time()}
+        _cache_put(cache_key, result)
 
     if debug:
         # Returning a Response directly bypasses response_model validation,
@@ -552,8 +686,8 @@ def refresh_graph(request: Request, owner: str | None = None, repo: str | None =
 
     cache_key = f"{owner}/{repo}"
     log.info("Force-refreshing graph for %s/%s", owner, repo)
-    result = _build_graph(api_key, owner, repo)
-    _cache[cache_key] = {"data": result, "ts": time.time()}
+    result = _build_graph(api_key, owner, repo, refresh=True)
+    _cache_put(cache_key, result)
     return result
 
 
@@ -911,7 +1045,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
     raw_repos = fetch_repos(session, owner)
     if not raw_repos:
         result = WorkspaceOverviewResponse(owner=owner, repos=[])
-        _cache[overview_key] = {"data": result, "ts": time.time()}
+        _cache_put(overview_key, result)
         return result
 
     def _process_repo(r: dict) -> WorkspaceRepoSummary:
@@ -934,7 +1068,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
 
     summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
     result = WorkspaceOverviewResponse(owner=owner, repos=summaries)
-    _cache[overview_key] = {"data": result, "ts": time.time()}
+    _cache_put(overview_key, result)
 
     timer.stop()
     _record_perf(
@@ -1320,5 +1454,5 @@ def get_org_graph(owner: str, request: Request, refresh: bool = False):
         return _cache[cache_key]["data"]
 
     result = _build_org_graph(api_key, owner)
-    _cache[cache_key] = {"data": result, "ts": time.time()}
+    _cache_put(cache_key, result)
     return result
