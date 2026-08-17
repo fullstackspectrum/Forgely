@@ -40,6 +40,7 @@ from cloudsmith import (
     fetch_team_members,
     fetch_vulnerability_scans,
     get_package_vulnerabilities,
+    scan_workers,
 )
 from models import (
     CVERecord,
@@ -369,7 +370,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
         })
 
     # --- Parallel vulnerability scanning ---
-    MAX_WORKERS = 20
+    MAX_WORKERS = scan_workers()
 
     scan_cache = _get_scan_cache()
     # Counters are cumulative on the shared cache, so snapshot here and diff
