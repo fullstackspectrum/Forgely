@@ -6,6 +6,7 @@ import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { token } from "../lib/palette";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
 
@@ -70,11 +71,11 @@ function drawTriangleNodeHover(
   const { labelSize: size, labelFont: font, labelWeight: weight } = settings;
   context.font = `${weight} ${size}px ${font}`;
 
-  context.fillStyle = "#FFF";
+  context.fillStyle = token("--t-primary");
   context.shadowOffsetX = 0;
   context.shadowOffsetY = 0;
   context.shadowBlur = 8;
-  context.shadowColor = "#000";
+  context.shadowColor = token("--fg-n-950");
 
   const PADDING = 2;
   const r = Math.max(data.size, size / 2) + PADDING;

@@ -8,6 +8,7 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types";
+import { token } from "../lib/palette";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -21,21 +22,21 @@ interface Props {
 }
 
 const SEV_BORDER: Record<string, string> = {
-  Critical: "#ff4d4d",
-  High:     "#ff8c1a",
-  Medium:   "#ffd11a",
-  Low:      "#79b8ff",
-  None:     "#28a745",
+  Critical: token("--s-critical"),
+  High:     token("--s-high"),
+  Medium:   token("--s-medium"),
+  Low:      token("--s-low"),
+  None:     token("--s-none"),
 };
 
 function getSevColor(sev: string | null): string {
-  if (!sev) return "#555577";
-  return SEVERITY_COLORS[sev] ?? "#555577";
+  if (!sev) return token("--fg-n-600");
+  return SEVERITY_COLORS[sev] ?? token("--fg-n-600");
 }
 
 function getSevBorder(sev: string | null): string {
-  if (!sev) return "#888899";
-  return SEV_BORDER[sev] ?? "#888899";
+  if (!sev) return token("--t-muted");
+  return SEV_BORDER[sev] ?? token("--t-muted");
 }
 
 function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
@@ -159,7 +160,7 @@ export default function WorkspaceOverviewCanvas({
       y: 0,
       size: 48,
       label: "",
-      color: "#0f0f1a",
+      color: token("--c-bg"),
       nodeType: "workspace",
       type: "image",
       image: "/forgely-icon.png",
@@ -203,12 +204,12 @@ export default function WorkspaceOverviewCanvas({
     });
 
     const sigma = new Sigma(graph, container, {
-      defaultNodeColor: "#4a90d9",
+      defaultNodeColor: token("--c-action"),
       defaultEdgeColor: "rgba(120,130,180,0.25)",
       labelFont: "Inter, system-ui, sans-serif",
       labelSize: 12,
       labelWeight: "500",
-      labelColor: { color: "#c8cadf" },
+      labelColor: { color: token("--t-secondary") },
       renderEdgeLabels: false,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
@@ -341,8 +342,8 @@ export default function WorkspaceOverviewCanvas({
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
         hidden: hiddenByRepo,
-        color: dimmed ? "#2a2a3a" : attrs.color,
-        borderColor: dimmed ? "#3a3a4a" : attrs.borderColor,
+        color: dimmed ? token("--c-surface") : attrs.color,
+        borderColor: dimmed ? token("--c-border-strong") : attrs.borderColor,
       };
     });
     sigma.setSetting("edgeReducer", (edge, attrs) => {

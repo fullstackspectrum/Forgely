@@ -15,6 +15,7 @@ import { placeRadially, refineForceLayout } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
+import { token } from "../lib/palette";
 
 /** Map Cloudsmith package format → Devicon SVG URL (jsDelivr CDN).
  *  Using .svg URLs so @sigma/node-image detects them as SVGs and
@@ -407,7 +408,7 @@ export default function GraphCanvas({
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
       const sevColor =
-        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#ffffff");
+        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? token("--s-none") : token("--t-primary"));
 
       const size =
         node.type === "repo"
@@ -429,9 +430,9 @@ export default function GraphCanvas({
         size,
         color:
           node.type === "repo"
-            ? "#0f0f1a"
+            ? token("--c-bg")
             : node.type === "dependency"
-              ? "#9b59b6"
+              ? token("--fg-blue-300")
               : sevColor,
         x: 0,
         y: 0,
@@ -458,7 +459,7 @@ export default function GraphCanvas({
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
+        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
         type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -490,7 +491,7 @@ export default function GraphCanvas({
           size: cn.size,
           baseSize: cn.size,
           phaseOffset: i / RING_COUNT,
-          color: "rgba(255,77,77,0)",
+          color: "rgba(232, 117, 107,0)",
           nodeType: "echo",
           type: "ring",
           parentId: cn.id,
@@ -526,7 +527,7 @@ export default function GraphCanvas({
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
       labelFont: "Geist, system-ui, sans-serif",
-      labelColor: { color: "#ddd" },
+      labelColor: { color: token("--t-secondary") },
       labelSize: 13,
       stagePadding: 40,
       zIndex: true,
@@ -733,7 +734,7 @@ export default function GraphCanvas({
             res.zIndex = 5;
           } else {
             /* Everything else: ghost — tiny, near-background, pushed to back */
-            res.color = "#111220";
+            res.color = token("--c-bg");
             res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
             res.label = "";
             res.zIndex = -2;
@@ -741,7 +742,7 @@ export default function GraphCanvas({
         } else if (st.hoveredNode) {
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.color = "#0e0f1c";
+            res.color = token("--c-bg");
             res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
             res.label = "";
             res.zIndex = -1;
@@ -928,10 +929,10 @@ export default function GraphCanvas({
       console.error("Graph build failed:", err);
       if (containerRef.current) {
         containerRef.current.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8888aa;gap:8px;">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--t-muted);gap:8px;">
             <span style="font-size:32px;">⚠</span>
             <span style="font-size:14px;font-weight:600;">Failed to render graph</span>
-            <span style="font-size:12px;color:#555570;">${err instanceof Error ? err.message : "Unknown error"}</span>
+            <span style="font-size:12px;color:var(--fg-n-600);">${err instanceof Error ? err.message : "Unknown error"}</span>
           </div>`;
       }
     }

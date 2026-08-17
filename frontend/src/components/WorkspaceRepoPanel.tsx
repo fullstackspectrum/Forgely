@@ -15,7 +15,7 @@ interface Props {
 const SEV_ORDER = ["Critical", "High", "Medium", "Low"];
 
 function SevBadge({ severity }: { severity: string }) {
-  const color = SEVERITY_COLORS[severity] ?? "#888";
+  const color = SEVERITY_COLORS[severity] ?? "var(--t-muted)";
   return (
     <span className="cve-severity-badge" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>
       {severity}
@@ -186,7 +186,7 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
           <span className="wo-stat-label">Packages</span>
         </div>
         <div className="wo-stat-item">
-          <span className="wo-stat-value" style={{ color: data.vuln_count > 0 ? SEVERITY_COLORS[data.max_severity ?? ""] ?? "#ff4d4d" : "#28a745" }}>
+          <span className="wo-stat-value" style={{ color: data.vuln_count > 0 ? SEVERITY_COLORS[data.max_severity ?? ""] ?? "var(--s-critical)" : "var(--s-none)" }}>
             {data.vuln_count}
           </span>
           <span className="wo-stat-label">Vulnerabilities</span>
