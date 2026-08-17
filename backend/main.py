@@ -293,6 +293,26 @@ def list_repos(owner: str, request: Request):
     ]
 
 
+# CVE descriptions are stripped from the wire, not from the model.
+#
+# They are 21.5 MB of the container repository' 29.2 MB payload — 21,598 records of
+# which only the handful in an expanded node are ever read — and /api/cve
+# serves them per package instead.
+#
+# Excluded at serialisation rather than dropped from CVERecord because the
+# in-memory objects are shared: _extract_repo_summary_from_graph reads
+# descriptions off cached GraphResponse objects, and /api/cve answers from the
+# same cache without touching the API.
+GRAPH_EXCLUDE_DESCRIPTIONS = {
+    "nodes": {"__all__": {"data": {"cves": {"__all__": {"description"}}}}}
+}
+
+
+def _graph_payload(result: GraphResponse) -> dict:
+    """Encode a graph for the wire, minus CVE descriptions."""
+    return jsonable_encoder(result, exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
+
+
 def _cve_records(vulns: list[dict]) -> list[CVERecord]:
     """Normalise Cloudsmith vulnerability entries into CVERecords.
 
@@ -690,7 +710,8 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
     return result
 
 
-@app.get("/api/graph", response_model=GraphResponse)
+@app.get("/api/graph", response_model=GraphResponse,
+         response_model_exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
 def get_graph(
     request: Request,
     owner: str | None = None,
@@ -721,7 +742,7 @@ def get_graph(
         with _perf_lock:
             perf = _last_perf.get(cache_key)
         return JSONResponse({
-            "graph": jsonable_encoder(result),
+            "graph": _graph_payload(result),
             "cached": cached,
             "perf": perf,
         })
@@ -767,7 +788,7 @@ def stream_graph(
 
         def cached_frames():
             yield json.dumps({"type": "progress", "phase": "cached", "done": 1, "total": 1}) + "\n"
-            yield json.dumps({"type": "graph", "data": jsonable_encoder(cached)}) + "\n"
+            yield json.dumps({"type": "graph", "data": _graph_payload(cached)}) + "\n"
 
         return StreamingResponse(
             cached_frames(),
@@ -786,7 +807,7 @@ def stream_graph(
                 ),
             )
             _cache_put(cache_key, result)
-            frames.put({"type": "graph", "data": jsonable_encoder(result)})
+            frames.put({"type": "graph", "data": _graph_payload(result)})
         except HTTPException as exc:
             frames.put({"type": "error", "detail": exc.detail, "status": exc.status_code})
         except Exception as exc:  # noqa: BLE001 - surfaced to the client as a frame
@@ -809,7 +830,8 @@ def stream_graph(
     )
 
 
-@app.post("/api/graph/refresh", response_model=GraphResponse)
+@app.post("/api/graph/refresh", response_model=GraphResponse,
+          response_model_exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
 def refresh_graph(request: Request, owner: str | None = None, repo: str | None = None):
     api_key = _get_api_key(request)
     default_owner, default_repo = _get_defaults()
