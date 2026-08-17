@@ -67,6 +67,8 @@ class GraphResponse(BaseModel):
 class WorkspaceCveSummary(BaseModel):
     id: str
     severity: str = "Unknown"
+    # Summary-length only, trimmed to OVERVIEW_DESCRIPTION_CHARS with a
+    # trailing ellipsis when cut. Full text comes from /api/cve.
     description: str = ""
     packages: list[str] = []
 
