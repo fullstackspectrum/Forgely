@@ -167,6 +167,31 @@ PACKAGE_LIST_TTL = int(os.getenv("FORGELY_PACKAGE_LIST_TTL", "900"))
 # Age-based sweep of the persistent cache on open, for rows orphaned by a crash.
 CACHE_PRUNE_DAYS = float(os.getenv("FORGELY_CACHE_PRUNE_DAYS", "90"))
 
+# Largest shared-CVE clique that still gets pairwise edges.
+#
+# Shared-CVE edges are built by connecting every pair of packages carrying the
+# same CVE, which is O(k²) in the size of the clique. In practice the pair
+# deduplication downstream already absorbs this: neuro-containers generates
+# 67,515 pairs and emits 741 distinct edges, because the same package pairs
+# share many CVEs. Largest clique observed anywhere is 33.
+#
+# What deduplication cannot absorb is one CVE spanning a large fraction of a
+# large repo — a base-image or libc advisory across thousands of packages,
+# where the pairs really are distinct:
+#
+#     packages sharing one CVE    distinct edges    build time
+#                          200            19,900           5ms
+#                          500           124,750          29ms
+#                        1,000           499,500         111ms
+#                        2,000         1,999,000         556ms
+#
+# A single CVE contributing half a million edges would dominate the payload and
+# the render for no analytical benefit — the packages all carry the CVE in
+# their own `cves` list either way. 100 caps one CVE's contribution at 4,950
+# edges while leaving 3x headroom over anything measured, so this changes
+# nothing on real data. Set to 0 to disable the guard.
+MAX_CVE_CLIQUE = int(os.getenv("FORGELY_MAX_CVE_CLIQUE", "100"))
+
 # The in-memory graph cache held every graph, workspace overview and org graph
 # ever requested, for the life of the process, with no eviction — a 10k-package
 # graph is ~4 MB, so browsing a workspace of repos leaked steadily. Entries are
@@ -608,8 +633,17 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
 
     # Shared-CVE edges
     seen_pairs: set[tuple[str, str]] = set()
+    oversized_cliques: list[tuple[str, int]] = []
     for cve_id, pkg_ids in cve_to_packages.items():
+        # A package listing the same CVE twice would otherwise pair with
+        # itself and emit a self-loop. Not observed on any repo measured, but
+        # nothing prevents it. dict.fromkeys keeps first-seen order, so edge
+        # ordering is unchanged.
+        pkg_ids = list(dict.fromkeys(pkg_ids))
         if len(pkg_ids) < 2:
+            continue
+        if MAX_CVE_CLIQUE and len(pkg_ids) > MAX_CVE_CLIQUE:
+            oversized_cliques.append((cve_id, len(pkg_ids)))
             continue
         for i in range(len(pkg_ids)):
             for j in range(i + 1, len(pkg_ids)):
@@ -618,6 +652,22 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
                 if pair not in seen_pairs:
                     edges.append(GraphEdge(source=a, target=b, type="shared_cve", label=cve_id))
                     seen_pairs.add(pair)
+
+    # Loud, because this drops edges the graph would otherwise draw. Aggregated
+    # to one record: a workspace tripping this would trip it many times over.
+    if oversized_cliques:
+        oversized_cliques.sort(key=lambda kv: -kv[1])
+        suppressed = sum(k * (k - 1) // 2 for _, k in oversized_cliques)
+        log.warning(
+            "%d CVE(s) span more than %d packages; shared-CVE edges suppressed for them "
+            "(~%d edge(s) avoided). Affected packages still carry the CVE in their own "
+            "record. Largest: %s. Raise or disable with %s.",
+            len(oversized_cliques),
+            MAX_CVE_CLIQUE,
+            suppressed,
+            ", ".join(f"{cve}={k}" for cve, k in oversized_cliques[:3]),
+            "FORGELY_MAX_CVE_CLIQUE",
+        )
 
     # --- Parallel dependency fetching ---
     # Skip formats measured never to return dependency data (perf/02). Resolved
