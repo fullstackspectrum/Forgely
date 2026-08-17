@@ -54,6 +54,7 @@ from models import (
     WorkspaceRepoSummary,
 )
 from cache import ScanCache, cache_enabled
+from compression import StreamingGZipMiddleware
 from perfstats import BuildTimer, format_report, get_stats, payload_bytes_enabled
 
 # Load .env from the project root (one level up)
@@ -133,6 +134,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Graph payloads are large and highly repetitive: 4.2 MB for neuro-packages and
+# 29.2 MB for neuro-containers, whose 21,598 CVE descriptions repeat across
+# every package sharing a CVE. minimum_size keeps it off the many small JSON
+# replies where a round of deflate buys nothing.
+#
+# StreamingGZipMiddleware rather than Starlette's: see compression.py. The
+# stock one buffers streamed chunks inside zlib, which would hold every
+# progress frame until the build ends.
+app.add_middleware(StreamingGZipMiddleware, minimum_size=1000)
 
 # Simple in-memory cache
 _cache: dict[str, dict] = {}
@@ -280,6 +291,72 @@ def list_repos(owner: str, request: Request):
         }
         for r in raw
     ]
+
+
+# CVE descriptions are stripped from the wire, not from the model.
+#
+# They are 21.5 MB of neuro-containers' 29.2 MB payload — 21,598 records of
+# which only the handful in an expanded node are ever read — and /api/cve
+# serves them per package instead.
+#
+# Excluded at serialisation rather than dropped from CVERecord because the
+# in-memory objects are shared: _extract_repo_summary_from_graph reads
+# descriptions off cached GraphResponse objects, and /api/cve answers from the
+# same cache without touching the API.
+GRAPH_EXCLUDE_DESCRIPTIONS = {
+    "nodes": {"__all__": {"data": {"cves": {"__all__": {"description"}}}}}
+}
+
+
+def _graph_payload(result: GraphResponse) -> dict:
+    """Encode a graph for the wire, minus CVE descriptions."""
+    return jsonable_encoder(result, exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
+
+
+def _cve_records(vulns: list[dict]) -> list[CVERecord]:
+    """Normalise Cloudsmith vulnerability entries into CVERecords.
+
+    Extracted from _build_graph so /api/cve can produce byte-identical records
+    when it has to fall back to the API — the field-name fallbacks below are
+    load-bearing and duplicating them would let the two paths drift.
+    """
+    records: list[CVERecord] = []
+    for v in vulns:
+        v_sev = v.get("severity", v.get("max_severity", "Unknown"))
+        cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
+
+        affected = (
+            v.get("package_name")
+            or v.get("affected_package")
+            or v.get("package")
+            or v.get("component")
+            or v.get("dependency")
+            or ""
+        )
+        raw_av = v.get("affected_version") or v.get("package_version") or ""
+        affected_version = raw_av.get("raw_version", "") if isinstance(raw_av, dict) else str(raw_av)
+        raw_fv = v.get("fixed_version") or v.get("fixed_in") or v.get("patched_version") or ""
+        fixed_in = raw_fv.get("raw_version", "") if isinstance(raw_fv, dict) else str(raw_fv)
+
+        refs = v.get("references") or []
+        first_ref = refs[0].get("url", "") if refs and isinstance(refs[0], dict) else (refs[0] if refs else "")
+        api_url = v.get("url") or v.get("advisory_url") or first_ref or ""
+        nvd_url = ""
+        ghsa_url = ""
+        if cve_id and cve_id.upper().startswith("CVE-"):
+            nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
+            ghsa_url = f"https://github.com/advisories?query={cve_id}"
+        elif cve_id and cve_id.upper().startswith("GHSA-"):
+            ghsa_url = f"https://github.com/advisories/{cve_id}"
+
+        description = v.get("description") or v.get("title") or v.get("summary", "")
+
+        records.append(CVERecord(
+            id=cve_id, severity=v_sev, description=description,
+            url=api_url, nvd_url=nvd_url, ghsa_url=ghsa_url,
+            affected=affected, affected_version=affected_version, fixed_in=fixed_in,
+        ))
+    return records
 
 
 def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
@@ -487,45 +564,10 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
             scan_status = "Scanned (Clean)"
             max_sev = "None"
 
-        cve_records: list[CVERecord] = []
-        for v in vulns:
-            v_sev = v.get("severity", v.get("max_severity", "Unknown"))
-            cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
-
-            affected = (
-                v.get("package_name")
-                or v.get("affected_package")
-                or v.get("package")
-                or v.get("component")
-                or v.get("dependency")
-                or ""
-            )
-            raw_av = v.get("affected_version") or v.get("package_version") or ""
-            affected_version = raw_av.get("raw_version", "") if isinstance(raw_av, dict) else str(raw_av)
-            raw_fv = v.get("fixed_version") or v.get("fixed_in") or v.get("patched_version") or ""
-            fixed_in = raw_fv.get("raw_version", "") if isinstance(raw_fv, dict) else str(raw_fv)
-
-            refs = v.get("references") or []
-            first_ref = refs[0].get("url", "") if refs and isinstance(refs[0], dict) else (refs[0] if refs else "")
-            api_url = v.get("url") or v.get("advisory_url") or first_ref or ""
-            nvd_url = ""
-            ghsa_url = ""
-            if cve_id and cve_id.upper().startswith("CVE-"):
-                nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
-                ghsa_url = f"https://github.com/advisories?query={cve_id}"
-            elif cve_id and cve_id.upper().startswith("GHSA-"):
-                ghsa_url = f"https://github.com/advisories/{cve_id}"
-
-            description = v.get("description") or v.get("title") or v.get("summary", "")
-
-            cve_records.append(CVERecord(
-                id=cve_id, severity=v_sev, description=description,
-                url=api_url, nvd_url=nvd_url, ghsa_url=ghsa_url,
-                affected=affected, affected_version=affected_version, fixed_in=fixed_in,
-            ))
-
-            if cve_id:
-                cve_to_packages.setdefault(cve_id, []).append(node_id)
+        cve_records = _cve_records(vulns)
+        for record in cve_records:
+            if record.id:
+                cve_to_packages.setdefault(record.id, []).append(node_id)
 
         nodes.append(GraphNode(
             id=node_id,
@@ -668,7 +710,8 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
     return result
 
 
-@app.get("/api/graph", response_model=GraphResponse)
+@app.get("/api/graph", response_model=GraphResponse,
+         response_model_exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
 def get_graph(
     request: Request,
     owner: str | None = None,
@@ -699,7 +742,7 @@ def get_graph(
         with _perf_lock:
             perf = _last_perf.get(cache_key)
         return JSONResponse({
-            "graph": jsonable_encoder(result),
+            "graph": _graph_payload(result),
             "cached": cached,
             "perf": perf,
         })
@@ -745,7 +788,7 @@ def stream_graph(
 
         def cached_frames():
             yield json.dumps({"type": "progress", "phase": "cached", "done": 1, "total": 1}) + "\n"
-            yield json.dumps({"type": "graph", "data": jsonable_encoder(cached)}) + "\n"
+            yield json.dumps({"type": "graph", "data": _graph_payload(cached)}) + "\n"
 
         return StreamingResponse(
             cached_frames(),
@@ -764,7 +807,7 @@ def stream_graph(
                 ),
             )
             _cache_put(cache_key, result)
-            frames.put({"type": "graph", "data": jsonable_encoder(result)})
+            frames.put({"type": "graph", "data": _graph_payload(result)})
         except HTTPException as exc:
             frames.put({"type": "error", "detail": exc.detail, "status": exc.status_code})
         except Exception as exc:  # noqa: BLE001 - surfaced to the client as a frame
@@ -787,7 +830,8 @@ def stream_graph(
     )
 
 
-@app.post("/api/graph/refresh", response_model=GraphResponse)
+@app.post("/api/graph/refresh", response_model=GraphResponse,
+          response_model_exclude=GRAPH_EXCLUDE_DESCRIPTIONS)
 def refresh_graph(request: Request, owner: str | None = None, repo: str | None = None):
     api_key = _get_api_key(request)
     default_owner, default_repo = _get_defaults()
@@ -801,6 +845,38 @@ def refresh_graph(request: Request, owner: str | None = None, repo: str | None =
     result = _build_graph(api_key, owner, repo, refresh=True)
     _cache_put(cache_key, result)
     return result
+
+
+@app.get("/api/cve/{owner}/{repo}/{slug}", response_model=list[CVERecord])
+def get_package_cve_details(request: Request, owner: str, repo: str, slug: str):
+    """Full CVE records for one package, descriptions included.
+
+    Descriptions are the bulk of the graph payload — 21,598 of them across
+    neuro-containers, 21.5 MB of the 29.2 MB — and none are visible until a
+    node is selected. They are served here instead so the graph carries only
+    what it draws.
+
+    Served from the warm graph cache where possible: the records are already
+    in memory, so an expanded node costs no API call at all. The fallback
+    exists for a direct link or an expired cache, and goes through the same
+    _cve_records() normalisation.
+    """
+    api_key = _get_api_key(request)
+    cache_key = f"{owner}/{repo}"
+
+    entry = _cache.get(cache_key)
+    if entry and time.time() - entry["ts"] < CACHE_TTL:
+        for node in entry["data"].nodes:
+            if node.data.slug == slug:
+                return node.data.cves
+
+    session = create_session(api_key)
+    try:
+        _max_sev, _count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
+    except Exception as exc:  # noqa: BLE001 - a missing description must not break the panel
+        log.warning("CVE detail fetch failed for %s/%s/%s: %s", owner, repo, slug, exc)
+        raise HTTPException(status_code=502, detail="Could not load vulnerability details") from exc
+    return _cve_records(vulns)
 
 
 @app.get("/api/search")
