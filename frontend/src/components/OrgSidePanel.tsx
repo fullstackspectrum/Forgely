@@ -70,7 +70,7 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
   const outEdges = data.edges.filter((e) => e.source === nodeId);
 
   const d = node.data as Record<string, unknown>;
-  const color = ORG_NODE_COLORS[node.type] ?? "#666";
+  const color = ORG_NODE_COLORS[node.type] ?? "var(--fg-n-600)";
 
   /* Group connections by type for organised display */
   const allConnections = [
@@ -232,7 +232,7 @@ function ConnGroups({
       <div className="org-conn-summary-grid">
         {Object.entries(groups).map(([type, conns]) => {
           const isOpen = expanded === type;
-          const color = ORG_NODE_COLORS[type] ?? "#666";
+          const color = ORG_NODE_COLORS[type] ?? "var(--fg-n-600)";
           return (
             <div key={type} className={`org-conn-summary-card${isOpen ? " open" : ""}`}>
               <button

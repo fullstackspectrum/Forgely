@@ -5,19 +5,20 @@
  */
 import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
+import { token } from "./palette";
 
 const SEVERITY_COLORS: Record<string, string> = {
-  Critical: "#ff4d4d",
-  High:     "#ff8c1a",
-  Medium:   "#ffd11a",
-  Low:      "#79b8ff",
+  Critical: token("--s-critical"),
+  High:     token("--s-high"),
+  Medium:   token("--s-medium"),
+  Low:      token("--s-low"),
 };
 
 const SEVERITY_BADGE: Record<string, [string, string]> = {
-  Critical: ["rgba(255,77,77,0.22)",  "#ff7070"],
-  High:     ["rgba(255,140,26,0.22)", "#ffaa50"],
-  Medium:   ["rgba(255,209,26,0.18)", "#ffdd50"],
-  Low:      ["rgba(121,184,255,0.18)","#90ccff"],
+  Critical: ["rgba(232, 117, 107,0.22)",  token("--s-critical")],
+  High:     ["rgba(240, 138, 90,0.22)", token("--s-high")],
+  Medium:   ["rgba(217, 182, 92,0.18)", token("--s-medium")],
+  Low:      ["rgba(139, 156, 175,0.18)",token("--s-low")],
 };
 
 export function drawDarkNodeHover(
@@ -84,14 +85,14 @@ export function drawDarkNodeHover(
 
   // ── Layer 2: top sheen (glass highlight) ─────────────────────────────────
   const sheen = context.createLinearGradient(x, y, x, y + boxHeight * 0.5);
-  sheen.addColorStop(0, "rgba(255, 255, 255, 0.11)");
-  sheen.addColorStop(1, "rgba(255, 255, 255, 0)");
+  sheen.addColorStop(0, "rgba(245, 248, 251, 0.11)");
+  sheen.addColorStop(1, "rgba(245, 248, 251, 0)");
   context.fillStyle = sheen;
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.fill();
 
   // ── Layer 3: outer border ────────────────────────────────────────────────
-  context.strokeStyle = "rgba(255, 255, 255, 0.11)";
+  context.strokeStyle = "rgba(245, 248, 251, 0.11)";
   context.lineWidth   = 1;
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.stroke();
@@ -112,7 +113,7 @@ export function drawDarkNodeHover(
   const textX = x + accentW + PAD_X;
   if (label) {
     context.font         = `${weight} ${fontSize}px ${font}`;
-    context.fillStyle    = "#ededf5";
+    context.fillStyle    = token("--t-primary");
     context.textBaseline = "top";
     context.fillText(label, textX, y + PAD_Y);
   }
@@ -121,7 +122,7 @@ export function drawDarkNodeHover(
   let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
-    const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(255,255,255,0.08)", "#aaa"];
+    const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(245, 248, 251,0.08)", token("--t-muted")];
     const sevW   = context.measureText(severity).width + 14;
     const badgeH = Math.round(fontSize - 1);
 
@@ -146,20 +147,20 @@ export function drawDarkNodeHover(
     roundedRect(context, textX, nextRowY, qW, badgeH, 3);
     context.fill();
 
-    context.fillStyle    = "#f59e0b";
+    context.fillStyle    = token("--s-medium");
     context.textBaseline = "top";
     context.fillText(qText, textX + 15, nextRowY + 1);
 
     // Small lock glyph before the text
     const lx = textX + 7, ly = nextRowY + badgeH / 2;
     const lr = badgeH * 0.28;
-    context.strokeStyle = "#f59e0b";
+    context.strokeStyle = token("--s-medium");
     context.lineWidth   = lr * 0.7;
     context.lineCap     = "round";
     context.beginPath();
     context.arc(lx, ly - lr * 0.5, lr * 0.6, Math.PI, 0);
     context.stroke();
-    context.fillStyle = "#f59e0b";
+    context.fillStyle = token("--s-medium");
     context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
   }
 
@@ -193,7 +194,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#f59e0b";
+  ctx.fillStyle = token("--s-medium");
   ctx.fill();
 
   // White lock — shackle (open-bottom arch)
@@ -202,7 +203,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   const shackleW   = r * 0.22;
   ctx.beginPath();
   ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
-  ctx.strokeStyle = "#fff";
+  ctx.strokeStyle = token("--t-primary");
   ctx.lineWidth   = shackleW;
   ctx.lineCap     = "round";
   ctx.stroke();
@@ -224,7 +225,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   ctx.lineTo(bX, bY + br);
   ctx.arcTo(bX, bY, bX + br, bY, br);
   ctx.closePath();
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = token("--t-primary");
   ctx.fill();
 
   ctx.restore();

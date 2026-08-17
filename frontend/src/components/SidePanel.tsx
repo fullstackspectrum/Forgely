@@ -18,7 +18,7 @@ function VersionString({ version, mono = false }: { version: string; mono?: bool
       <span
         className="version-string-text"
         title={version}
-        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" } : undefined}
+        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "var(--fg-blue-200)" } : undefined}
       >
         {version}
       </span>
@@ -511,7 +511,7 @@ export default function SidePanel({
 
       {d.vuln_count > 0 && d.cves.length === 0 && (
         <div className="panel-section">
-          <p style={{ color: "#e8a845" }}>
+          <p style={{ color: "var(--s-medium)" }}>
             ⚠ {d.vuln_count} vulnerabilities detected but details could not be
             retrieved.
           </p>
@@ -600,7 +600,7 @@ function MetaRow({
    /api/cve after the graph has rendered, and falls back to the record's own
    value when the graph still carries one. */
 function CveCard({ cve, description }: { cve: CVERecord; description: string }) {
-  const color = SEVERITY_COLORS[cve.severity] || "#666";
+  const color = SEVERITY_COLORS[cve.severity] || "var(--fg-n-600)";
   return (
     <div className="cve-card" style={{ borderLeftColor: color }}>
       <div className="cve-header">

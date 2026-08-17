@@ -15,16 +15,16 @@ export default function Legend() {
         <>
           <div className="legend-items">
             <span>
-              <i className="dot" style={{ background: "#000000" }} /> Repository
+              <i className="dot" style={{ background: "var(--c-bg)" }} /> Repository
             </span>
             <span>
-              <i className="dot" style={{ background: "#28a745" }} /> Package (Safe)
+              <i className="dot" style={{ background: "var(--s-none)" }} /> Package (Safe)
             </span>
             <span>
-              <i className="dot" style={{ background: "#ffffff", border: "1px solid #888" }} /> Package (Not Scanned)
+              <i className="dot" style={{ background: "var(--t-primary)", border: "1px solid var(--t-muted)" }} /> Package (Not Scanned)
             </span>
             <span>
-              <i className="dot-hexagon" style={{ background: "#9b59b6" }} /> Dependency
+              <i className="dot-hexagon" style={{ background: "var(--fg-blue-300)" }} /> Dependency
             </span>
           </div>
           <div className="legend-edges">

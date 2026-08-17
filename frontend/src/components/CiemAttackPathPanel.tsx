@@ -115,14 +115,14 @@ function repoPos(group: LayoutGroup, idx: number) {
    Colours
    ──────────────────────────────────────────────────────────── */
 const PERM_C: Record<Permission, { fill: string; border: string; arrow: string; pill: string }> = {
-  Admin: { fill: "rgba(239,68,68,0.13)",  border: "rgba(239,68,68,0.5)",  arrow: "rgba(239,68,68,0.5)",  pill: "#ef4444" },
-  Write: { fill: "rgba(249,115,22,0.13)", border: "rgba(249,115,22,0.5)", arrow: "rgba(249,115,22,0.5)", pill: "#f97316" },
+  Admin: { fill: "rgba(232, 117, 107,0.13)",  border: "rgba(232, 117, 107,0.5)",  arrow: "rgba(232, 117, 107,0.5)",  pill: "var(--s-critical)" },
+  Write: { fill: "rgba(240, 138, 90,0.13)", border: "rgba(240, 138, 90,0.5)", arrow: "rgba(240, 138, 90,0.5)", pill: "var(--s-high)" },
 };
 
 const NODE_C: Record<string, { fill: string; border: string; icon: string }> = {
-  user:    { fill: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.45)",  icon: "#3b82f6" },
-  service: { fill: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.45)",  icon: "#8b5cf6" },
-  team:    { fill: "rgba(245,158,11,0.12)",  border: "rgba(245,158,11,0.45)",  icon: "#f59e0b" },
+  user:    { fill: "rgba(55, 138, 221,0.12)",  border: "rgba(55, 138, 221,0.45)",  icon: "var(--c-action)" },
+  service: { fill: "rgba(92, 159, 228,0.12)",  border: "rgba(92, 159, 228,0.45)",  icon: "var(--fg-blue-300)" },
+  team:    { fill: "rgba(217, 182, 92,0.12)",  border: "rgba(217, 182, 92,0.45)",  icon: "var(--s-medium)" },
 };
 
 const TYPE_SUBLABELS: Record<string, string> = {
@@ -164,7 +164,7 @@ function CircleNode({
   cx: number; cy: number; r: number;
   type: string; label: string; subLabel?: string; delay?: string;
 }) {
-  const c = NODE_C[type] ?? { fill: "rgba(136,136,136,0.12)", border: "rgba(136,136,136,0.45)", icon: "#888" };
+  const c = NODE_C[type] ?? { fill: "rgba(136,136,136,0.12)", border: "rgba(136,136,136,0.45)", icon: "var(--t-muted)" };
   const scale = (r * 1.15) / 24;
   const off   = (24 * scale) / 2;
   const maxLen = r < 22 ? 13 : 15;
@@ -176,13 +176,13 @@ function CircleNode({
         <IconPaths type={type} color={c.icon}/>
       </g>
       <text x={cx} y={cy + r + 16} textAnchor="middle"
-        fontSize={r < 22 ? "11" : "12"} fontWeight="600" fill="#1e293b"
+        fontSize={r < 22 ? "11" : "12"} fontWeight="600" fill="var(--c-surface-raised)"
         fontFamily="Geist, system-ui, sans-serif">
         {trunc(label)}
       </text>
       {subLabel && (
         <text x={cx} y={cy + r + 28} textAnchor="middle"
-          fontSize="9.5" fill="#64748b" fontFamily="Geist, system-ui, sans-serif">
+          fontSize="9.5" fill="var(--fg-n-600)" fontFamily="Geist, system-ui, sans-serif">
           {subLabel}
         </text>
       )}
@@ -210,14 +210,14 @@ function RepoNode({
         <IconPaths type="repo" color={c.pill}/>
       </g>
       <text x={cx} y={cy + REPO_R + 14} textAnchor="middle"
-        fontSize="10" fontWeight="600" fill="#1e293b"
+        fontSize="10" fontWeight="600" fill="var(--c-surface-raised)"
         fontFamily="Geist, system-ui, sans-serif">
         {truncated}
       </text>
       <rect x={cx - pw / 2} y={cy + REPO_R + 26} width={pw} height={13} rx={6}
         fill={c.pill} opacity={0.88}/>
       <text x={cx} y={cy + REPO_R + 36} textAnchor="middle"
-        fontSize="7.5" fontWeight="700" fill="#fff" letterSpacing="0.05em"
+        fontSize="7.5" fontWeight="700" fill="var(--t-primary)" letterSpacing="0.05em"
         fontFamily="Geist, system-ui, sans-serif">
         {perm.toUpperCase()}
       </text>
@@ -336,7 +336,7 @@ function CiemPathCanvas({ risk, nodeMap }: { risk: IdentityRisk; nodeMap: Map<st
       <svg key={animKey} className="ag-canvas-svg" width="100%" height="100%" style={{ overflow: "visible" }}>
         <defs>
           {(["admin", "write"] as const).map((k) => {
-            const color = k === "admin" ? "#ef4444" : "#f97316";
+            const color = k === "admin" ? "var(--s-critical)" : "var(--s-high)";
             return (
               <marker key={k} id={`ciem-arr-${k}`} markerWidth="7" markerHeight="7"
                 refX="6" refY="3.5" orient="auto">
@@ -548,7 +548,7 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
             ) : (
               <div className="cap-identity-list">
                 {risks.map((risk) => {
-                  const color = ORG_NODE_COLORS[risk.node.type as keyof typeof ORG_NODE_COLORS] ?? "#888";
+                  const color = ORG_NODE_COLORS[risk.node.type as keyof typeof ORG_NODE_COLORS] ?? "var(--t-muted)";
                   const isSelected = selectedId === risk.nodeId;
                   return (
                     <button

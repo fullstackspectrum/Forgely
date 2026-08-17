@@ -36,10 +36,10 @@ const STATUS_FILTERS: { key: string; label: string; icon?: React.ReactNode }[] =
 ];
 
 const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
-  { key: "Critical", label: "Critical", color: "#ff4d4d" },
-  { key: "High",     label: "High",     color: "#ff8c1a" },
-  { key: "Medium",   label: "Medium",   color: "#ffd11a" },
-  { key: "Low",      label: "Low",      color: "#79b8ff" },
+  { key: "Critical", label: "Critical", color: "var(--s-critical)" },
+  { key: "High",     label: "High",     color: "var(--s-high)" },
+  { key: "Medium",   label: "Medium",   color: "var(--s-medium)" },
+  { key: "Low",      label: "Low",      color: "var(--s-low)" },
 ];
 
 export default function FilterBar({
@@ -147,7 +147,7 @@ export default function FilterBar({
                 <button
                   key={f.key}
                   className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
-                  style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "#fff" }}
+                  style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "var(--t-primary)" }}
                   onClick={() => toggleSeverity(f.key)}
                 >
                   {f.label}

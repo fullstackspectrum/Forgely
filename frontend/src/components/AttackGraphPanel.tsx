@@ -24,12 +24,12 @@ const X_PKG      = X_REPO     + NW + HX;
 const X_CVE      = X_PKG      + NW + HX;
 
 const STAGE_COLORS: Record<string, { accent: string; border: string; icon: string }> = {
-  client:   { accent: "#0ea5e9", border: "rgba(14,165,233,0.4)",   icon: "#0ea5e9" },
-  internet: { accent: "#4a90d9", border: "rgba(74,144,217,0.45)",  icon: "#4a90d9" },
-  registry: { accent: "#8b5cf6", border: "rgba(139,92,246,0.45)", icon: "#8b5cf6" },
-  repo:     { accent: "#10b981", border: "rgba(16,185,129,0.45)",  icon: "#10b981" },
-  package:  { accent: "#ff4d4d", border: "rgba(255,77,77,0.45)",   icon: "#ff4d4d" },
-  cve:      { accent: "#ef4444", border: "rgba(239,68,68,0.45)",   icon: "#ef4444" },
+  client:   { accent: "var(--fg-blue-200)", border: "rgba(133, 183, 235,0.4)",   icon: "var(--fg-blue-200)" },
+  internet: { accent: "var(--c-action)", border: "rgba(55, 138, 221,0.45)",  icon: "var(--c-action)" },
+  registry: { accent: "var(--fg-blue-300)", border: "rgba(92, 159, 228,0.45)", icon: "var(--fg-blue-300)" },
+  repo:     { accent: "var(--s-none)", border: "rgba(107, 135, 163,0.45)",  icon: "var(--s-none)" },
+  package:  { accent: "var(--s-critical)", border: "rgba(232, 117, 107,0.45)",   icon: "var(--s-critical)" },
+  cve:      { accent: "var(--s-critical)", border: "rgba(232, 117, 107,0.45)",   icon: "var(--s-critical)" },
 };
 
 /** Convert a severity label to a STAGE_COLORS-style colour object. */
@@ -334,11 +334,11 @@ function AttackGraphCanvas({
           </marker>
           {/* Arrowhead for CVE edges */}
           <marker id="ag-arrow-cve" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="rgba(239,68,68,0.7)" />
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(232, 117, 107,0.7)" />
           </marker>
           {/* Arrowhead for Cloudsmith-specific access edges */}
           <marker id="ag-arrow-cs" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="rgba(139,92,246,0.7)" />
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(92, 159, 228,0.7)" />
           </marker>
           <style>{`
             .ag-node-enter { animation: agNodeIn 0.35s cubic-bezier(0.16,1,0.3,1) both; }
@@ -387,8 +387,8 @@ function AttackGraphCanvas({
                   const nodeCenterY = nodeY + CNH / 2;
                   const isNative = method.type === "native";
                   const nodeColor = isNative ? STAGE_COLORS.client : STAGE_COLORS.registry;
-                  const edgeColor = isNative ? "rgba(74,144,217,0.5)" : "rgba(139,92,246,0.5)";
-                  const labelBg   = isNative ? "rgba(74,144,217,0.88)" : "rgba(139,92,246,0.88)";
+                  const edgeColor = isNative ? "rgba(55, 138, 221,0.5)" : "rgba(92, 159, 228,0.5)";
+                  const labelBg   = isNative ? "rgba(55, 138, 221,0.88)" : "rgba(92, 159, 228,0.88)";
                   const animDelay = `${0.05 + i * 0.06}s`;
 
                   // Bezier from client node right edge → Internet left center
@@ -419,7 +419,7 @@ function AttackGraphCanvas({
                         <rect x={lx - lw / 2} y={ly - 7} width={lw} height={14} rx={4} fill={labelBg} />
                         <text
                           x={lx} y={ly + 4.5} textAnchor="middle"
-                          fontSize="8.5" fontWeight="600" fill="#fff"
+                          fontSize="8.5" fontWeight="600" fill="var(--t-primary)"
                           fontFamily='ui-monospace,"SF Mono",Consolas,monospace'
                           style={{ pointerEvents: "none" }}
                         >{method.label}</text>
@@ -456,7 +456,7 @@ function AttackGraphCanvas({
             return (
               <line key={repo.id}
                 x1={X_REPO + NW / 2 + ICON_R} y1={ry} x2={X_PKG + NW / 2 - ICON_R} y2={0}
-                stroke={isQuarantined ? "rgba(239,68,68,0.5)" : "rgba(100,116,180,0.45)"}
+                stroke={isQuarantined ? "rgba(232, 117, 107,0.5)" : "rgba(100,116,180,0.45)"}
                 strokeWidth="1.5"
                 markerEnd="url(#ag-arrow-flow)"
                 strokeDasharray="800" className="ag-edge-draw"
@@ -571,16 +571,16 @@ function AttackGraphCanvas({
             id="package"
             x={X_PKG} y={pkgY}
             w={NW} h={NH} r={NR}
-            color={isQuarantined ? { accent: "#f97316", border: "rgba(249,115,22,0.5)", icon: STAGE_COLORS.package.icon } : STAGE_COLORS.package}
+            color={isQuarantined ? { accent: "var(--s-high)", border: "rgba(240, 138, 90,0.5)", icon: STAGE_COLORS.package.icon } : STAGE_COLORS.package}
             label={packageNode!.label}
             sub={packageNode!.data.version || ""}
             pill={isQuarantined
-              ? { text: "Quarantined", color: "#f97316" }
+              ? { text: "Quarantined", color: "var(--s-high)" }
               : { text: maxSev ?? "High", color: SEVERITY_COLORS[maxSev ?? "High"] ?? SEVERITY_COLORS.High }}
             delay="0.35s"
             icon={
               isQuarantined
-                ? <svg viewBox="0 0 24 24" fill="none" stroke="#f97316"
+                ? <svg viewBox="0 0 24 24" fill="none" stroke="var(--s-high)"
                     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="11" width="18" height="11" rx="2"/>
                     <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -665,7 +665,7 @@ function AttackGraphCanvas({
                 style={{
                   width: "100%", height: "100%",
                   background: "none", border: "none",
-                  color: "rgba(0,0,0,0.4)", fontSize: "11px", fontWeight: 600,
+                  color: "rgba(10, 22, 34,0.4)", fontSize: "11px", fontWeight: 600,
                   cursor: "pointer", fontFamily: "Geist, system-ui, sans-serif",
                   letterSpacing: "0.05em",
                 }}
@@ -720,7 +720,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
 
       {/* Label */}
       <text x={cx} y={cy + ICON_R + 16} textAnchor="middle"
-        fontSize="12" fontWeight="600" fill="#1e293b"
+        fontSize="12" fontWeight="600" fill="var(--c-surface-raised)"
         fontFamily={labelMono ? 'ui-monospace,"SF Mono",Consolas,monospace' : "Geist, system-ui, sans-serif"}
       >
         {label.length > 20 ? label.slice(0, 19) + "…" : label}
@@ -729,7 +729,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
       {/* Sub */}
       {sub && (
         <text x={cx} y={cy + ICON_R + 30} textAnchor="middle"
-          fontSize="10" fill="#6b7280"
+          fontSize="10" fill="var(--fg-n-600)"
           fontFamily="Geist, system-ui, sans-serif"
         >
           {sub.length > 24 ? sub.slice(0, 23) + "…" : sub}
@@ -745,7 +745,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
             <rect x={cx - pw / 2} y={pillY} width={pw} height={16} rx={8}
               fill={pill.color} opacity="0.9" />
             <text x={cx} y={pillY + 11.5} textAnchor="middle"
-              fontSize="9" fontWeight="700" fill="#fff"
+              fontSize="9" fontWeight="700" fill="var(--t-primary)"
               fontFamily="Geist, system-ui, sans-serif" letterSpacing="0.04em">
               {pill.text}
             </text>
@@ -781,7 +781,7 @@ function SvgClientNode({ id, x, y, label, iconType, color, delay }: SvgClientNod
       <foreignObject x={cx - 10} y={cy - 10} width={20} height={20}>
         <div style={{ width: 20, height: 20 }}>{getClientIcon(iconType, color.icon)}</div>
       </foreignObject>
-      <text x={cx} y={cy + r + 14} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="#1e293b"
+      <text x={cx} y={cy + r + 14} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--c-surface-raised)"
         fontFamily="Geist, system-ui, sans-serif">
         {label.length > 16 ? label.slice(0, 15) + "…" : label}
       </text>

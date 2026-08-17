@@ -12,6 +12,7 @@ import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
 import { ORG_NODE_COLORS } from "../types";
+import { token } from "../lib/palette";
 
 const NODE_SIZE: Record<string, number> = {
   org: 28,
@@ -25,24 +26,24 @@ const NODE_SIZE: Record<string, number> = {
 
 const EDGE_COLORS: Record<string, string> = {
   org_repo:         "rgba(40,167,69,0.5)",
-  member_org:       "rgba(255,140,26,0.5)",
+  member_org:       "rgba(240, 138, 90,0.5)",
   service_org:      "rgba(167,109,255,0.5)",
   team_org:         "rgba(255,77,135,0.5)",
   team_member:      "rgba(255,77,135,0.6)",
   access:           "rgba(74,144,217,0.25)",
-  entitlement_repo: "rgba(255,209,26,0.4)",
+  entitlement_repo: "rgba(217, 182, 92,0.4)",
   repo_upstream:    "rgba(0,188,212,0.5)",
   shared_upstream:  "rgba(255,87,34,0.7)",
 };
 
 const EDGE_COLORS_BRIGHT: Record<string, string> = {
   org_repo:         "rgba(40,167,69,0.90)",
-  member_org:       "rgba(255,140,26,0.90)",
+  member_org:       "rgba(240, 138, 90,0.90)",
   service_org:      "rgba(167,109,255,0.90)",
   team_org:         "rgba(255,77,135,0.90)",
   team_member:      "rgba(255,77,135,0.90)",
   access:           "rgba(74,144,217,0.85)",
-  entitlement_repo: "rgba(255,209,26,0.90)",
+  entitlement_repo: "rgba(217, 182, 92,0.90)",
   repo_upstream:    "rgba(0,188,212,0.90)",
   shared_upstream:  "rgba(255,87,34,0.90)",
 };
@@ -258,7 +259,7 @@ export default function OrgGraphCanvas({
           const nodeAttrs: Record<string, unknown> = {
             label: isOrg ? "" : node.label,
             size: NODE_SIZE[node.type] ?? 10,
-            color: isOrg ? "#000000" : (ORG_NODE_COLORS[node.type] ?? "#666"),
+            color: isOrg ? token("--fg-n-950") : (ORG_NODE_COLORS[node.type] ?? token("--fg-n-600")),
             x: Math.random() * 100,
             y: Math.random() * 100,
             nodeType: node.type,
@@ -309,7 +310,7 @@ export default function OrgGraphCanvas({
           labelGridCellSize: 80,
           labelRenderedSizeThreshold: 5,
           labelFont: "Geist, system-ui, sans-serif",
-          labelColor: { color: "#ddd" },
+          labelColor: { color: token("--t-secondary") },
           labelSize: 13,
           stagePadding: 40,
           zIndex: true,
@@ -337,7 +338,7 @@ export default function OrgGraphCanvas({
                 res.highlighted = true;
                 res.zIndex = 10;
               } else if (!isOrg) {
-                res.color = "#111220";
+                res.color = token("--c-bg");
                 res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
                 res.label = "";
                 res.zIndex = -2;
@@ -357,14 +358,14 @@ export default function OrgGraphCanvas({
               } else if (st.neighbors.has(node)) {
                 res.zIndex = 5;
               } else if (!isOrg) {
-                res.color = "#111220";
+                res.color = token("--c-bg");
                 res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
                 res.label = "";
                 res.zIndex = -2;
               }
             } else if (st.hoveredNode) {
               if (!st.hoverNeighbors.has(node) && !isOrg) {
-                res.color = "#0e0f1c";
+                res.color = token("--c-bg");
                 res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
                 res.label = "";
                 res.zIndex = -1;
