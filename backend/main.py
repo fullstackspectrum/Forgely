@@ -54,6 +54,7 @@ from models import (
     WorkspaceRepoSummary,
 )
 from cache import ScanCache, cache_enabled
+from compression import StreamingGZipMiddleware
 from perfstats import BuildTimer, format_report, get_stats, payload_bytes_enabled
 
 # Load .env from the project root (one level up)
@@ -133,6 +134,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Graph payloads are large and highly repetitive: 4.2 MB for neuro-packages and
+# 29.2 MB for neuro-containers, whose 21,598 CVE descriptions repeat across
+# every package sharing a CVE. minimum_size keeps it off the many small JSON
+# replies where a round of deflate buys nothing.
+#
+# StreamingGZipMiddleware rather than Starlette's: see compression.py. The
+# stock one buffers streamed chunks inside zlib, which would hold every
+# progress frame until the build ends.
+app.add_middleware(StreamingGZipMiddleware, minimum_size=1000)
 
 # Simple in-memory cache
 _cache: dict[str, dict] = {}
