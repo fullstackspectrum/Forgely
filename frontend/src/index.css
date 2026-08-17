@@ -1,5 +1,6 @@
 /* ===== Forgely – Global Styles ===== */
 
+@import "./styles/fonts.css";
 @import "./styles/tokens.css";
 
 /* Legacy variable names, re-pointed at the design tokens.
@@ -1719,7 +1720,7 @@ body {
 .dep-pkg-expr {
   font-size: 12px;
   font-weight: 500;
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: var(--fg-font-mono);
   color: var(--fg-blue-200);
   white-space: nowrap;
   flex-shrink: 0;
@@ -2226,7 +2227,7 @@ body {
 .dep-row-version {
   font-size: 12px;
   color: var(--t-muted);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--fg-font-mono);
 }
 
 .dep-row-badge {
@@ -3077,7 +3078,7 @@ body {
   color: var(--text-muted);
 }
 .connect-key-masked {
-  font-family: "SF Mono", "Fira Code", monospace;
+  font-family: var(--fg-font-mono);
   color: var(--text-dim);
   font-size: 13px;
   letter-spacing: 1px;
@@ -3531,7 +3532,7 @@ body {
 }
 
 .org-detail-mono {
-  font-family: "SF Mono", "Fira Code", monospace;
+  font-family: var(--fg-font-mono);
   font-size: 12px;
 }
 
@@ -4188,7 +4189,7 @@ body {
 }
 
 .ag-cve-id {
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: var(--fg-font-mono);
   font-size: 12px;
   color: var(--s-critical);
 }
@@ -4566,7 +4567,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
-  font-family: monospace;
+  font-family: var(--fg-font-mono);
 }
 
 .wo-cve-desc {
@@ -5155,4 +5156,85 @@ body {
 .cap-global-btn:hover {
   background: rgba(232, 117, 107, 0.18);
   color: var(--t-primary);
+}
+
+/* ============================================================
+   Typography — BRANDING.md §3
+   ============================================================ */
+
+/* Display face. Space Grotesk is the wordmark face; using it for headings ties
+   the product to the identity. It is not a UI face — wide apertures and quirky
+   glyphs get tiring in dense tables — so it stays above 18px and out of prose. */
+h1, h2, h3,
+.panel-title,
+.org-panel-hero-title,
+.loading-stage-label,
+.empty-state h2,
+.graph-loading h2 {
+  font-family: var(--fg-font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Identifiers render in mono. Not cosmetic: in a supply-chain tool users
+   compare strings differing by one character — 1.2.11 against 1.2.1, two
+   similar role ARNs — and proportional type makes that comparison harder.
+   BRANDING.md calls this the highest-value readability change in the rebrand.
+
+   Applies to package and repository names, versions, CVE identifiers and
+   dependency expressions. Not to prose, labels, counts or button text. */
+.panel-title,
+.panel-pkg-name,
+.panel-version,
+.result-name,
+.result-version,
+.wo-search-result-name,
+.wo-repo-row-name,
+.repo-format-card-name,
+.dep-row-name,
+.dep-row-version,
+.dep-pkg-label,
+.dep-pkg-version,
+.dep-pkg-expr,
+.repo-vuln-name,
+.cve-id,
+.wo-cve-id,
+.cve-affected,
+.cve-fixed,
+.ag-header-pkg,
+.cap-identity-name,
+.org-conn-card-name,
+.changelog-version {
+  font-family: var(--fg-font-mono);
+  font-feature-settings: "liga" 0, "calt" 0; /* no ligatures in identifiers */
+}
+
+/* .panel-title takes the display face above for its size and weight, but it
+   renders a package name, so mono wins on family. Declared after, deliberately. */
+.panel-title {
+  font-family: var(--fg-font-mono);
+  letter-spacing: 0;
+}
+
+/* Type scale. 11/12/13/15/18/22/28/36/48; body 15px at 1.55, tables 13px at
+   1.45. 11px is for labels only, never prose. */
+body {
+  font-size: var(--fg-text-md);
+  line-height: 1.55;
+}
+
+td, th,
+.dep-row-name,
+.dep-row-version,
+.cve-id,
+.wo-cve-id {
+  font-size: var(--fg-text-sm);
+  line-height: 1.45;
+}
+
+/* All-caps eyebrow labels take the tagline's tracking. */
+.panel-section-title,
+.wo-cve-section-label,
+.legend-title {
+  letter-spacing: 0.08em;
 }

@@ -330,7 +330,7 @@ function AttackGraphCanvas({
         <defs>
           {/* Arrowhead for flow edges */}
           <marker id="ag-arrow-flow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="rgba(100,116,180,0.6)" />
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(139, 156, 175,0.6)" />
           </marker>
           {/* Arrowhead for CVE edges */}
           <marker id="ag-arrow-cve" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -369,8 +369,8 @@ function AttackGraphCanvas({
                 {/* Dashed bounding box */}
                 <rect
                   x={0} y={boxY} width={CLIENT_BOX_W} height={boxH} rx={14}
-                  fill="rgba(14,165,233,0.04)"
-                  stroke="rgba(14,165,233,0.25)"
+                  fill="rgba(133, 183, 235,0.04)"
+                  stroke="rgba(133, 183, 235,0.25)"
                   strokeWidth="1.5" strokeDasharray="6,4"
                   className="ag-node-enter" style={{ animationDelay: "0s" }}
                 />
@@ -378,7 +378,7 @@ function AttackGraphCanvas({
                 <text
                   x={CLIENT_BOX_W / 2} y={boxY + 13}
                   textAnchor="middle" fontSize="9" fontWeight="700" letterSpacing="0.07em"
-                  fill="rgba(14,165,233,0.5)" fontFamily="Geist, system-ui, sans-serif"
+                  fill="rgba(133, 183, 235,0.5)" fontFamily="var(--fg-font-body)"
                   style={{ textTransform: "uppercase", pointerEvents: "none" }}
                 >CLIENT</text>
 
@@ -420,7 +420,7 @@ function AttackGraphCanvas({
                         <text
                           x={lx} y={ly + 4.5} textAnchor="middle"
                           fontSize="8.5" fontWeight="600" fill="var(--t-primary)"
-                          fontFamily='ui-monospace,"SF Mono",Consolas,monospace'
+                          fontFamily='var(--fg-font-mono)'
                           style={{ pointerEvents: "none" }}
                         >{method.label}</text>
                       </g>
@@ -444,7 +444,7 @@ function AttackGraphCanvas({
           <line
             x1={X_INTERNET + NW / 2 + ICON_R} y1={0}
             x2={X_REPO + NW / 2 - ICON_R} y2={repoCount === 1 ? 0 : repoStartY + NH / 2}
-            stroke="rgba(100,116,180,0.45)" strokeWidth="1.5"
+            stroke="rgba(139, 156, 175,0.45)" strokeWidth="1.5"
             markerEnd="url(#ag-arrow-flow)"
             strokeDasharray="800" className="ag-edge-draw"
             style={{ animationDelay: "0.15s" }}
@@ -456,7 +456,7 @@ function AttackGraphCanvas({
             return (
               <line key={repo.id}
                 x1={X_REPO + NW / 2 + ICON_R} y1={ry} x2={X_PKG + NW / 2 - ICON_R} y2={0}
-                stroke={isQuarantined ? "rgba(232, 117, 107,0.5)" : "rgba(100,116,180,0.45)"}
+                stroke={isQuarantined ? "rgba(232, 117, 107,0.5)" : "rgba(139, 156, 175,0.45)"}
                 strokeWidth="1.5"
                 markerEnd="url(#ag-arrow-flow)"
                 strokeDasharray="800" className="ag-edge-draw"
@@ -474,10 +474,10 @@ function AttackGraphCanvas({
               <g key={`qbadge-${i}`} className="ag-node-enter"
                 style={{ animationDelay: "0.55s", transformOrigin: `${mx}px ${my}px` }}>
                 <rect x={mx - 47} y={my - 10} width={94} height={20} rx={5}
-                  fill="white" stroke="rgba(234,88,12,0.6)" strokeWidth="1.5" />
+                  fill="white" stroke="rgba(240, 138, 90,0.6)" strokeWidth="1.5" />
                 <foreignObject x={mx - 44} y={my - 7} width={14} height={14}>
                   <div style={{ width: 14, height: 14 }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(234,88,12,0.9)"
+                    <svg viewBox="0 0 24 24" fill="none" stroke="rgba(240, 138, 90,0.9)"
                       strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2"/>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -485,7 +485,7 @@ function AttackGraphCanvas({
                   </div>
                 </foreignObject>
                 <text x={mx - 25} y={my + 4.5} fontSize="9" fontWeight="700" letterSpacing="0.05em"
-                  fill="rgba(194,65,12,0.9)" fontFamily="Geist, system-ui, sans-serif">
+                  fill="rgba(240, 138, 90,0.9)" fontFamily="var(--fg-font-body)">
                   QUARANTINED
                 </text>
               </g>
@@ -666,7 +666,7 @@ function AttackGraphCanvas({
                   width: "100%", height: "100%",
                   background: "none", border: "none",
                   color: "rgba(10, 22, 34,0.4)", fontSize: "11px", fontWeight: 600,
-                  cursor: "pointer", fontFamily: "Geist, system-ui, sans-serif",
+                  cursor: "pointer", fontFamily: "var(--fg-font-body)",
                   letterSpacing: "0.05em",
                 }}
               >
@@ -721,7 +721,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
       {/* Label */}
       <text x={cx} y={cy + ICON_R + 16} textAnchor="middle"
         fontSize="12" fontWeight="600" fill="var(--c-surface-raised)"
-        fontFamily={labelMono ? 'ui-monospace,"SF Mono",Consolas,monospace' : "Geist, system-ui, sans-serif"}
+        fontFamily={labelMono ? 'var(--fg-font-mono)' : "var(--fg-font-body)"}
       >
         {label.length > 20 ? label.slice(0, 19) + "…" : label}
       </text>
@@ -730,7 +730,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
       {sub && (
         <text x={cx} y={cy + ICON_R + 30} textAnchor="middle"
           fontSize="10" fill="var(--fg-n-600)"
-          fontFamily="Geist, system-ui, sans-serif"
+          fontFamily="var(--fg-font-body)"
         >
           {sub.length > 24 ? sub.slice(0, 23) + "…" : sub}
         </text>
@@ -746,7 +746,7 @@ function SvgNode({ id, x, y, w, h, r, color, label, sub, pill, icon, delay = "0s
               fill={pill.color} opacity="0.9" />
             <text x={cx} y={pillY + 11.5} textAnchor="middle"
               fontSize="9" fontWeight="700" fill="var(--t-primary)"
-              fontFamily="Geist, system-ui, sans-serif" letterSpacing="0.04em">
+              fontFamily="var(--fg-font-body)" letterSpacing="0.04em">
               {pill.text}
             </text>
           </>
@@ -782,7 +782,7 @@ function SvgClientNode({ id, x, y, label, iconType, color, delay }: SvgClientNod
         <div style={{ width: 20, height: 20 }}>{getClientIcon(iconType, color.icon)}</div>
       </foreignObject>
       <text x={cx} y={cy + r + 14} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--c-surface-raised)"
-        fontFamily="Geist, system-ui, sans-serif">
+        fontFamily="var(--fg-font-body)">
         {label.length > 16 ? label.slice(0, 15) + "…" : label}
       </text>
     </g>
