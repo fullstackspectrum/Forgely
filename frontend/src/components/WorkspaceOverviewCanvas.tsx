@@ -51,7 +51,38 @@ function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
     });
     forceAtlas2.assign(graph, {
       iterations: Math.min(600, 250 + n * 3),
-      settings: { gravity: 0.2, scalingRatio: 12, adjustSizes: true, strongGravityMode: true, slowDown: 1 + Math.log(n + 1) },
+      settings: {
+        gravity: 0.2,
+        scalingRatio: 12,
+        adjustSizes: true,
+        strongGravityMode: true,
+        slowDown: 1 + Math.log(n + 1),
+        // Gated, not unconditional. Barnes-Hut trades exact repulsion for a
+        // quadtree, and building that tree costs more than the O(N²) pass it
+        // replaces until the graph is large. Measured on this canvas's own
+        // topology and settings (one workspace node, one node per repo),
+        // best of three runs:
+        //
+        //     nodes    brute   barnes-hut
+        //         9    0.2ms        1.2ms
+        //        51    4.5ms       13.2ms
+        //       151   44.1ms       82.1ms
+        //       301  170.4ms      204.2ms
+        //       401  296.5ms      284.5ms   <- crossover
+        //       601  655.3ms      471.3ms
+        //       901 1467.7ms      776.6ms
+        //
+        // A workspace has one node per repository, so it sits at the top of
+        // that table almost always. Enabling this unconditionally — as the
+        // design doc suggested — would have made the common case 2-3x slower
+        // to speed up a size that does not occur.
+        //
+        // The threshold is sensitive to the initial scatter above, not just to
+        // node count: timed against a uniform ring the crossover looks like
+        // 300, but the random radial band this canvas actually uses pushes it
+        // to 400.
+        barnesHutOptimize: n > 400,
+      },
     });
     // Re-anchor workspace node to origin
     const ox = graph.getNodeAttribute(wsId, "x") as number;
