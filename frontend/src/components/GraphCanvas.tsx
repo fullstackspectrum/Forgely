@@ -507,6 +507,18 @@ export default function GraphCanvas({
       allowInvalidContainer: true,
       renderEdgeLabels: false,
       enableEdgeEvents: true,
+      // Skip edge draws while the camera is moving. sigma computes
+      // `moving` from camera animation, drag and wheel, and when this is set
+      // it skips every edge program's render() for that frame — so panning a
+      // 7,650-edge graph stops re-rasterising all of them per frame.
+      //
+      // It is worth more here than the default case because enableEdgeEvents
+      // is on above: that gives the edges context a picking buffer, so each
+      // frame was drawing the edges twice. Both passes are skipped.
+      //
+      // Edges reappear the moment the camera settles, including after the
+      // animatedReset that follows a layout run.
+      hideEdgesOnMove: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
       nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
