@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback } from "react";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
+import { useCveDescriptions } from "../hooks/useCveDescriptions";
 
 const SEV_FILTERS = new Set<FilterType>(["Critical", "High", "Medium", "Low"]);
 
@@ -101,6 +102,15 @@ export default function SidePanel({
     });
     return list;
   }, [data, nodeId, node]);
+
+  /* CVE descriptions are fetched on demand rather than carried in the graph
+     payload (perf/08). Declared before the early returns for the same reason
+     as `dependencies` above. */
+  const { descriptions: cveDescriptions } = useCveDescriptions(
+    owner,
+    repo,
+    node?.type === "package" && node.data.cves.length > 0 ? node.data.slug : "",
+  );
 
   if (!node) return null;
 
@@ -403,7 +413,7 @@ export default function SidePanel({
           if (!q) return true;
           return (
             (c.id || "").toLowerCase().includes(q) ||
-            (c.description || "").toLowerCase().includes(q) ||
+            (cveDescriptions[c.id] || c.description || "").toLowerCase().includes(q) ||
             (c.affected || "").toLowerCase().includes(q)
           );
         });
@@ -467,7 +477,11 @@ export default function SidePanel({
               {filtered.length === 0 ? (
                 <div className="cve-empty">No CVEs match your search.</div>
               ) : paginated.map((cve, i) => (
-                <CveCard key={`${cve.id}-${i}`} cve={cve} />
+                <CveCard
+                  key={`${cve.id}-${i}`}
+                  cve={cve}
+                  description={cveDescriptions[cve.id] || cve.description}
+                />
               ))}
             </div>
             {totalPages > 1 && (
@@ -582,7 +596,10 @@ function MetaRow({
   );
 }
 
-function CveCard({ cve }: { cve: CVERecord }) {
+/* `description` is passed in rather than read off `cve`: it arrives from
+   /api/cve after the graph has rendered, and falls back to the record's own
+   value when the graph still carries one. */
+function CveCard({ cve, description }: { cve: CVERecord; description: string }) {
   const color = SEVERITY_COLORS[cve.severity] || "#666";
   return (
     <div className="cve-card" style={{ borderLeftColor: color }}>
@@ -606,11 +623,11 @@ function CveCard({ cve }: { cve: CVERecord }) {
           ✅ <strong>Fixed in:</strong> {cve.fixed_in}
         </div>
       )}
-      {cve.description && (
+      {description && (
         <div className="cve-description">
-          {cve.description.length > 250
-            ? cve.description.slice(0, 250) + "…"
-            : cve.description}
+          {description.length > 250
+            ? description.slice(0, 250) + "…"
+            : description}
         </div>
       )}
       <div className="cve-links">
