@@ -197,7 +197,7 @@ export default function WorkspaceOverviewCanvas({
       });
       graph.addEdge(wsId, repo.slug, {
         size: 2,
-        color: "rgba(70,130,210,0.5)",
+        color: "rgba(55, 138, 221,0.5)",
         type: "curvedArrow",
         curvature: 0.15,
       });
@@ -205,8 +205,8 @@ export default function WorkspaceOverviewCanvas({
 
     const sigma = new Sigma(graph, container, {
       defaultNodeColor: token("--c-action"),
-      defaultEdgeColor: "rgba(120,130,180,0.25)",
-      labelFont: "Inter, system-ui, sans-serif",
+      defaultEdgeColor: "rgba(139, 156, 175,0.25)",
+      labelFont: token("--fg-font-body"),
       labelSize: 12,
       labelWeight: "500",
       labelColor: { color: token("--t-secondary") },
@@ -356,7 +356,7 @@ export default function WorkspaceOverviewCanvas({
         const repoNode = src === `ws:${data.owner}` ? tgt : src;
         const fmts = repoFormats.get(repoNode);
         const matches = fmts ? [...formatFilter].some((f) => fmts.has(f)) : false;
-        return { ...attrs, color: matches ? "rgba(70,130,210,0.5)" : "rgba(70,130,210,0.1)" };
+        return { ...attrs, color: matches ? "rgba(55, 138, 221,0.5)" : "rgba(55, 138, 221,0.1)" };
       }
       return attrs;
     });

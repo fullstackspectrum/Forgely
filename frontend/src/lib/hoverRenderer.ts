@@ -28,7 +28,7 @@ export function drawDarkNodeHover(
   settings: Settings,
 ): void {
   const fontSize  = settings.labelSize  ?? 13;
-  const font      = settings.labelFont  ?? "Geist, system-ui, sans-serif";
+  const font      = settings.labelFont  ?? token("--fg-font-body");
   const weight    = settings.labelWeight ?? "600";
   const label          = (data.label as string | null | undefined) ?? "";
   const severity       = data.severity      as string | undefined;
@@ -72,12 +72,12 @@ export function drawDarkNodeHover(
 
   // ── Layer 1: drop shadow + glass body ────────────────────────────────────
   context.save();
-  context.shadowColor    = "rgba(0, 0, 0, 0.65)";
+  context.shadowColor    = "rgba(10, 22, 34, 0.65)";
   context.shadowBlur     = 22;
   context.shadowOffsetY  = 5;
   const bodyGrad = context.createLinearGradient(x, y, x, y + boxHeight);
-  bodyGrad.addColorStop(0, "rgba(30, 33, 52, 0.97)");
-  bodyGrad.addColorStop(1, "rgba(16, 18, 30, 0.97)");
+  bodyGrad.addColorStop(0, "rgba(18, 32, 46, 0.97)");
+  bodyGrad.addColorStop(1, "rgba(10, 22, 34, 0.97)");
   context.fillStyle = bodyGrad;
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.fill();
@@ -143,7 +143,7 @@ export function drawDarkNodeHover(
     const qW     = context.measureText(qText).width + 22;
     const badgeH = Math.round(fontSize - 1);
 
-    context.fillStyle = "rgba(245,158,11,0.20)";
+    context.fillStyle = "rgba(217, 182, 92,0.20)";
     roundedRect(context, textX, nextRowY, qW, badgeH, 3);
     context.fill();
 
@@ -188,7 +188,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   // Dark border ring for contrast against any node colour
   ctx.beginPath();
   ctx.arc(cx, cy, r + r * 0.18, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillStyle = "rgba(10, 22, 34,0.55)";
   ctx.fill();
 
   // Amber filled background circle

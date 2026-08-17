@@ -25,27 +25,27 @@ const NODE_SIZE: Record<string, number> = {
 };
 
 const EDGE_COLORS: Record<string, string> = {
-  org_repo:         "rgba(40,167,69,0.5)",
+  org_repo:         "rgba(107, 135, 163,0.5)",
   member_org:       "rgba(240, 138, 90,0.5)",
-  service_org:      "rgba(167,109,255,0.5)",
-  team_org:         "rgba(255,77,135,0.5)",
-  team_member:      "rgba(255,77,135,0.6)",
-  access:           "rgba(74,144,217,0.25)",
+  service_org:      "rgba(92, 159, 228,0.5)",
+  team_org:         "rgba(232, 117, 107,0.5)",
+  team_member:      "rgba(232, 117, 107,0.6)",
+  access:           "rgba(55, 138, 221,0.25)",
   entitlement_repo: "rgba(217, 182, 92,0.4)",
-  repo_upstream:    "rgba(0,188,212,0.5)",
-  shared_upstream:  "rgba(255,87,34,0.7)",
+  repo_upstream:    "rgba(133, 183, 235,0.5)",
+  shared_upstream:  "rgba(240, 138, 90,0.7)",
 };
 
 const EDGE_COLORS_BRIGHT: Record<string, string> = {
-  org_repo:         "rgba(40,167,69,0.90)",
+  org_repo:         "rgba(107, 135, 163,0.90)",
   member_org:       "rgba(240, 138, 90,0.90)",
-  service_org:      "rgba(167,109,255,0.90)",
-  team_org:         "rgba(255,77,135,0.90)",
-  team_member:      "rgba(255,77,135,0.90)",
-  access:           "rgba(74,144,217,0.85)",
+  service_org:      "rgba(92, 159, 228,0.90)",
+  team_org:         "rgba(232, 117, 107,0.90)",
+  team_member:      "rgba(232, 117, 107,0.90)",
+  access:           "rgba(55, 138, 221,0.85)",
   entitlement_repo: "rgba(217, 182, 92,0.90)",
-  repo_upstream:    "rgba(0,188,212,0.90)",
-  shared_upstream:  "rgba(255,87,34,0.90)",
+  repo_upstream:    "rgba(133, 183, 235,0.90)",
+  shared_upstream:  "rgba(240, 138, 90,0.90)",
 };
 
 function assignOrgTreeLayout(graph: Graph, horizontal: boolean) {
@@ -283,7 +283,7 @@ export default function OrgGraphCanvas({
           const isAccess = edge.type === "access";
           graph.addEdgeWithKey(`e-${idx++}`, edge.source, edge.target, {
             size: isShared ? 3 : isAccess ? 1.5 : 1.5,
-            color: EDGE_COLORS[edge.type] ?? "rgba(100,100,100,0.4)",
+            color: EDGE_COLORS[edge.type] ?? "rgba(139, 156, 175,0.4)",
             type: isAccess ? "curvedDotted" : "curvedArrow",
             curvature: isShared ? 0.3 : 0.15,
             edgeKind: edge.type,
@@ -309,7 +309,8 @@ export default function OrgGraphCanvas({
           labelDensity: 0.15,
           labelGridCellSize: 80,
           labelRenderedSizeThreshold: 5,
-          labelFont: "Geist, system-ui, sans-serif",
+          // Resolved, not var(): sigma passes this straight to canvas ctx.font.
+          labelFont: token("--fg-font-body"),
           labelColor: { color: token("--t-secondary") },
           labelSize: 13,
           stagePadding: 40,
@@ -407,11 +408,11 @@ export default function OrgGraphCanvas({
                 res.hidden = true;
               } else {
                 res.size = (attrs.size ?? 1) * 2;
-                res.color = EDGE_COLORS_BRIGHT[kind] ?? "rgba(180,180,220,0.90)";
+                res.color = EDGE_COLORS_BRIGHT[kind] ?? "rgba(182, 196, 211,0.90)";
               }
             } else if (st.hoveredNode) {
               if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
-                res.color = "rgba(30, 32, 50, 0.08)";
+                res.color = "rgba(18, 32, 46, 0.08)";
               }
             }
 

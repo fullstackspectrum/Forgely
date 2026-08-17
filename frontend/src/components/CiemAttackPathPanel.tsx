@@ -164,7 +164,7 @@ function CircleNode({
   cx: number; cy: number; r: number;
   type: string; label: string; subLabel?: string; delay?: string;
 }) {
-  const c = NODE_C[type] ?? { fill: "rgba(136,136,136,0.12)", border: "rgba(136,136,136,0.45)", icon: "var(--t-muted)" };
+  const c = NODE_C[type] ?? { fill: "rgba(139, 156, 175,0.12)", border: "rgba(139, 156, 175,0.45)", icon: "var(--t-muted)" };
   const scale = (r * 1.15) / 24;
   const off   = (24 * scale) / 2;
   const maxLen = r < 22 ? 13 : 15;
@@ -177,12 +177,12 @@ function CircleNode({
       </g>
       <text x={cx} y={cy + r + 16} textAnchor="middle"
         fontSize={r < 22 ? "11" : "12"} fontWeight="600" fill="var(--c-surface-raised)"
-        fontFamily="Geist, system-ui, sans-serif">
+        fontFamily="var(--fg-font-body)">
         {trunc(label)}
       </text>
       {subLabel && (
         <text x={cx} y={cy + r + 28} textAnchor="middle"
-          fontSize="9.5" fill="var(--fg-n-600)" fontFamily="Geist, system-ui, sans-serif">
+          fontSize="9.5" fill="var(--fg-n-600)" fontFamily="var(--fg-font-body)">
           {subLabel}
         </text>
       )}
@@ -211,14 +211,14 @@ function RepoNode({
       </g>
       <text x={cx} y={cy + REPO_R + 14} textAnchor="middle"
         fontSize="10" fontWeight="600" fill="var(--c-surface-raised)"
-        fontFamily="Geist, system-ui, sans-serif">
+        fontFamily="var(--fg-font-body)">
         {truncated}
       </text>
       <rect x={cx - pw / 2} y={cy + REPO_R + 26} width={pw} height={13} rx={6}
         fill={c.pill} opacity={0.88}/>
       <text x={cx} y={cy + REPO_R + 36} textAnchor="middle"
         fontSize="7.5" fontWeight="700" fill="var(--t-primary)" letterSpacing="0.05em"
-        fontFamily="Geist, system-ui, sans-serif">
+        fontFamily="var(--fg-font-body)">
         {perm.toUpperCase()}
       </text>
     </g>
@@ -356,28 +356,28 @@ function CiemPathCanvas({ risk, nodeMap }: { risk: IdentityRisk; nodeMap: Map<st
 
           {/* ── Column headers ─────────────────────────────── */}
           <text x={X_ID_C} y={24} textAnchor="middle" fontSize="9" fontWeight="700"
-            letterSpacing="0.07em" fill="rgba(100,116,139,0.65)"
-            fontFamily="Geist, system-ui, sans-serif">IDENTITY</text>
+            letterSpacing="0.07em" fill="rgba(139, 156, 175,0.65)"
+            fontFamily="var(--fg-font-body)">IDENTITY</text>
 
           {hasTeams && (
             <text x={X_TEAM_C} y={24} textAnchor="middle" fontSize="9" fontWeight="700"
-              letterSpacing="0.07em" fill="rgba(100,116,139,0.65)"
-              fontFamily="Geist, system-ui, sans-serif">VIA TEAM</text>
+              letterSpacing="0.07em" fill="rgba(139, 156, 175,0.65)"
+              fontFamily="var(--fg-font-body)">VIA TEAM</text>
           )}
 
           <text
             x={X_REPO_C0 + ((cols - 1) * REPO_COL_W) / 2}
             y={24} textAnchor="middle" fontSize="9" fontWeight="700"
-            letterSpacing="0.07em" fill="rgba(100,116,139,0.65)"
-            fontFamily="Geist, system-ui, sans-serif">REPOSITORY</text>
+            letterSpacing="0.07em" fill="rgba(139, 156, 175,0.65)"
+            fontFamily="var(--fg-font-body)">REPOSITORY</text>
 
           {/* ── Group-separator labels ──────────────────────── */}
           {groups.length > 1 && groups.map((g) => (
             <text key={`sep-${g.teamId}`}
               x={X_REPO_C0 - 8} y={g.startY - 8}
               fontSize="8" fontWeight="700" letterSpacing="0.06em"
-              fill="rgba(100,116,139,0.45)"
-              fontFamily="Geist, system-ui, sans-serif">
+              fill="rgba(139, 156, 175,0.45)"
+              fontFamily="var(--fg-font-body)">
               {g.teamId
                 ? (g.teamNode?.label ?? g.teamId).toUpperCase()
                 : "DIRECT ACCESS"}
@@ -419,8 +419,8 @@ function CiemPathCanvas({ risk, nodeMap }: { risk: IdentityRisk; nodeMap: Map<st
                   hasTeams && (
                     <text x={X_TEAM_C} y={group.teamCY + 4} textAnchor="middle"
                       fontSize="8.5" fontWeight="700" letterSpacing="0.06em"
-                      fill="rgba(100,116,139,0.4)"
-                      fontFamily="Geist, system-ui, sans-serif">DIRECT</text>
+                      fill="rgba(139, 156, 175,0.4)"
+                      fontFamily="var(--fg-font-body)">DIRECT</text>
                   )
                 )}
 
@@ -617,7 +617,7 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
             ) : (
               <div className="cap-detail-empty">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
-                  stroke="rgba(100,116,139,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  stroke="rgba(139, 156, 175,0.45)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 </svg>
                 <p>Select an identity to explore its attack paths</p>

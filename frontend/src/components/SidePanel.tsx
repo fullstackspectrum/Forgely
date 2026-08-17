@@ -18,7 +18,7 @@ function VersionString({ version, mono = false }: { version: string; mono?: bool
       <span
         className="version-string-text"
         title={version}
-        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "var(--fg-blue-200)" } : undefined}
+        style={mono ? { fontFamily: "var(--fg-font-mono)", color: "var(--fg-blue-200)" } : undefined}
       >
         {version}
       </span>

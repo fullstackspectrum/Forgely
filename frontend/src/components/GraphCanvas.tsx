@@ -459,7 +459,7 @@ export default function GraphCanvas({
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
+        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
         type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -526,7 +526,8 @@ export default function GraphCanvas({
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
-      labelFont: "Geist, system-ui, sans-serif",
+      // Resolved, not var(): sigma passes this straight to canvas ctx.font.
+      labelFont: token("--fg-font-body"),
       labelColor: { color: token("--t-secondary") },
       labelSize: 13,
       stagePadding: 40,
@@ -800,9 +801,9 @@ export default function GraphCanvas({
           } else {
             res.size = (attrs.size ?? 1) * 2;
             const kind = graph.getEdgeAttribute(edge, "edgeKind");
-            if (kind === "shared_cve")    res.color = "rgba(255,90,90,0.90)";
-            else if (kind === "dependency") res.color = "rgba(155,80,210,0.90)";
-            else                            res.color = "rgba(74,144,217,0.90)";
+            if (kind === "shared_cve")    res.color = "rgba(232, 117, 107,0.90)";
+            else if (kind === "dependency") res.color = "rgba(92, 159, 228,0.90)";
+            else                            res.color = "rgba(55, 138, 221,0.90)";
           }
         }
 
@@ -810,7 +811,7 @@ export default function GraphCanvas({
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
-            res.color = "rgba(30, 32, 50, 0.08)";
+            res.color = "rgba(18, 32, 46, 0.08)";
           }
         }
 
