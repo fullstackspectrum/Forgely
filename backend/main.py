@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import queue
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +17,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from cloudsmith import (
     APP_VERSION,
@@ -174,11 +175,14 @@ def _cache_put(key: str, data) -> None:
             : len(_cache) - _MAX_CACHE_ENTRIES
         ]:
             _cache.pop(k, None)
+
+
 _pkg_list_cache: dict[str, dict] = {}
 _pkg_list_lock = threading.Lock()
 
 
-def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False) -> list[dict]:
+def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False,
+                           on_page=None) -> list[dict]:
     """fetch_all_packages, with a short-lived in-memory cache.
 
     In-memory rather than SQLite on purpose: this is the one volatile input in
@@ -192,7 +196,7 @@ def _fetch_packages_cached(session, owner: str, repo: str, refresh: bool = False
         if entry and time.time() - entry["ts"] < PACKAGE_LIST_TTL:
             log.info("Package list for %s served from cache (%d packages)", key, len(entry["data"]))
             return entry["data"]
-    packages = fetch_all_packages(session, owner, repo)
+    packages = fetch_all_packages(session, owner, repo, on_page=on_page)
     now = time.time()
     with _pkg_list_lock:
         _pkg_list_cache[key] = {"data": packages, "ts": now}
@@ -277,15 +281,35 @@ def list_repos(owner: str, request: Request):
     ]
 
 
-def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> GraphResponse:
+def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
+                 on_progress=None) -> GraphResponse:
     """Fetch Cloudsmith data and build the graph response.
 
     *refresh* forces a fresh package list; scan results are still reused, since
     those are keyed on the scan timestamp and cannot go stale.
+
+    *on_progress(phase, done, total)* reports build progress for the streaming
+    endpoint. Frames are throttled to ~100 per phase — a 7,490-package build
+    would otherwise emit thousands, and the client only needs enough to move a
+    progress bar smoothly.
     """
+    def _progress(phase: str, done: int, total: int) -> None:
+        if on_progress:
+            on_progress(phase, done, total)
+
+    def _throttled(phase: str, total: int):
+        step = max(1, total // 100)
+        def report(done: int) -> None:
+            if done == total or done % step == 0:
+                _progress(phase, done, total)
+        return report
+
     timer = BuildTimer()
     session = create_session(api_key)
-    packages = _fetch_packages_cached(session, owner, repo, refresh=refresh)
+    packages = _fetch_packages_cached(
+        session, owner, repo, refresh=refresh,
+        on_page=lambda done, total: _progress("packages", done, total),
+    )
 
     if not packages:
         raise HTTPException(status_code=404, detail="No packages found – check owner/repo and API key.")
@@ -381,11 +405,14 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> 
         else:
             vuln_results[meta["node_id"]] = (None, 0, [])
 
+    _scan_report = _throttled("scanning", len(scannable_metas))
+    _progress("scanning", 0, len(scannable_metas))
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = {pool.submit(_scan_vuln, m): m for m in scannable_metas}
-        for fut in as_completed(futures):
+        for _scan_done, fut in enumerate(as_completed(futures), 1):
             meta, max_sev, vuln_count, vulns = fut.result()
             vuln_results[meta["node_id"]] = (max_sev, vuln_count, vulns)
+            _scan_report(_scan_done)
 
     cache_delta: dict | None = None
     if scan_cache is not None:
@@ -592,9 +619,12 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False) -> 
         slug, src_id = item
         return (src_id, fetch_dependencies(session, owner, repo, slug, slug_to_fmt.get(slug, "")))
 
+    _dep_report = _throttled("dependencies", len(dep_items))
+    _progress("dependencies", 0, len(dep_items))
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         dep_futures = [pool.submit(_fetch_dep, item) for item in dep_items]
-        for fut in as_completed(dep_futures):
+        for _dep_done, fut in enumerate(as_completed(dep_futures), 1):
+            _dep_report(_dep_done)
             src_id, deps = fut.result()
             for dep in deps:
                 dep_name = dep.get("name", dep.get("identifier", "unknown"))
@@ -673,6 +703,87 @@ def get_graph(
             "perf": perf,
         })
     return result
+
+
+# A buffering proxy would hold the whole stream and defeat the point entirely.
+_NDJSON_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+
+@app.get("/api/graph/stream")
+def stream_graph(
+    request: Request,
+    owner: str | None = None,
+    repo: str | None = None,
+    refresh: bool = False,
+):
+    """Build the graph, streaming progress as NDJSON.
+
+    Added alongside /api/graph rather than replacing it: converting that
+    endpoint would break its response_model schema and the ?debug=1 path for
+    no benefit, and a non-streaming consumer is still the simpler contract.
+
+    Frame types, one JSON object per line:
+        {"type":"progress","phase":...,"done":N,"total":M}
+        {"type":"graph","data":{...}}          terminal, on success
+        {"type":"error","detail":"..."}        terminal, on failure
+
+    This does not make the build faster — it makes a 44.6s cold build legible
+    instead of a spinner. Warm builds finish in ~1.5s and simply emit fewer
+    frames.
+    """
+    api_key = _get_api_key(request)
+    default_owner, default_repo = _get_defaults()
+    owner = owner or default_owner
+    repo = repo or default_repo
+    if not owner or not repo:
+        raise HTTPException(status_code=400, detail="owner and repo are required")
+
+    cache_key = f"{owner}/{repo}"
+    if not refresh and cache_key in _cache and time.time() - _cache[cache_key]["ts"] < CACHE_TTL:
+        cached = _cache[cache_key]["data"]
+
+        def cached_frames():
+            yield json.dumps({"type": "progress", "phase": "cached", "done": 1, "total": 1}) + "\n"
+            yield json.dumps({"type": "graph", "data": jsonable_encoder(cached)}) + "\n"
+
+        return StreamingResponse(
+            cached_frames(),
+            media_type="application/x-ndjson",
+            headers=_NDJSON_HEADERS,
+        )
+
+    frames: queue.Queue = queue.Queue()
+
+    def worker():
+        try:
+            result = _build_graph(
+                api_key, owner, repo, refresh=refresh,
+                on_progress=lambda phase, done, total: frames.put(
+                    {"type": "progress", "phase": phase, "done": done, "total": total}
+                ),
+            )
+            _cache_put(cache_key, result)
+            frames.put({"type": "graph", "data": jsonable_encoder(result)})
+        except HTTPException as exc:
+            frames.put({"type": "error", "detail": exc.detail, "status": exc.status_code})
+        except Exception as exc:  # noqa: BLE001 - surfaced to the client as a frame
+            log.warning("Streamed build failed for %s: %s", cache_key, exc)
+            frames.put({"type": "error", "detail": str(exc), "status": 500})
+        finally:
+            frames.put(None)
+
+    threading.Thread(target=worker, daemon=True, name=f"build-{cache_key}").start()
+
+    def generate():
+        while True:
+            frame = frames.get()
+            if frame is None:
+                break
+            yield json.dumps(frame) + "\n"
+
+    return StreamingResponse(
+        generate(), media_type="application/x-ndjson", headers=_NDJSON_HEADERS
+    )
 
 
 @app.post("/api/graph/refresh", response_model=GraphResponse)

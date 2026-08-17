@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 
 import Sigma from "sigma";
 import Graph from "graphology";
-import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
@@ -12,6 +11,7 @@ import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
+import { placeRadially, refineForceLayout } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
@@ -164,79 +164,6 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
-/** ForceAtlas2 with radial initial placement so the repo stays centred. */
-function applyForceLayout(graph: Graph) {
-  let repoNode: string | null = null;
-  graph.forEachNode((id, attrs) => {
-    if (attrs.nodeType === "repo") repoNode = id;
-  });
-
-  // Radial scatter: repo at origin, everything else placed in a ring with
-  // random angle + distance variation so FA2 starts from a circular cloud
-  // rather than a square one (which it struggles to escape).
-  const total = graph.order;
-  const baseRadius = Math.max(250, total * 10);
-  let idx = 0;
-  graph.forEachNode((id) => {
-    if (id === repoNode) {
-      graph.setNodeAttribute(id, "x", 0);
-      graph.setNodeAttribute(id, "y", 0);
-      return;
-    }
-    // Spread evenly around the circle with a random offset so no two nodes
-    // start at the same angle, plus a random radial distance band.
-    const angle = (idx / Math.max(1, total - 1)) * 2 * Math.PI + (Math.random() - 0.5) * 1.5;
-    const r = baseRadius * (0.4 + Math.random() * 0.9);
-    graph.setNodeAttribute(id, "x", Math.cos(angle) * r);
-    graph.setNodeAttribute(id, "y", Math.sin(angle) * r);
-    idx++;
-  });
-
-  // Iteration budget, scaled *down* with size — not up.
-  //
-  // The previous `Math.min(800, 350 + total * 2)` gave larger graphs more
-  // iterations, but FA2 costs O(iterations x N log N): big graphs paid more
-  // per iteration AND ran more of them, while needing them least.
-  //
-  // Measured on a 10,400-package language repository (7,544 nodes): 800
-  // iterations took 17.4s and left every node within 0.07% of where 50
-  // iterations put it. That graph is a star — 97.9% of edges hang off the repo
-  // node, mean degree elsewhere 1.04 — so the radial pre-placement above
-  // already lands it near equilibrium and the remaining iterations refine
-  // nothing.
-  //
-  // Small, genuinely clustered graphs keep the full budget: the container repository
-  // (215 nodes, mean degree 11.1) is still improving at 780 iterations, and the
-  // entire run costs 175ms, so there is nothing worth saving there.
-  const iterations = Math.min(800, Math.max(50, Math.round(750000 / total)));
-
-  forceAtlas2.assign(graph, {
-    iterations,
-    settings: {
-      gravity: 0.15,
-      scalingRatio: 14,
-      adjustSizes: true,
-      barnesHutOptimize: total > 150,
-      // strongGravityMode applies a constant pull toward the origin on every
-      // node, which counteracts repulsion drift and keeps the cluster circular.
-      strongGravityMode: true,
-      slowDown: 1 + Math.log(total + 1),
-    },
-  });
-
-  // Translate all nodes so the repo lands exactly at (0, 0).
-  if (repoNode && graph.hasNode(repoNode)) {
-    const ox = graph.getNodeAttribute(repoNode, "x") as number;
-    const oy = graph.getNodeAttribute(repoNode, "y") as number;
-    if (ox !== 0 || oy !== 0) {
-      graph.forEachNode((id) => {
-        graph.setNodeAttribute(id, "x", (graph.getNodeAttribute(id, "x") as number) - ox);
-        graph.setNodeAttribute(id, "y", (graph.getNodeAttribute(id, "y") as number) - oy);
-      });
-    }
-  }
-}
-
 interface Props {
   data: GraphResponse;
   selectedNode: string | null;
@@ -286,6 +213,9 @@ export default function GraphCanvas({
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
   const contextMenuHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
+  /* Cancels the in-flight sliced layout. Shared by the build and layout-switch
+     effects so only one can ever be settling the graph. */
+  const layoutRef = useRef<(() => void) | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
   /* Mutable ref for state that reducers read */
@@ -394,8 +324,21 @@ export default function GraphCanvas({
     if (!graph || !sigma) return;
 
     if (layout === "force") {
-      applyForceLayout(graph);
-    } else if (layout === "circular") {
+      /* Scatter now so the switch is instant, then settle across frames.
+         The camera refit waits for the layout to stop — refitting mid-run
+         chases nodes that are still moving. */
+      const repoNode = placeRadially(graph);
+      sigma.refresh();
+      sigma.getCamera().animatedReset({ duration: 400 });
+      layoutRef.current?.();
+      layoutRef.current = refineForceLayout(graph, repoNode, () => {
+        sigma.refresh();
+        sigma.getCamera().animatedReset({ duration: 400 });
+      });
+      return () => { layoutRef.current?.(); layoutRef.current = null; };
+    }
+
+    if (layout === "circular") {
       circular.assign(graph);
     } else if (layout === "radial") {
       /* Place repo node at center, packages in ring, deps in outer ring */
@@ -523,8 +466,12 @@ export default function GraphCanvas({
       });
     }
 
-    /* --- Layout --- */
-    applyForceLayout(graph);
+    /* --- Layout ---
+       Only the cheap scatter runs here. Settling it is deferred until sigma
+       exists, so the first paint is not held behind it — on 7,544 nodes that
+       was a 3.3s freeze between the loading screen disappearing and anything
+       being drawn. */
+    const repoNode = placeRadially(graph);
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
@@ -953,6 +900,18 @@ export default function GraphCanvas({
     rafId = requestAnimationFrame(tick);
     (sigma as any)._pulseRaf = rafId;
 
+    /* --- Settle the layout ---
+       The pulse loop above already repaints every frame and re-syncs echo
+       nodes to their parents, so slices only have to move nodes. The full
+       refresh at the end is for the spatial index: the pulse loop skips
+       indexation, which leaves hit-testing stale once positions have moved. */
+    if (layoutRef.current) layoutRef.current();
+    layoutRef.current = refineForceLayout(graph, repoNode, () => {
+      if (cancelled) return;
+      sigma.refresh();
+      sigma.getCamera().animatedReset({ duration: 400 });
+    });
+
     } catch (err) {
       console.error("Graph build failed:", err);
       if (containerRef.current) {
@@ -969,6 +928,10 @@ export default function GraphCanvas({
 
     return () => {
       cancelled = true;
+      /* Before killing sigma — a slice landing afterwards would refresh a
+         dead renderer. */
+      layoutRef.current?.();
+      layoutRef.current = null;
       if (contextMenuHandlerRef.current) {
         containerRef.current?.removeEventListener("contextmenu", contextMenuHandlerRef.current);
         contextMenuHandlerRef.current = null;
