@@ -664,20 +664,51 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
 
     _dep_report = _throttled("dependencies", len(dep_items))
     _progress("dependencies", 0, len(dep_items))
+    # Fetch concurrently, but fold into the graph afterwards in a fixed order.
+    #
+    # Building inside the as_completed loop made two things depend on thread
+    # scheduling. Node and edge ordering varied run to run, and a dependency
+    # node — keyed on name alone — took its version from whichever parent
+    # finished first, so `ruby` reported >=3.1.0, >=3.0 or >=2.6.0 across three
+    # identical builds. Raising the worker count in perf/12 made it routine.
+    #
+    # Nothing was lost (each edge carries its own constraint), but a graph that
+    # differs between identical runs breaks the A/B diff every branch here is
+    # verified with.
+    dep_results: dict[str, list[dict]] = {}
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         dep_futures = [pool.submit(_fetch_dep, item) for item in dep_items]
         for _dep_done, fut in enumerate(as_completed(dep_futures), 1):
             _dep_report(_dep_done)
             src_id, deps = fut.result()
-            for dep in deps:
-                dep_name = dep.get("name", dep.get("identifier", "unknown"))
-                dep_operator = dep.get("operator", dep.get("comparator", "")) or ""
-                dep_version_num = dep.get("version", dep.get("version_constraint", dep.get("constraints", ""))) or ""
-                dep_version = f"{dep_operator}{dep_version_num}" if dep_version_num else ""
-                if dep_name not in seen_ids:
-                    nodes.append(GraphNode(id=dep_name, label=dep_name, type="dependency", data=NodeData(version=dep_version)))
-                    seen_ids.add(dep_name)
-                edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency", label=dep_version))
+            dep_results[src_id] = deps
+
+    dep_nodes: dict[str, GraphNode] = {}
+    for _slug, src_id in dep_items:
+        for dep in dep_results.get(src_id, []):
+            dep_name = dep.get("name", dep.get("identifier", "unknown"))
+            dep_operator = dep.get("operator", dep.get("comparator", "")) or ""
+            dep_version_num = dep.get("version", dep.get("version_constraint", dep.get("constraints", ""))) or ""
+            dep_version = f"{dep_operator}{dep_version_num}" if dep_version_num else ""
+
+            existing = dep_nodes.get(dep_name)
+            if existing is not None:
+                # Parents disagree about the constraint. Take the lowest by
+                # value so the answer does not depend on iteration order
+                # either; the authoritative per-parent constraint is the edge
+                # label below.
+                if dep_version and (not existing.data.version or dep_version < existing.data.version):
+                    existing.data.version = dep_version
+            elif dep_name not in seen_ids:
+                node = GraphNode(id=dep_name, label=dep_name, type="dependency",
+                                 data=NodeData(version=dep_version))
+                nodes.append(node)
+                seen_ids.add(dep_name)
+                dep_nodes[dep_name] = node
+            # else: the name collides with a package node, which keeps its own
+            # data — unchanged from before.
+
+            edges.append(GraphEdge(source=src_id, target=dep_name, type="dependency", label=dep_version))
 
     graph_stats = GraphStats(
         critical=stats.get("Critical", 0),
@@ -1089,6 +1120,46 @@ def _summary_description(text: str) -> str:
     return text[:OVERVIEW_DESCRIPTION_CHARS] + "…"
 
 
+def _merge_cve(cve_map: dict, cve_id: str, severity: str, description: str, package: str) -> None:
+    """Fold one package's view of a CVE into the workspace summary.
+
+    The same CVE id arrives once per affected package and the copies do not
+    agree: on full-stack-spectrum/neuro-containers, 134 of 4,130 ids carry more
+    than one severity (CVE-2026-8376 is both Critical and Medium) and 14 carry
+    more than one description.
+
+    Both callers used to keep whichever copy arrived first. One of them iterates
+    as_completed() over 60 threads, so the severity shown was decided by
+    scheduling — it changed between identical runs and disagreed with the other
+    caller. For a security view that is the wrong kind of arbitrary: a CVE that
+    is Critical on one package could render Medium because a different package's
+    scan happened to land first.
+
+    Resolution is now by value rather than arrival:
+      * severity    — the highest seen, so a summary never under-reports.
+      * description — the longest seen, ties broken lexicographically. Arbitrary
+                      but total, which is what makes it reproducible.
+      * packages    — sorted by the caller once every package has been folded in.
+    """
+    entry = cve_map.get(cve_id)
+    if entry is None:
+        entry = cve_map[cve_id] = {
+            "id": cve_id,
+            "severity": severity,
+            "description": _summary_description(description),
+            "packages": [],
+        }
+    else:
+        if SEVERITY_RANK.get(severity, 0) > SEVERITY_RANK.get(entry["severity"], 0):
+            entry["severity"] = severity
+        candidate = _summary_description(description)
+        if (len(candidate), candidate) > (len(entry["description"]), entry["description"]):
+            entry["description"] = candidate
+
+    if package not in entry["packages"]:
+        entry["packages"].append(package)
+
+
 def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse) -> WorkspaceRepoSummary:
     """Build a WorkspaceRepoSummary from an already-cached GraphResponse."""
     cve_map: dict[str, dict] = {}
@@ -1103,16 +1174,10 @@ def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse)
         for cve in node.data.cves:
             if not cve.id:
                 continue
-            if cve.id not in cve_map:
-                cve_map[cve.id] = {
-                    "id": cve.id,
-                    "severity": cve.severity,
-                    "description": _summary_description(cve.description),
-                    "packages": [],
-                }
-            if node.label not in cve_map[cve.id]["packages"]:
-                cve_map[cve.id]["packages"].append(node.label)
+            _merge_cve(cve_map, cve.id, cve.severity, cve.description, node.label)
 
+    for entry in cve_map.values():
+        entry["packages"].sort()
     cves = [WorkspaceCveSummary(**v) for v in cve_map.values()]
     s = graph.stats
     max_sev: str | None = None
@@ -1211,12 +1276,10 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
                         continue
                     v_sev = v.get("severity", v.get("max_severity", "Unknown"))
                     desc = v.get("description") or v.get("title") or v.get("summary", "")
-                    if cve_id not in cve_map:
-                        cve_map[cve_id] = {"id": cve_id, "severity": v_sev,
-                                           "description": _summary_description(desc), "packages": []}
-                    if meta["name"] not in cve_map[cve_id]["packages"]:
-                        cve_map[cve_id]["packages"].append(meta["name"])
+                    _merge_cve(cve_map, cve_id, v_sev, desc, meta["name"])
 
+    for entry in cve_map.values():
+        entry["packages"].sort()
     cves = [WorkspaceCveSummary(**v) for v in cve_map.values()]
     max_overall: str | None = None
     for sev in ("Critical", "High", "Medium", "Low"):
