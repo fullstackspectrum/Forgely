@@ -1,25 +1,50 @@
 /* ===== Forgely – Global Styles ===== */
 
+@import "./styles/tokens.css";
+
+/* Legacy variable names, re-pointed at the design tokens.
+ *
+ * These nineteen names carry 364 of the ~800 colour references in this file,
+ * so aliasing them rebrands most of the app without touching a rule. The
+ * remaining literals are being replaced in their own passes; until then the
+ * two layers coexist, which is the point — this is a shim, not a destination.
+ *
+ * Nothing new should reference these. Build against the semantic layer in
+ * tokens.css (--c-*, --t-*, --s-*, --g-*) as BRANDING.md requires.
+ */
 :root {
-  --bg-primary: #0f0f1a;
-  --bg-surface: #1a1a2e;
-  --bg-elevated: #222240;
-  --bg-card: #1e1e36;
-  --text-primary: #e8e8f0;
-  --text-muted: #8888aa;
-  --text-dim: #555570;
-  --critical: #ff4d4d;
-  --high: #ff8c1a;
-  --medium: #ffd11a;
-  --low: #79b8ff;
-  --safe: #28a745;
-  --accent: #4a90d9;
-  --border: #333355;
-  --glow-accent: rgba(74, 144, 217, 0.3);
-  --glow-critical: rgba(255, 77, 77, 0.25);
-  --radius: 8px;
-  --radius-sm: 4px;
-  --font: "Geist", system-ui, -apple-system, sans-serif;
+  --bg-primary: var(--c-bg);
+  --bg-surface: var(--c-surface);
+  /* The token file offers three dark surface steps where this file had four.
+     bg-card and bg-surface therefore collapse to the same value; the spec
+     wants elevation carried by borders rather than by background steps. */
+  --bg-card: var(--c-surface);
+  --bg-elevated: var(--c-surface-raised);
+
+  --text-primary: var(--t-primary);
+  /* Both step up in contrast: --text-muted was #8888aa (~5:1), --text-dim was
+     #555570 (~3:1, under AA). The replacements are 9.30:1 and 5.88:1. */
+  --text-muted: var(--t-secondary);
+  --text-dim: var(--t-muted);
+
+  --critical: var(--s-critical);
+  --high: var(--s-high);
+  --medium: var(--s-medium);
+  --low: var(--s-low);
+  /* Was #28a745 green. The severity ramp is deliberately red-to-gold with no
+     green — see BRANDING.md §2.4 on red/green deficiency — so "clean" now
+     reads neutral rather than green. Branch 4 adds the shape and label that
+     stop this being colour-only. */
+  --safe: var(--s-none);
+
+  --accent: var(--c-action);
+  --border: var(--c-border);
+  --glow-accent: rgba(55, 138, 221, 0.3);
+  --glow-critical: rgba(232, 117, 107, 0.25);
+
+  --radius: var(--fg-radius-md);
+  --radius-sm: var(--fg-radius-sm);
+  --font: var(--fg-font-body);
 }
 
 *,

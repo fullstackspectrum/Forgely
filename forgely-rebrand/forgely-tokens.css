@@ -1,0 +1,186 @@
+/* Forgely design tokens
+   Generated from the Displacement identity. See BRANDING.md for rationale.
+   Two layers: primitives (--fg-*) and semantic aliases (--c-*, --t-*, --s-*).
+   Build against the semantic layer. Never reference a primitive in a component. */
+
+:root {
+  /* ---------------------------------------------------------- primitives */
+
+  /* Blue — brand, interaction, and graph distance */
+  --fg-blue-50:  #EEF5FD;
+  --fg-blue-100: #D5E7F9;
+  --fg-blue-200: #85B7EB; /* Mist */
+  --fg-blue-300: #5C9FE4;
+  --fg-blue-400: #378ADD; /* Signal blue */
+  --fg-blue-500: #2A6FBB;
+  --fg-blue-600: #1B5FA5;
+  --fg-blue-700: #0C447C; /* Deep ink */
+  --fg-blue-800: #082F57;
+  --fg-blue-900: #061F3A;
+
+  /* Amber — origin and focus only. Never a severity. */
+  --fg-amber-100: #FDF0DA;
+  --fg-amber-200: #F8D194;
+  --fg-amber-300: #F3B855;
+  --fg-amber-400: #EF9F27; /* Ember */
+  --fg-amber-500: #C97F18;
+  --fg-amber-600: #9A5E0F;
+
+  /* Neutrals — blue-tinted slate, never pure grey */
+  --fg-n-0:   #FFFFFF;
+  --fg-n-50:  #F5F8FB;
+  --fg-n-100: #EAEFF5;
+  --fg-n-200: #D7E0EA;
+  --fg-n-300: #B6C4D3;
+  --fg-n-400: #8B9CAF;
+  --fg-n-500: #6B87A3;
+  --fg-n-600: #4E657D;
+  --fg-n-700: #354B60;
+  --fg-n-800: #1F3143;
+  --fg-n-900: #12202E;
+  --fg-n-950: #0A1622;
+
+  /* Severity — a red-to-gold ramp, deliberately excluding Ember's hue */
+  --fg-sev-critical: #B3261E;
+  --fg-sev-high:     #C4451F;
+  --fg-sev-medium:   #8A6410;
+  --fg-sev-low:      #4E657D;
+  --fg-sev-none:     #8B9CAF;
+
+  --fg-sev-critical-bg: #FBEAE8;
+  --fg-sev-high-bg:     #FCEEE7;
+  --fg-sev-medium-bg:   #F7F0DF;
+  --fg-sev-low-bg:      #EDF1F5;
+  --fg-sev-none-bg:     #F1F4F8;
+
+  /* -------------------------------------------------------------- shape */
+  --fg-unit: 4px;
+  --fg-radius-sm: 4px;
+  --fg-radius-md: 6px;   /* the logo cell radius */
+  --fg-radius-lg: 10px;
+  --fg-radius-xl: 14px;
+  --fg-radius-tile: 22%; /* app-icon squircle proportion */
+
+  /* --------------------------------------------------------------- type */
+  --fg-font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --fg-font-body: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --fg-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --fg-text-2xs: 11px;
+  --fg-text-xs:  12px;
+  --fg-text-sm:  13px;
+  --fg-text-md:  15px;
+  --fg-text-lg:  18px;
+  --fg-text-xl:  22px;
+  --fg-text-2xl: 28px;
+  --fg-text-3xl: 36px;
+  --fg-text-4xl: 48px;
+
+  /* ------------------------------------------------------------- motion */
+  --fg-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --fg-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fg-dur-instant: 90ms;
+  --fg-dur-fast: 160ms;
+  --fg-dur-base: 240ms;
+  --fg-dur-slow: 400ms;
+  --fg-dur-ripple: 1800ms;
+  --fg-stagger: 110ms; /* ripple step between graph rings */
+
+  /* ==================================================== semantic: light */
+  --c-bg:           var(--fg-n-0);
+  --c-bg-subtle:    var(--fg-n-50);
+  --c-bg-sunken:    var(--fg-n-100);
+  --c-surface:      var(--fg-n-0);
+  --c-surface-raised: var(--fg-n-0);
+  --c-border:       var(--fg-n-200);
+  --c-border-strong: var(--fg-n-300);
+
+  --t-primary:   var(--fg-n-900);
+  --t-secondary: var(--fg-n-600);
+  --t-muted:     var(--fg-n-500);
+  --t-inverse:   var(--fg-n-0);
+  --t-brand:     var(--fg-blue-700);
+
+  --c-action:        var(--fg-blue-600);
+  --c-action-hover:  var(--fg-blue-700);
+  --c-action-subtle: var(--fg-blue-50);
+  --c-action-text:   var(--fg-n-0);
+  --c-link:          var(--fg-blue-600);
+  --c-focus:         var(--fg-blue-600);
+
+  --c-origin:        var(--fg-amber-400);
+  --c-origin-subtle: var(--fg-amber-100);
+  --c-origin-text:   var(--fg-amber-600);
+
+  --s-critical: var(--fg-sev-critical);
+  --s-high:     var(--fg-sev-high);
+  --s-medium:   var(--fg-sev-medium);
+  --s-low:      var(--fg-sev-low);
+  --s-none:     var(--fg-sev-none);
+
+  /* Graph distance from origin — hop 0 is the origin itself */
+  --g-hop-0: var(--fg-amber-400);
+  --g-hop-1: var(--fg-blue-400);
+  --g-hop-2: var(--fg-blue-300);
+  --g-hop-3: var(--fg-blue-200);
+  --g-hop-far: var(--fg-n-300);
+  --g-edge-direct: var(--fg-blue-400);
+  --g-edge-transitive: var(--fg-blue-200);
+  --g-edge-muted: var(--fg-n-200);
+  --g-canvas: var(--fg-n-50);
+  --g-node-stroke: var(--fg-n-0);
+}
+
+[data-theme="dark"] {
+  --c-bg:           var(--fg-n-950);
+  --c-bg-subtle:    var(--fg-n-900);
+  --c-bg-sunken:    var(--fg-n-950);
+  --c-surface:      var(--fg-n-900);
+  --c-surface-raised: var(--fg-n-800);
+  --c-border:       #2B3F53;
+  --c-border-strong: var(--fg-n-700);
+
+  --t-primary:   var(--fg-n-50);
+  --t-secondary: var(--fg-n-300);
+  --t-muted:     var(--fg-n-400);
+  --t-inverse:   var(--fg-n-950);
+  --t-brand:     var(--fg-blue-200);
+
+  --c-action:        var(--fg-blue-400);
+  --c-action-hover:  var(--fg-blue-300);
+  --c-action-subtle: #16324F;
+  --c-action-text:   var(--fg-n-950);
+  --c-link:          var(--fg-blue-300);
+  --c-focus:         var(--fg-blue-300);
+
+  --c-origin:        var(--fg-amber-400);
+  --c-origin-subtle: #3A2A0C;
+  --c-origin-text:   var(--fg-amber-300);
+
+  --s-critical: #E8756B;
+  --s-high:     #F08A5A;
+  --s-medium:   #D9B65C;
+  --s-low:      var(--fg-n-400);
+  --s-none:     var(--fg-n-500);
+
+  --fg-sev-critical-bg: #3A1C1A;
+  --fg-sev-high-bg:     #3A2418;
+  --fg-sev-medium-bg:   #332C13;
+  --fg-sev-low-bg:      #1F2C39;
+  --fg-sev-none-bg:     #1B2733;
+
+  --g-hop-far: var(--fg-n-600);
+  --g-edge-muted: var(--fg-n-700);
+  --g-canvas: var(--fg-n-950);
+  --g-node-stroke: var(--fg-n-900);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fg-dur-instant: 1ms;
+    --fg-dur-fast: 1ms;
+    --fg-dur-base: 1ms;
+    --fg-dur-slow: 1ms;
+    --fg-stagger: 0ms;
+  }
+}
