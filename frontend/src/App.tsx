@@ -25,7 +25,7 @@ import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter
 type TabType = "packages" | "organisation";
 
 export default function App() {
-  const { data, loading, error, fetchGraph } = useGraphData();
+  const { data, loading, error, progress, fetchGraph } = useGraphData();
 
   const [tab, setTab] = useState<TabType>("packages");
   const [owner, setOwner] = useState("");
@@ -353,7 +353,10 @@ export default function App() {
       {tab === "packages" && (
         <>
           {(loading || workspaceOverviewLoading) ? (
-            <LoadingIndicator variant={workspaceOverviewLoading ? "workspace-overview" : "packages"} />
+            <LoadingIndicator
+              variant={workspaceOverviewLoading ? "workspace-overview" : "packages"}
+              progress={progress}
+            />
           ) : error && !data && !workspaceOverviewData ? (
             <div className="graph-loading">
               <h2>Connection Error</h2>

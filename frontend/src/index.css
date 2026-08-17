@@ -2604,6 +2604,57 @@ body {
   75% { content: "..."; }
 }
 
+.loading-stage-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.loading-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 240px;
+  width: 240px;
+  margin-top: -14px;
+}
+
+.loading-progress-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.loading-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4a90d9, #6ba8e5);
+  transition: width 0.3s ease;
+}
+
+/* No countable total — the graph assembly and cache hits report no units. */
+.loading-progress-track.indeterminate .loading-progress-fill {
+  width: 35%;
+  animation: progressSlide 1.4s ease-in-out infinite;
+}
+
+@keyframes progressSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(286%); }
+}
+
+.loading-progress-pct {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 34px;
+  text-align: right;
+}
+
 .loading-elapsed {
   font-size: 12px;
   color: var(--text-muted);
