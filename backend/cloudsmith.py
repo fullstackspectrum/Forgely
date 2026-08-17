@@ -32,6 +32,64 @@ RETRY_BACKOFF = 2
 # instead of discarding connections (which logs "Connection pool is full").
 CONNECTION_POOL_SIZE = 64
 
+
+def _env_int(name: str, default: int) -> int:
+    """Positive integer from the environment, or the default.
+
+    Read lazily rather than at import: main imports this module before
+    load_dotenv() runs, so anything captured at import time misses .env.
+    """
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        log.warning("Ignoring non-integer %s=%r", name, raw)
+        return default
+    if value < 1:
+        log.warning("Ignoring non-positive %s=%d", name, value)
+        return default
+    return value
+
+
+# Measured against a 10,400-package language repository (1,887 scans), package
+# list warm, scan cache cold on every run. Zero 429s and zero failures at every
+# level tested:
+#
+#     workers    wall   speedup   mean latency
+#          10   46.4s     0.54x          228ms
+#          20   25.0s     1.00x          238ms   <- previous hardcoded value
+#          40   16.7s     1.49x          266ms
+#          60   14.0s     1.78x          280ms   <- default
+#         100   11.2s     2.24x          288ms
+#
+# Scaling is sublinear because the API inflates latency under concurrency
+# rather than rejecting it. 60 sits where the curve flattens: on a full cold
+# build, 60/30 reaches 2.27x and 100/60 only 2.38x for nearly double the
+# connections, which is not a trade worth making against someone else's API.
+SCAN_WORKERS_DEFAULT = 60
+SCAN_WORKERS_ENV = "FORGELY_SCAN_WORKERS"
+
+
+def scan_workers() -> int:
+    """Concurrent vulnerability-scan fetches during a graph build.
+
+    Note this is per build. Concurrent builds each get their own pool, so the
+    thread count multiplies — lower it if the process serves many at once.
+    """
+    return _env_int(SCAN_WORKERS_ENV, SCAN_WORKERS_DEFAULT)
+
+
+def connection_pool_size() -> int:
+    """Connection pool size, never smaller than the concurrency it must serve.
+
+    The adapter is built with pool_block=True, so a pool smaller than the
+    worker count silently serialises the excess — a sweep of worker counts
+    against a fixed pool would measure the pool, not the API.
+    """
+    return max(CONNECTION_POOL_SIZE, scan_workers(), pagination_workers())
+
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
 
 # How many prior scans to consult when the latest yields no findings. The walk
@@ -113,9 +171,10 @@ def create_session(api_key: str) -> requests.Session:
         "Accept": "application/json",
         "User-Agent": f"Forgely/{APP_VERSION}",
     })
+    pool = connection_pool_size()
     adapter = HTTPAdapter(
-        pool_connections=CONNECTION_POOL_SIZE,
-        pool_maxsize=CONNECTION_POOL_SIZE,
+        pool_connections=pool,
+        pool_maxsize=pool,
         pool_block=True,
     )
     s.mount("https://", adapter)
@@ -302,7 +361,25 @@ PAGE_SIZE = 100
 # Pagination runs before the main worker pool starts, so it has the connection
 # pool to itself. Kept below CONNECTION_POOL_SIZE and modest because list pages
 # are the heaviest call in the API (~1.1s each, 100 full records per page).
-PAGINATION_WORKERS = 10
+# Swept the same way, with the scan cache warm so pagination was the only cost:
+#
+#     workers    wall   speedup   mean latency
+#           5   27.6s     0.61x         1131ms
+#          10   16.9s     1.00x         1247ms   <- previous hardcoded value
+#          20   12.2s     1.38x         1498ms
+#          40   10.2s     1.65x         1837ms
+#          60    7.3s     2.31x         1892ms
+#
+# List pages inflate far worse than scans under concurrency (+67% latency by
+# 60 workers, against +26% for scans) because each carries 100 full records.
+# 30 keeps most of the gain without leaning on the API that hard.
+PAGINATION_WORKERS_DEFAULT = 30
+PAGINATION_WORKERS_ENV = "FORGELY_PAGINATION_WORKERS"
+
+
+def pagination_workers() -> int:
+    """Concurrent list-page fetches. See scan_workers() for why this is tunable."""
+    return _env_int(PAGINATION_WORKERS_ENV, PAGINATION_WORKERS_DEFAULT)
 
 
 def _page_total(headers) -> int | None:
@@ -335,15 +412,16 @@ def _paginate_speculatively(first: list, fetch_page) -> dict[int, list]:
     Used only when the page-total header is missing or unparseable. Pagination
     is monotonic — a page shorter than PAGE_SIZE is the last one — so a batch
     can be dispatched blind and truncated at whichever page terminates it.
-    Costs up to PAGINATION_WORKERS-1 wasted calls at the boundary, which is far
-    cheaper than walking one page at a time.
+    Costs up to pagination_workers()-1 wasted calls at the boundary, which is
+    far cheaper than walking one page at a time.
     """
     pages: dict[int, list] = {1: first}
     next_page = 2
+    workers = pagination_workers()
 
     while next_page <= MAX_SPECULATIVE_PAGES:
-        batch = list(range(next_page, next_page + PAGINATION_WORKERS))
-        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+        batch = list(range(next_page, next_page + workers))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(fetch_page, p) for p in batch]
             for fut in as_completed(futures):
                 page, data = fut.result()
@@ -358,7 +436,7 @@ def _paginate_speculatively(first: list, fetch_page) -> dict[int, list]:
                     pages.pop(page, None)
             return pages
 
-        next_page += PAGINATION_WORKERS
+        next_page += workers
 
     log.warning(
         "Speculative pagination hit the %d-page safety cap – results may be truncated",
@@ -419,7 +497,7 @@ def _fetch_paginated(
         pages: dict[int, list] = {1: first}
         if on_page:
             on_page(1, total_pages)
-        with ThreadPoolExecutor(max_workers=PAGINATION_WORKERS) as pool:
+        with ThreadPoolExecutor(max_workers=pagination_workers()) as pool:
             futures = [pool.submit(_fetch_page, p) for p in range(2, total_pages + 1)]
             for fut in as_completed(futures):
                 page, data = fut.result()
