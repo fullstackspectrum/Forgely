@@ -1066,6 +1066,29 @@ def vulnly_report(owner: str, repo: str, slug: str, request: Request):
 #  Workspace package overview
 # ──────────────────────────────────────────────────────────────
 
+# Length of the CVE description carried by the workspace overview.
+#
+# This endpoint is a summary, and its descriptions were 6.73 MB of a 7.57 MB
+# payload — 6,582 of them, median 708 characters, longest 31,477 — to render a
+# snippet WorkspaceRepoPanel cuts to 120 characters. Truncating here takes the
+# response from 2.36 MB to 0.42 MB gzipped.
+#
+# 200 rather than the panel's 120 so a change to how much the panel shows does
+# not immediately require an API change. Full text stays available per package
+# from /api/cve, which is what the package graph's side panel uses.
+#
+# Safe for search: WorkspaceRepoPanel filters on CVE id and package name only,
+# never on description.
+OVERVIEW_DESCRIPTION_CHARS = 200
+
+
+def _summary_description(text: str) -> str:
+    """Trim a CVE description to summary length, marking it when cut."""
+    if not text or len(text) <= OVERVIEW_DESCRIPTION_CHARS:
+        return text or ""
+    return text[:OVERVIEW_DESCRIPTION_CHARS] + "…"
+
+
 def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse) -> WorkspaceRepoSummary:
     """Build a WorkspaceRepoSummary from an already-cached GraphResponse."""
     cve_map: dict[str, dict] = {}
@@ -1084,7 +1107,7 @@ def _extract_repo_summary_from_graph(slug: str, name: str, graph: GraphResponse)
                 cve_map[cve.id] = {
                     "id": cve.id,
                     "severity": cve.severity,
-                    "description": cve.description,
+                    "description": _summary_description(cve.description),
                     "packages": [],
                 }
             if node.label not in cve_map[cve.id]["packages"]:
@@ -1189,7 +1212,8 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
                     v_sev = v.get("severity", v.get("max_severity", "Unknown"))
                     desc = v.get("description") or v.get("title") or v.get("summary", "")
                     if cve_id not in cve_map:
-                        cve_map[cve_id] = {"id": cve_id, "severity": v_sev, "description": desc, "packages": []}
+                        cve_map[cve_id] = {"id": cve_id, "severity": v_sev,
+                                           "description": _summary_description(desc), "packages": []}
                     if meta["name"] not in cve_map[cve_id]["packages"]:
                         cve_map[cve_id]["packages"].append(meta["name"])
 
