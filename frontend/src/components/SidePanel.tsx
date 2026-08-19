@@ -227,6 +227,7 @@ export default function SidePanel({
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
       <div className="panel-summary">
       <div className="panel-header">
+        <span className="panel-eyebrow">Package</span>
         <h2 className="panel-title">{node.label}</h2>
         {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
       </div>
@@ -322,6 +323,24 @@ export default function SidePanel({
           ⚠ {reportError}
         </div>
       )}
+
+      {/* Two stats first — "lead with consequence, not classification" (§8).
+          The vulnerability count is what the user acts on; format and licence
+          are reference detail and stay in the table below. */}
+      <div className="panel-stats">
+        <div className="panel-stat" data-severity={d.vuln_count > 0 ? (d.max_severity ?? undefined) : undefined}>
+          <div className="panel-stat-value">{d.vuln_count}</div>
+          <div className="panel-stat-key">
+            {d.vuln_count === 1 ? "Vulnerability" : "Vulnerabilities"}
+          </div>
+        </div>
+        <div className="panel-stat">
+          <div className="panel-stat-value">{dependencies.length}</div>
+          <div className="panel-stat-key">
+            {dependencies.length === 1 ? "Dependency" : "Dependencies"}
+          </div>
+        </div>
+      </div>
 
       {/* Metadata grid */}
       <div className="panel-meta">
