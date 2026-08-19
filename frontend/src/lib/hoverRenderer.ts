@@ -1,6 +1,7 @@
 /**
- * Glass-style node hover renderer: layered canvas card with gradient body,
- * top sheen, severity accent bar, and an inline severity badge.
+ * Node hover card: a flat surface with a 1px border, a severity accent bar,
+ * and an inline severity badge. Drawn on canvas rather than in the DOM
+ * because it tracks a WebGL node position.
  * Also exports a custom label drawer that renders a lock badge for quarantined nodes.
  */
 import { drawDiscNodeLabel } from "sigma/rendering";
@@ -50,7 +51,7 @@ export function drawDarkNodeHover(
   const PAD_X     = 12;
   const PAD_Y     = 8;
   const INNER_GAP = 5;
-  const radius    = 9;
+  const radius    = 10;   // --fg-radius-lg: popovers and panels
 
   const showSeverity = nodeType === "package" && !!severity && !(severity === "Unknown" || severity === "None");
 
@@ -76,29 +77,17 @@ export function drawDarkNodeHover(
   const x = data.x + data.size + 8;
   const y = data.y - boxHeight / 2;
 
-  // ── Layer 1: drop shadow + glass body ────────────────────────────────────
-  context.save();
-  context.shadowColor    = "rgba(10, 22, 34, 0.65)";
-  context.shadowBlur     = 22;
-  context.shadowOffsetY  = 5;
-  const bodyGrad = context.createLinearGradient(x, y, x, y + boxHeight);
-  bodyGrad.addColorStop(0, "rgba(18, 32, 46, 0.97)");
-  bodyGrad.addColorStop(1, "rgba(10, 22, 34, 0.97)");
-  context.fillStyle = bodyGrad;
-  roundedRect(context, x, y, boxWidth, boxHeight, radius);
-  context.fill();
-  context.restore();
-
-  // ── Layer 2: top sheen (glass highlight) ─────────────────────────────────
-  const sheen = context.createLinearGradient(x, y, x, y + boxHeight * 0.5);
-  sheen.addColorStop(0, "rgba(245, 248, 251, 0.11)");
-  sheen.addColorStop(1, "rgba(245, 248, 251, 0)");
-  context.fillStyle = sheen;
+  // ── Body: flat surface, 1px border ───────────────────────────────────────
+  // Was three layers — drop shadow, vertical gradient body, and a top sheen
+  // faking a glass highlight. §4: "Elevation: use borders and background
+  // steps, not shadows. The identity is flat geometric shapes; drop shadows
+  // fight it." A hover card is a popover, so §4 would permit one soft shadow,
+  // but the sheen and gradient are not elevation — they are ornament.
+  context.fillStyle = token("--c-surface");
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.fill();
 
-  // ── Layer 3: outer border ────────────────────────────────────────────────
-  context.strokeStyle = "rgba(245, 248, 251, 0.11)";
+  context.strokeStyle = token("--c-border");
   context.lineWidth   = 1;
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.stroke();

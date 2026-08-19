@@ -111,7 +111,6 @@ body {
   height: 100%;
   background-color: var(--bg-primary);
   background-image:
-    radial-gradient(ellipse at 50% 44%, rgba(55, 138, 221, 0.09) 0%, transparent 60%),
     linear-gradient(rgba(55, 138, 221, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(55, 138, 221, 0.08) 1px, transparent 1px);
   background-size:
@@ -2649,7 +2648,7 @@ body {
 .loading-progress-fill {
   height: 100%;
   border-radius: var(--fg-radius-sm);
-  background: linear-gradient(90deg, var(--c-action), var(--fg-blue-300));
+  background: var(--c-action);
   transition: width 0.3s ease;
 }
 
@@ -3306,7 +3305,10 @@ body {
   flex-shrink: 0;
 }
 .org-filter-dot-all {
-  background: linear-gradient(135deg, var(--c-action), var(--s-none), var(--s-high), var(--fg-blue-300));
+  /* Was a four-stop gradient through --s-none and --s-high. Severity colours
+     are not decoration (§1) — spending them here is what makes them stop
+     meaning anything on the nodes. The blue ramp says "all" just as well. */
+  background: linear-gradient(135deg, var(--c-action), var(--fg-blue-200));
 }
 
 .org-filter-label {

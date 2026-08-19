@@ -73,10 +73,12 @@ function drawTriangleNodeHover(
   context.font = `${weight} ${size}px ${font}`;
 
   context.fillStyle = token("--t-primary");
-  context.shadowOffsetX = 0;
-  context.shadowOffsetY = 0;
-  context.shadowBlur = 8;
-  context.shadowColor = token("--fg-n-950");
+  /* A stroke in the canvas colour rather than a drop shadow: §6 specifies
+     exactly this for separating a node from what it overlaps, "without adding
+     a visual layer", and §4 rules shadows out for anything that is not a
+     modal or popover. */
+  context.strokeStyle = token("--g-node-stroke");
+  context.lineWidth = 1.5;
 
   const PADDING = 2;
   const r = Math.max(data.size, size / 2) + PADDING;
@@ -104,9 +106,9 @@ function drawTriangleNodeHover(
     context.lineTo(data.x - r, data.y + r);
     context.closePath();
     context.fill();
+    context.stroke();
   }
 
-  context.shadowBlur = 0;
   drawDiscNodeLabel(context, data, settings);
 }
 
