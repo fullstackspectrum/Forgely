@@ -106,9 +106,9 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
             <StatusPill active={!!d.has_two_factor} label={d.has_two_factor ? "2FA Enabled" : "2FA Disabled"} />
           </div>
           <InfoCard>
-            {d.role && <DetailRow label="Role" value={String(d.role)} />}
-            {d.email && <DetailRow label="Email" value={String(d.email)} mono />}
-            {d.joined_at && <DetailRow label="Joined" value={String(d.joined_at).split("T")[0]} />}
+            {!!d.role && <DetailRow label="Role" value={String(d.role)} />}
+            {!!d.email && <DetailRow label="Email" value={String(d.email)} mono />}
+            {!!d.joined_at && <DetailRow label="Joined" value={String(d.joined_at).split("T")[0]} />}
           </InfoCard>
         </>
       )}
@@ -117,9 +117,9 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
       {node.type === "service" && (
         <>
           <InfoCard>
-            {d.role && <DetailRow label="Role" value={String(d.role)} />}
-            {d.description && <DetailRow label="Description" value={String(d.description)} />}
-            {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
+            {!!d.role && <DetailRow label="Role" value={String(d.role)} />}
+            {!!d.description && <DetailRow label="Description" value={String(d.description)} />}
+            {!!d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
           </InfoCard>
           {Array.isArray(d.teams) && d.teams.length > 0 && (
             <InfoCard>
@@ -141,7 +141,7 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
         <>
           <div className="org-stat-row">
             <StatCard icon="📦" value={String(d.package_count ?? 0)} label="Packages" />
-            {d.repo_type && <StatCard icon="🏷" value={String(d.repo_type)} label="Type" />}
+            {!!d.repo_type && <StatCard icon="🏷" value={String(d.repo_type)} label="Type" />}
           </div>
           {d.description && (
             <InfoCard>
@@ -159,8 +159,8 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
             <StatusPill active={!!d.is_active} />
           </div>
           <InfoCard>
-            {d.limit_package_query && <DetailRow label="Package Query" value={String(d.limit_package_query)} mono />}
-            {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
+            {!!d.limit_package_query && <DetailRow label="Package Query" value={String(d.limit_package_query)} mono />}
+            {!!d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
           </InfoCard>
         </>
       )}
@@ -173,11 +173,11 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
             <StatusPill active={!!d.verify_ssl} label={d.verify_ssl ? "SSL Verified" : "SSL Unverified"} />
           </div>
           <InfoCard>
-            {d.upstream_url && <DetailRow label="URL" value={String(d.upstream_url)} mono />}
-            {d.format && <DetailRow label="Format" value={String(d.format)} />}
-            {d.mode && <DetailRow label="Mode" value={String(d.mode)} />}
+            {!!d.upstream_url && <DetailRow label="URL" value={String(d.upstream_url)} mono />}
+            {!!d.format && <DetailRow label="Format" value={String(d.format)} />}
+            {!!d.mode && <DetailRow label="Mode" value={String(d.mode)} />}
             {d.priority != null && <DetailRow label="Priority" value={String(d.priority)} />}
-            {d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
+            {!!d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
           </InfoCard>
         </>
       )}

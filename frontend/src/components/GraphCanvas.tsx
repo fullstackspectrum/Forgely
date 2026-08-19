@@ -10,6 +10,7 @@ import { NodeCircleWithRingProgram, NodeImageWithRingProgram, severityRing } fro
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
+import { NodeOriginProgram } from "../programs/NodeOriginProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import { placeRadially, refineForceLayout } from "../lib/layout";
@@ -532,7 +533,7 @@ export default function GraphCanvas({
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
       defaultNodeType: "circleRing",
-      nodeProgramClasses: { circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
+      nodeProgramClasses: { origin: NodeOriginProgram, circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -738,6 +739,18 @@ export default function GraphCanvas({
           res.zIndex = 9;
         } else if (st.selectedNode) {
           if (node === st.selectedNode) {
+            /* The origin: the one thing under investigation (§1). Ember fill,
+               tilted rounded square, 22px, label always shown. Exactly one of
+               these exists at a time, which is what makes amber mean
+               something — "if your UI has three amber things in it, the
+               metaphor is dead and so is the colour's meaning".
+
+               The severity ring stays: you still need to know whether the
+               thing you are investigating is Critical. */
+            res.type = "origin";
+            res.color = token("--c-origin");
+            res.size = 22;
+            res.forceLabel = true;
             res.highlighted = true;
             res.zIndex = 10;
           } else if (st.neighbors.has(node)) {

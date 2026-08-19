@@ -5,6 +5,7 @@
 import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
+import type { Settings } from "sigma/settings";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import { token } from "../lib/palette";
 
@@ -66,7 +67,7 @@ const UNIFORMS = ["u_sizeRatio", "u_correctionRatio", "u_cameraAngle", "u_matrix
 function drawTriangleNodeHover(
   context: CanvasRenderingContext2D,
   data: NodeDisplayData & { label?: string | null },
-  settings: { labelSize: number; labelFont: string; labelWeight: string },
+  settings: Settings,
 ) {
   const { labelSize: size, labelFont: font, labelWeight: weight } = settings;
   context.font = `${weight} ${size}px ${font}`;
@@ -125,7 +126,7 @@ export class NodeTriangleProgram extends NodeProgram<typeof UNIFORMS[number]> {
         { name: "a_size", size: 1, type: FLOAT },
         { name: "a_color", size: 4, type: UNSIGNED_BYTE, normalized: true },
         { name: "a_id", size: 4, type: UNSIGNED_BYTE, normalized: true },
-      ] as const,
+      ],
       CONSTANT_ATTRIBUTES: [{ name: "a_angle", size: 1, type: FLOAT }] as const,
       // 3 corners of an equilateral triangle pointing up
       CONSTANT_DATA: [
