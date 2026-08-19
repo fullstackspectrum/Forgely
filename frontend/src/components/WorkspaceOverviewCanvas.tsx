@@ -150,7 +150,7 @@ export default function WorkspaceOverviewCanvas({
       color: token("--c-bg"),
       nodeType: "workspace",
       type: "image",
-      image: "/forgely-icon.png",
+      image: "/forgely-icon.svg",
     });
 
     /* Repo nodes arranged in a circle */

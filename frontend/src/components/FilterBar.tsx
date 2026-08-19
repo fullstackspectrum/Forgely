@@ -85,7 +85,7 @@ export default function FilterBar({
   return (
     <div className="left-panel">
       <div className="left-panel-header">
-        <img src="/forgely-logo.png" alt="Forgely" className="left-panel-logo" />
+        <img src="/forgely-lockup-horizontal-reversed.svg" alt="Forgely" className="left-panel-logo" />
       </div>
 
       <div className="left-panel-tabs">

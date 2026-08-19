@@ -156,9 +156,23 @@ export default function LoadingIndicator({ variant = "packages", progress }: Pro
 
   return (
     <div className="loading-indicator">
-      <div className="loading-logo-pulse">
-        <img src="/forgely-logo.png" alt="" className="loading-logo-img" />
-      </div>
+      {/* The branded loader, not the logo on a pulse keyframe. Its ripple
+          propagates outward from the ember cell, which is the point — motion
+          away from the origin is what blast radius means (BRANDING.md §5).
+          The animation is CSS inside the SVG, so it runs in an <img> with
+          nothing to import, and the file freezes itself into the static mark
+          under prefers-reduced-motion.
+
+          §7 restricts this to graph-shaped work over a second, which a build
+          is: 19s cold, and the phase list below is showing real progress
+          throughout. A plain spinner belongs anywhere shorter. */}
+      <img
+        src="/forgely-loader-reversed.svg"
+        alt=""
+        className="loading-loader"
+        width={96}
+        height={96}
+      />
 
       <div className="loading-stages">
         {STAGES.map((s, i) => (
