@@ -1,7 +1,4 @@
 <!doctype html>
-<!-- Dark is the product default. The token file defines light on bare :root
-     and dark under [data-theme="dark"], so this attribute is what selects it;
-     removing it silently flips the whole app to light. -->
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
@@ -13,6 +10,24 @@
          because it blocks first paint; the display and mono faces are not, so
          they do not compete for bandwidth with it. -->
     <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin />
+  <script>
+    /* Set the theme before first paint. Doing this in React means one frame
+       rendered in the wrong theme on every load — a white flash for dark-mode
+       users, which is the one thing a theme toggle must not do.
+       Kept in sync with lib/theme.ts; the storage key and the "system"
+       fallback are the contract between them. */
+    (function () {
+      try {
+        var stored = localStorage.getItem("forgely_theme") || "dark";
+        var resolved = stored === "system"
+          ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+          : stored;
+        document.documentElement.setAttribute("data-theme", resolved);
+      } catch (e) {
+        /* Private mode can throw on localStorage; dark stays as the default. */
+      }
+    })();
+  </script>
   </head>
   <body>
     <div id="root"></div>

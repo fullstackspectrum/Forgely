@@ -106,3 +106,41 @@ export const NodeCircleWithRingProgram = createNodeCompoundProgram([
 ]);
 
 export { RingProgram as NodeRingOnlyProgram };
+
+/** Resting fill for a node, by what it is. Hop distance overrides this in the
+ *  reducer once an origin is selected. */
+export function nodeFill(nodeType: string | undefined): string {
+  return nodeType === "repo"
+    ? token("--c-bg")
+    : nodeType === "dependency"
+      ? token("--fg-blue-200")   /* transitive reads as Mist */
+      : token("--fg-blue-400");  /* Signal blue for packages */
+}
+
+/**
+ * Re-resolve every node's colours after a theme change.
+ *
+ * Node colours are baked into graph attributes when the graph is built, and
+ * token() memoises what it read, so a theme switch leaves both holding the old
+ * palette. Rebuilding the whole sigma instance would also work but costs a
+ * teardown and a fresh layout on graphs of several thousand nodes.
+ *
+ * Call refreshPalette() before this, or it re-reads the stale cache.
+ */
+export function recolorGraph(graph: {
+  forEachNode: (cb: (id: string, attrs: Record<string, unknown>) => void) => void;
+  setNodeAttribute: (id: string, key: string, value: unknown) => void;
+}): void {
+  graph.forEachNode((id, attrs) => {
+    const type = attrs.nodeType as string | undefined;
+    if (type === "echo") return;
+    graph.setNodeAttribute(id, "color", nodeFill(type));
+    if (type === "package") {
+      const ring = severityRing(attrs.severity as string | undefined);
+      graph.setNodeAttribute(id, "borderColor", ring.borderColor);
+      graph.setNodeAttribute(id, "borderSize", ring.borderSize);
+    } else {
+      graph.setNodeAttribute(id, "borderColor", token("--g-node-stroke"));
+    }
+  });
+}

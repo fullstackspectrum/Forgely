@@ -20,6 +20,7 @@ import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
 import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
+import { applyTheme, resolveTheme, storedTheme, watchSystemTheme, type Theme } from "./lib/theme";
 import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
@@ -49,6 +50,26 @@ export default function App() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
+
+  /* Theme. The boot script in index.html has already set data-theme before
+     first paint; this picks up the same stored value so the UI agrees with it. */
+  const [theme, setTheme] = useState<Theme>(() => storedTheme());
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(storedTheme()));
+
+  const changeTheme = useCallback((t: Theme) => {
+    applyTheme(t);
+    setTheme(t);
+    setResolvedTheme(resolveTheme(t));
+  }, []);
+
+  /* Follow the OS only while set to "system". */
+  useEffect(() => {
+    if (theme !== "system") return;
+    return watchSystemTheme(() => {
+      applyTheme("system");
+      setResolvedTheme(resolveTheme("system"));
+    });
+  }, [theme]);
 
   /* Org graph state */
   const [orgData, setOrgData] = useState<OrgGraphResponse | null>(null);
@@ -253,6 +274,8 @@ export default function App() {
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
+          theme={theme}
+          onThemeChange={changeTheme}
           filter={filter}
           filterFlags={filterFlags}
           filterFlagsMode={filterFlagsMode}
@@ -376,6 +399,7 @@ export default function App() {
             />
           ) : data ? (
             <GraphCanvas
+              theme={resolvedTheme}
               data={data}
               selectedNode={selectedNode}
               hoveredNode={hoveredNode}
