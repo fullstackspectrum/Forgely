@@ -359,7 +359,7 @@ export default function App() {
             />
           ) : error && !data && !workspaceOverviewData ? (
             <div className="graph-loading">
-              <h2>Connection Error</h2>
+              <h2>Couldn't load this repository</h2>
               <p>{error || workspaceOverviewError}</p>
               <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
             </div>
@@ -400,7 +400,12 @@ export default function App() {
             />
           ) : (
             <div className="empty-state">
-              <p>Select a workspace and repository to visualize</p>
+              {/* The mark is the displacement illustration §7 asks for — a grid
+                  with one cell knocked out of line. No invented artwork needed. */}
+              <img src="/forgely-icon.svg" alt="" className="empty-state-mark" />
+              <h2>Start with a repository</h2>
+              <p>Forgely maps every package in it, and everything its vulnerabilities reach.</p>
+              <p className="empty-state-hint">Pick a workspace and repository above.</p>
             </div>
           )}
 
@@ -581,7 +586,7 @@ export default function App() {
             <LoadingIndicator variant="workspace" />
           ) : orgError && !orgData ? (
             <div className="graph-loading">
-              <h2>Connection Error</h2>
+              <h2>Couldn't load this repository</h2>
               <p>{orgError}</p>
               <button className="btn btn-accent" onClick={() => owner && fetchOrgGraph(owner)}>Retry</button>
             </div>
@@ -600,7 +605,10 @@ export default function App() {
             />
           ) : (
             <div className="empty-state">
-              <p>Select a workspace to view workspace graph</p>
+              <img src="/forgely-icon.svg" alt="" className="empty-state-mark" />
+              <h2>Start with a workspace</h2>
+              <p>Forgely maps who can reach what — members, teams, services and the repositories they touch.</p>
+              <p className="empty-state-hint">Pick a workspace above.</p>
             </div>
           )}
 
@@ -706,9 +714,9 @@ function ApiErrorToast({ message, onDismiss, onReconnect }: ApiErrorToastProps) 
         )}
       </div>
       <div className="api-error-toast-body">
-        <div className="api-error-toast-title">{isAuth ? "Not authenticated" : "Request failed"}</div>
+        <div className="api-error-toast-title">{isAuth ? "Not connected to Cloudsmith" : "Couldn't complete that request"}</div>
         <div className="api-error-toast-msg">
-          {isAuth ? "Your API key is missing or has been revoked." : body}
+          {isAuth ? "Your API key is missing or has been revoked. Reconnect to continue." : body}
         </div>
         {isAuth && body && body !== "Authentication required" && (
           <div className="api-error-toast-detail">{body}</div>

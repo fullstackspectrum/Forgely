@@ -837,7 +837,7 @@ body {
   border-color: rgba(245, 248, 251, 0.2);
 }
 
-.custom-dropdown-trigger:focus {
+.custom-dropdown-trigger:focus:not(:focus-visible) {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 8px var(--glow-accent);
@@ -1665,7 +1665,7 @@ body {
   margin-bottom: 8px;
   transition: border-color 0.15s;
 }
-.dep-panel-search:focus {
+.dep-panel-search:focus:not(:focus-visible) {
   outline: none;
   border-color: rgba(92, 159, 228, 0.6);
 }
@@ -1773,7 +1773,7 @@ body {
   font-family: inherit;
   transition: border-color 0.15s, background 0.15s;
 }
-.cve-search-input:focus {
+.cve-search-input:focus:not(:focus-visible) {
   outline: none;
   border-color: var(--accent);
   background: rgba(245, 248, 251, 0.04);
@@ -5330,4 +5330,96 @@ td, th,
   border-style: solid;
   box-sizing: content-box;
   vertical-align: middle;
+}
+
+/* ============================================================
+   Accessibility — BRANDING.md §5, §7, §9.11
+   ============================================================ */
+
+/* "2px --c-focus ring at 2px offset, on every interactive element, always
+   visible on keyboard focus. Never remove the outline without replacing it."
+ *
+ * There were eight `outline: none` rules and no replacement, so keyboard users
+ * had no visible focus at all on those controls. :focus-visible keeps the ring
+ * off for pointer interaction, which is why the outlines were removed in the
+ * first place — this gets that without losing the affordance. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+  border-radius: var(--fg-radius-sm);
+}
+
+/* The canvas takes keyboard focus so the graph is reachable without a mouse. */
+.sigma-container:focus-visible,
+.graph-container:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
+
+/* "prefers-reduced-motion: reduce sets every duration to 1ms and the stagger
+   to 0. The ripple becomes an instant state change; the loader freezes into
+   the static mark. Both remain fully functional."
+ *
+ * The token file already collapses the duration variables, but the animations
+ * in this stylesheet use literal durations, so they need stating explicitly.
+ * Without this the app had 18 animations and no reduced-motion handling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible only to screen readers — for labelling controls whose meaning is
+   carried by an icon or by position. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Empty states: a display headline, one line of body, and the mark as the
+   displacement illustration. "Empty is an invitation, not an apology." (§7) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 32px;
+}
+
+.empty-state-mark {
+  width: 56px;
+  height: 56px;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.empty-state h2 {
+  font-size: var(--fg-text-xl);
+  color: var(--t-primary);
+}
+
+.empty-state p {
+  max-width: 42ch;
+  color: var(--t-secondary);
+  font-size: var(--fg-text-md);
+  line-height: 1.55;
+}
+
+.empty-state-hint {
+  color: var(--t-muted);
+  font-size: var(--fg-text-sm);
 }

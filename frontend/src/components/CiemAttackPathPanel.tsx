@@ -564,8 +564,8 @@ export default function CiemAttackPathPanel({ data, onClose }: Props) {
                         <span className="cap-identity-name">{risk.node.label}</span>
                         <div className="cap-identity-meta">
                           <span>{risk.repoCount} repo{risk.repoCount !== 1 ? "s" : ""}</span>
-                          {risk.isServiceAdmin && <span className="cap-meta-critical">Service Admin</span>}
-                          {risk.isBroadAccess && !risk.isServiceAdmin && <span className="cap-meta-high">Broad Access</span>}
+                          {risk.isServiceAdmin && <span className="cap-meta-critical">Service admin</span>}
+                          {risk.isBroadAccess && !risk.isServiceAdmin && <span className="cap-meta-high">Broad access</span>}
                         </div>
                       </div>
                       <div className="cap-identity-perms">

@@ -139,7 +139,7 @@ export default function FilterBar({
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Max Severity" defaultOpen={true}>
+        <CollapsibleSection title="Max severity" defaultOpen={true}>
           <div className="left-panel-btn-group">
             {SEVERITY_FILTERS.map((f) => {
               const active = filter === f.key;

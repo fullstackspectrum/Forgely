@@ -159,7 +159,7 @@ export default function OrgSidePanel({ data, nodeId, onNodeSelect, onOpenAttackP
             <StatusPill active={!!d.is_active} />
           </div>
           <InfoCard>
-            {!!d.limit_package_query && <DetailRow label="Package Query" value={String(d.limit_package_query)} mono />}
+            {!!d.limit_package_query && <DetailRow label="Package query" value={String(d.limit_package_query)} mono />}
             {!!d.created_at && <DetailRow label="Created" value={String(d.created_at).split("T")[0]} />}
           </InfoCard>
         </>
