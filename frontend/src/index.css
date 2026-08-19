@@ -379,10 +379,8 @@ body {
   width: 260px;
   height: 100%;
   z-index: 150;
-  background: rgba(10, 22, 34, 0.90);
-  border-right: 1px solid rgba(245, 248, 251, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1351,7 +1349,19 @@ body {
   gap: 8px;
 }
 /* Repo overview cards stretch to 4 even columns when wide */
-.side-panel-expanded .repo-cards {
+.side-panel-expanded /* An all-caps eyebrow, tracked per §3, so the panel says what kind of thing
+   it is describing without needing a logo to carry that. */
+.panel-eyebrow {
+  display: block;
+  font-size: var(--fg-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+  margin-bottom: 4px;
+}
+
+.repo-cards {
   grid-template-columns: repeat(4, 1fr);
 }
 
@@ -1842,10 +1852,16 @@ body {
   gap: 12px;
 }
 
-.repo-header-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--fg-radius-md);
+/* An all-caps eyebrow, tracked per §3, so the panel says what kind of thing
+   it is describing without needing a logo to carry that. */
+.panel-eyebrow {
+  display: block;
+  font-size: var(--fg-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+  margin-bottom: 4px;
 }
 
 .repo-cards {
@@ -5403,4 +5419,97 @@ td, th,
 .empty-state-hint {
   color: var(--t-muted);
   font-size: var(--fg-text-sm);
+}
+
+/* ============================================================
+   Sidebar — matched to the mockup
+   Filter rows were full-width bordered buttons: 260px of heavy chrome for
+   what is a list of toggles. A checkbox, a label and a count carry the same
+   information with a fraction of the ink.
+   ============================================================ */
+
+.left-panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 16px 16px 0;
+  background: var(--c-bg);
+  border-radius: var(--fg-radius-md);
+  padding: 4px;
+}
+
+.left-panel-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: var(--fg-radius-sm);
+  background: none;
+  color: var(--t-muted);
+  font-family: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--fg-dur-instant) var(--fg-ease);
+}
+
+.left-panel-tab.active {
+  background: var(--c-action);
+  color: var(--c-action-text);
+  font-weight: 600;
+}
+
+/* Filter rows */
+.btn.btn-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--fg-radius-md);
+  background: none;
+  color: var(--t-secondary);
+  font-family: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fg-dur-instant) var(--fg-ease);
+}
+
+.btn.btn-block:hover {
+  background: var(--c-surface-raised);
+}
+
+/* The checkbox that replaces the button's border. */
+.btn.btn-block::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border: 1.5px solid var(--c-border-strong);
+  border-radius: var(--fg-radius-sm);
+  transition: background var(--fg-dur-instant) var(--fg-ease),
+              border-color var(--fg-dur-instant) var(--fg-ease);
+}
+
+.btn.btn-block.btn-active {
+  background: none;
+  color: var(--t-primary);
+}
+
+.btn.btn-block.btn-active::before {
+  background: var(--c-action);
+  border-color: var(--c-action);
+}
+
+.left-panel-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Severity rows show the mark rather than a colour-filled button — the level
+   stays readable without the fill doing the work (§2.4). */
+.btn.btn-sev .sev-mark {
+  margin-left: 2px;
 }
