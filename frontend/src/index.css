@@ -1205,15 +1205,16 @@ body {
 
 .panel-overlay {
   position: fixed;
-  width: 400px;
-  max-height: calc(100vh - 40px);
+  width: 376px;
+  max-height: calc(100vh - 106px);
   z-index: 200;
-  background: rgba(10, 22, 34, 0.94);
-  border: 1px solid rgba(245, 248, 251, 0.09);
-  border-radius: var(--fg-radius-xl);
-  box-shadow: 0 8px 24px rgba(12, 32, 54, 0.12);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-lg);
+  /* §4 reserves shadows for modals and popovers, and this panel floats over
+     the canvas rather than sitting in the layout — the mockup shadows it for
+     that reason, and a border alone does not lift it off a busy graph. */
+  box-shadow: 0 8px 24px rgba(4, 10, 18, 0.5);
   overflow-y: auto;
   animation: floatIn 0.22s ease-out;
   transition: width 0.3s ease, right 0.3s ease, left 0.3s ease, top 0.3s ease, bottom 0.3s ease, border-radius 0.3s ease, max-height 0.3s ease;
@@ -5513,3 +5514,94 @@ td, th,
 .btn.btn-sev .sev-mark {
   margin-left: 2px;
 }
+
+/* ============================================================
+   Detail panel — matched to the mockup
+   ============================================================ */
+
+.side-panel {
+  padding: 0;
+}
+
+/* .panel-summary and .panel-details are `display: contents`, so they generate
+   no box — padding on them is inert and their children lay out directly in
+   .side-panel. The header therefore spans the card on its own, and the blocks
+   below carry their own inset. */
+.panel-header {
+  display: block;
+  margin: 0 0 16px;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* The panel describes the selected node, which is the origin — so it carries
+   the ember marker, tilted, exactly as the node does. That is one origin shown
+   in two places, not two origins (§1). */
+.panel-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fg-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-origin-text);
+  margin-bottom: 8px;
+}
+
+.panel-eyebrow::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  flex: none;
+  background: var(--c-origin);
+  border-radius: 2px;
+  transform: rotate(12deg);
+}
+
+.panel-status-row,
+.panel-stats,
+.panel-meta,
+.panel-section,
+.panel-actions {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+/* Stat grid: two columns of large display numerals, replacing the dense
+   label/value table. §3 puts numerals in stat blocks in the display face. */
+.panel-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.panel-stat {
+  background: var(--c-surface-raised);
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  padding: 12px 16px;
+}
+
+.panel-stat-value {
+  font-family: var(--fg-font-display);
+  font-size: var(--fg-text-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--t-primary);
+}
+
+.panel-stat-key {
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+  margin-top: 2px;
+}
+
+/* A stat that is itself a finding takes the severity tint. */
+.panel-stat[data-severity] .panel-stat-value { color: var(--sev-fg); }
+.panel-stat[data-severity] { border-color: var(--sev-fg); background: var(--sev-bg); }
+.panel-stat[data-severity="Critical"] { --sev-bg: var(--fg-sev-critical-bg); --sev-fg: var(--s-critical); }
+.panel-stat[data-severity="High"]     { --sev-bg: var(--fg-sev-high-bg);     --sev-fg: var(--s-high); }
+.panel-stat[data-severity="Medium"]   { --sev-bg: var(--fg-sev-medium-bg);   --sev-fg: var(--s-medium); }
+.panel-stat[data-severity="Low"]      { --sev-bg: var(--fg-sev-low-bg);      --sev-fg: var(--s-low); }
