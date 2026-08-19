@@ -166,10 +166,21 @@ export default function LoadingIndicator({ variant = "packages", progress }: Pro
           §7 restricts this to graph-shaped work over a second, which a build
           is: 19s cold, and the phase list below is showing real progress
           throughout. A plain spinner belongs anywhere shorter. */}
+      {/* One loader per theme, swapped in CSS. The reversed file draws its
+          neighbour cells in white for dark backgrounds; on a light canvas
+          those cells disappear and the ripple loses most of its shape. */}
+      <img
+        src="/forgely-loader.svg"
+        alt=""
+        className="loading-loader logo-light"
+        width={96}
+        height={96}
+      />
       <img
         src="/forgely-loader-reversed.svg"
         alt=""
-        className="loading-loader"
+        aria-hidden="true"
+        className="loading-loader logo-dark"
         width={96}
         height={96}
       />
