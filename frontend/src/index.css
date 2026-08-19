@@ -5610,8 +5610,9 @@ td, th,
 }
 
 
-/* One lockup per theme. The reversed file sets the wordmark in white, so on a
-   light sidebar it disappeared into the background. */
+/* Theme-paired artwork: the reversed files draw in white for dark backgrounds
+   and vanish on a light one. Used by the nav lockup and the loader.
+   Light is the default so the pair works even if data-theme is somehow absent. */
 .logo-dark { display: none; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }
