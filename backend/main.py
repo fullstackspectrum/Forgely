@@ -961,8 +961,18 @@ def validate_api_key(request: Request):
         return {"valid": False, "error": str(exc)}
 
 
+def _report_theme(theme: str | None) -> str:
+    """Clamp a requested report theme to what vulnly accepts.
+
+    vulnly 1.0.0 takes --theme {dark,light} and defaults to dark. Anything else
+    is an argparse error, so an unexpected query value would surface to the
+    user as a failed report rather than a wrong colour.
+    """
+    return "light" if (theme or "").lower() == "light" else "dark"
+
+
 @app.get("/api/vulnly-repo-report/{owner}/{repo}")
-def vulnly_repo_report(owner: str, repo: str, request: Request):
+def vulnly_repo_report(owner: str, repo: str, request: Request, theme: str | None = None):
     """Generate an HTML repo-level vulnerability summary using vulnly.
 
     Fetches all packages in the repo, collects their latest scan results in
@@ -1019,7 +1029,8 @@ def vulnly_repo_report(owner: str, repo: str, request: Request):
         out_path = os.path.join(tmp, "report.html")
         try:
             proc = subprocess.run(
-                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith", "-o", out_path],
+                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith",
+                 "-o", out_path, "--theme", _report_theme(theme)],
                 input=payload,
                 capture_output=True,
                 timeout=120,
@@ -1042,7 +1053,7 @@ def vulnly_repo_report(owner: str, repo: str, request: Request):
 
 
 @app.get("/api/vulnly-report/{owner}/{repo}/{slug}")
-def vulnly_report(owner: str, repo: str, slug: str, request: Request):
+def vulnly_report(owner: str, repo: str, slug: str, request: Request, theme: str | None = None):
     """Generate an HTML vulnerability report for a package using vulnly.
 
     Fetches the latest Cloudsmith vulnerability scan for the package, wraps
@@ -1071,7 +1082,8 @@ def vulnly_report(owner: str, repo: str, slug: str, request: Request):
         out_path = os.path.join(tmp, "report.html")
         try:
             proc = subprocess.run(
-                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith", "-o", out_path],
+                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith",
+                 "-o", out_path, "--theme", _report_theme(theme)],
                 input=payload,
                 capture_output=True,
                 timeout=60,

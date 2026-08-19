@@ -55,3 +55,15 @@ export function watchSystemTheme(onChange: () => void): () => void {
   mq.addEventListener("change", onChange);
   return () => mq.removeEventListener("change", onChange);
 }
+
+/**
+ * The theme currently rendered, read from the document.
+ *
+ * For code that needs the value at the moment of an action rather than as
+ * React state — the report downloads, which must match what the user is
+ * looking at when they click. Reading the attribute cannot go stale the way a
+ * captured prop can.
+ */
+export function currentTheme(): "light" | "dark" {
+  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+}
