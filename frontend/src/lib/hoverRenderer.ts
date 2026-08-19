@@ -139,24 +139,26 @@ export function drawDarkNodeHover(
     const qW     = context.measureText(qText).width + 22;
     const badgeH = Math.round(fontSize - 1);
 
-    context.fillStyle = "rgba(217, 182, 92,0.20)";
-    roundedRect(context, textX, nextRowY, qW, badgeH, 3);
+    /* Neutral, for the same reason as the node badge: quarantine is a state,
+       not a severity, and the severity ramp has to stay meaningful. */
+    context.fillStyle = "rgba(139, 156, 175, 0.18)";
+    roundedRect(context, textX, nextRowY, qW, badgeH, 4);
     context.fill();
 
-    context.fillStyle    = token("--s-medium");
+    context.fillStyle    = token("--fg-n-300");
     context.textBaseline = "top";
     context.fillText(qText, textX + 15, nextRowY + 1);
 
     // Small lock glyph before the text
     const lx = textX + 7, ly = nextRowY + badgeH / 2;
     const lr = badgeH * 0.28;
-    context.strokeStyle = token("--s-medium");
+    context.strokeStyle = token("--fg-n-300");
     context.lineWidth   = lr * 0.7;
     context.lineCap     = "round";
     context.beginPath();
     context.arc(lx, ly - lr * 0.5, lr * 0.6, Math.PI, 0);
     context.stroke();
-    context.fillStyle = token("--s-medium");
+    context.fillStyle = token("--fg-n-300");
     context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
   }
 
@@ -190,7 +192,13 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = token("--s-medium");
+  /* Not a severity colour. This was --s-medium (gold), which meant every
+     quarantined package put a Medium-severity disc on the canvas for a state
+     that is not a severity at all — and on a container repo that is dozens of
+     amber discs competing with the single ember origin. §1: "there is exactly
+     one of it on screen. If your UI has three amber things in it, the
+     metaphor is dead and so is the colour's meaning." */
+  ctx.fillStyle = token("--fg-n-400");
   ctx.fill();
 
   // White lock — shackle (open-bottom arch)

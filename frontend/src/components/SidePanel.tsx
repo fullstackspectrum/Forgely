@@ -882,9 +882,14 @@ function RepoDetail({
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
       <div className="panel-summary">
       <div className="panel-header">
+        {/* The Cloudsmith logo used to sit here as a 36px avatar. It is not
+            our mark and it made the panel read as Cloudsmith's own UI; the
+            repository name is the thing the user is looking at, so it leads.
+            The "View in Cloudsmith" link below stays — it goes there, and §8
+            says to name things by what the user controls. */}
         <div className="repo-header-row">
-          <img src="/cloudsmith.png" alt="" className="repo-header-logo" />
           <div>
+            <span className="panel-eyebrow">Repository</span>
             <h2 className="panel-title">{node.label}</h2>
             <span className="panel-version">{owner}</span>
           </div>

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import SeverityMark from "./SeverityMark";
 import type { FilterType } from "../types";
 import ChangelogModal from "./ChangelogModal";
 
@@ -27,12 +28,12 @@ interface Props {
   onDisconnect: () => void;
 }
 
-const STATUS_FILTERS: { key: string; label: string; icon?: React.ReactNode }[] = [
-  { key: "vulnerable", label: "Vulnerable", icon: "⚠" },
-  { key: "safe",       label: "Safe",       icon: "✔" },
-  { key: "quarantined",label: "Quarantined",icon: "🔒" },
-  { key: "shared_cve", label: "Shared CVEs",icon: "🔗" },
-  { key: "has_deps",   label: "Has Dependencies", icon: "🔀" },
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "vulnerable",  label: "Vulnerable" },
+  { key: "safe",        label: "Safe" },
+  { key: "quarantined", label: "Quarantined" },
+  { key: "shared_cve",  label: "Shared CVEs" },
+  { key: "has_deps",    label: "Has dependencies" },
 ];
 
 const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
@@ -129,10 +130,7 @@ export default function FilterBar({
                   className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
                   onClick={() => toggleFlag(f.key)}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                    {f.icon && <span aria-hidden="true">{f.icon}</span>}
-                    {f.label}
-                  </span>
+                  {f.label}
                 </button>
               );
             })}
@@ -146,10 +144,10 @@ export default function FilterBar({
               return (
                 <button
                   key={f.key}
-                  className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
-                  style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "var(--t-primary)" }}
+                  className={`btn btn-block btn-sev ${active ? "btn-active" : "btn-muted"}`}
                   onClick={() => toggleSeverity(f.key)}
                 >
+                  <SeverityMark severity={f.key} />
                   {f.label}
                 </button>
               );
