@@ -8,10 +8,9 @@ import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeCircleWithRingProgram, NodeImageWithRingProgram, nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
 import { hopColor, withAlpha } from "../lib/palette";
-import { NodeSquareProgram } from "@sigma/node-square";
+import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
-import { NodeOriginProgram } from "../programs/NodeOriginProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import { placeRadially, refineForceLayout } from "../lib/layout";
@@ -494,12 +493,10 @@ export default function GraphCanvas({
             : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
-      let nodeImage: string | null = null;
-      if (node.type === "repo") {
-        nodeImage = "/forgely-icon.svg";
-      } else {
-        nodeImage = getFormatIcon(node.data.format);
-      }
+      /* The repository is the mark's centre cell, drawn rather than imaged:
+         as a bitmap clipped to a disc it was cut off at its own boundary. */
+      const nodeImage: string | null =
+        node.type === "repo" ? null : getFormatIcon(node.data.format);
 
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
          hop-distance fills land, only this expression changes. */
@@ -524,11 +521,12 @@ export default function GraphCanvas({
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
         is_quarantined: node.data.is_quarantined ?? false,
+        /* Squares from the mark. Dependencies keep the hexagon: they are a
+           different kind of thing from a package, and shape is the only
+           channel saying so now that fill carries hop distance. */
         ...(node.type === "dependency"
           ? { type: "hexagon" }
-          : nodeImage
-            ? { type: "image", image: nodeImage }
-            : {}),
+          : { type: "square" }),
       });
       nodeData[node.id] = node.data;
     }
@@ -606,7 +604,7 @@ export default function GraphCanvas({
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
       defaultNodeType: "circleRing",
-      nodeProgramClasses: { origin: NodeOriginProgram, circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
+      nodeProgramClasses: { origin: NodeTiltedSquareProgram, square: NodeSquareProgram, circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -828,8 +826,11 @@ export default function GraphCanvas({
 
                The severity ring stays: you still need to know whether the
                thing you are investigating is Critical. */
+            /* Selection is the tilt, not the colour. Ember now belongs to the
+               repository — the mark's centre cell — and §1 allows exactly one
+               of it on screen, so the selected package stays blue and is
+               distinguished by being displaced, enlarged and labelled. */
             res.type = "origin";
-            res.color = token("--c-origin");
             res.size = 22;
             res.forceLabel = true;
             res.highlighted = true;

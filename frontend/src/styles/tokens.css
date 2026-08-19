@@ -129,7 +129,10 @@
   --s-none:     var(--fg-sev-none);
 
   /* Graph distance from origin — hop 0 is the origin itself */
-  --g-hop-0: var(--fg-amber-400);
+  /* Hop 0 is the selected node, and it is blue: ember is the repository's,
+     and the selection is marked by the tilt instead. Same value as hop 1 —
+     the displaced shape carries the distinction, not a colour step. */
+  --g-hop-0: var(--fg-blue-400);
   --g-hop-1: var(--fg-blue-400);
   --g-hop-2: var(--fg-blue-300);
   --g-hop-3: var(--fg-blue-200);
