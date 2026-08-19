@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import SeverityMark from "./SeverityMark";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { useCveDescriptions } from "../hooks/useCveDescriptions";
@@ -235,7 +236,7 @@ export default function SidePanel({
           <button
             type="button"
             className={`severity-badge severity-badge-clickable${filter === sev ? " active" : ""}`}
-            style={{ background: sevColor }}
+            data-severity={sev}
             onClick={() => toggleSeverity(sev as FilterType)}
             title={filter === sev ? `Clear ${sev} filter — showing all` : `Filter graph by ${sev}`}
             disabled={!onFilterChange || sev === "None" || sev === "Unknown"}
@@ -381,10 +382,11 @@ export default function SidePanel({
                     )}
                     {hasVulns && (
                       <span
-                        className="dep-row-badge"
-                        style={{ background: sevColor }}
-                        title={`${dep.data.vuln_count} ${dep.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}`}
+                        className="dep-row-badge severity-badge"
+                        data-severity={sev}
+                        title={`${dep.data.vuln_count} ${dep.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}, highest severity ${sev}`}
                       >
+                        <SeverityMark severity={sev} />
                         {dep.data.vuln_count}
                       </span>
                     )}
@@ -456,8 +458,8 @@ export default function SidePanel({
               {filterOptions.map((s) => (
                 <button
                   key={s}
-                  className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
-                  style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
+                  className={`cve-filter-btn${sevFilter === s ? " active severity-badge" : ""}`}
+                  data-severity={sevFilter === s && s !== "All" ? s : undefined}
                   onClick={() => { setSevFilter(s); setCvePage(0); }}
                 >
                   {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
@@ -746,7 +748,7 @@ function DependencyDetail({
                       <button
                         type="button"
                         className={`severity-badge severity-badge-clickable${isActive ? " active" : ""}`}
-                        style={{ background: sevColor }}
+                        data-severity={sev}
                         onClick={() => onFilterChange?.(isActive ? "all" : sev as FilterType)}
                         title={isActive ? `Clear ${sev} filter` : `Filter graph by ${sev}`}
                       >
@@ -1035,7 +1037,12 @@ function RepoDetail({
                   title={onNodeSelect ? `Select ${p.label}` : undefined}
                 >
                   <span className="repo-vuln-name">{p.label}</span>
-                  <span className="repo-vuln-badge" style={{ background: SEVERITY_COLORS[s] }}>
+                  <span
+                    className="repo-vuln-badge severity-badge"
+                    data-severity={s}
+                    title={`${p.data.vuln_count} ${p.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}, highest severity ${s}`}
+                  >
+                    <SeverityMark severity={s} />
                     {p.data.vuln_count}
                   </span>
                 </button>

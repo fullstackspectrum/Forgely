@@ -129,6 +129,12 @@
   --g-edge-muted: var(--fg-n-200);
   --g-canvas: var(--fg-n-50);
   --g-node-stroke: var(--fg-n-0);
+
+  /* Light-canvas equivalents, darkened to hold 3:1 against --fg-n-50. */
+  --g-sev-critical: #D62B20;
+  --g-sev-high:     #C25E00;
+  --g-sev-medium:   #8A6410;
+  --g-sev-low:      #4E657D;
 }
 
 [data-theme="dark"] {
@@ -168,6 +174,21 @@
   --fg-sev-medium-bg:   #332C13;
   --fg-sev-low-bg:      #1F2C39;
   --fg-sev-none-bg:     #1B2733;
+
+  /* Severity as rendered on the graph canvas — a ring, not text.
+     The text values above are lightened to clear 4.5:1 on raised surfaces,
+     which desaturates them: Critical and High end up 14 degrees apart in hue
+     and read as one orange smear at graph scale. A ring is a non-text UI
+     component (3:1 under WCAG 1.4.11) sitting on the canvas, so it can be far
+     more saturated and far better separated. §2.3 sets the precedent by
+     exempting the canvas from the text-contrast rules.
+
+     Measured against --g-canvas: Critical 5.1:1, High 7.7:1, Medium 11.9:1,
+     Low 7.3:1. Hue separation Critical->High is 26 degrees, up from 14. */
+  --g-sev-critical: #FF3B30;
+  --g-sev-high:     #FF8A1F;
+  --g-sev-medium:   #F2CE3F;
+  --g-sev-low:      #7FA8C9;
 
   --g-hop-far: var(--fg-n-600);
   --g-edge-muted: var(--fg-n-700);

@@ -7,18 +7,24 @@ import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
 import { token } from "./palette";
 
-const SEVERITY_COLORS: Record<string, string> = {
-  Critical: token("--s-critical"),
-  High:     token("--s-high"),
-  Medium:   token("--s-medium"),
-  Low:      token("--s-low"),
+/* Resolved on call, not at module scope. token() reads computed styles, and
+   this module is imported before the stylesheet is guaranteed to be applied —
+   a map built at import time would cache the fallback colour forever. */
+const SEV_TOKEN: Record<string, string> = {
+  Critical: "--s-critical",
+  High: "--s-high",
+  Medium: "--s-medium",
+  Low: "--s-low",
 };
 
-const SEVERITY_BADGE: Record<string, [string, string]> = {
-  Critical: ["rgba(232, 117, 107,0.22)",  token("--s-critical")],
-  High:     ["rgba(240, 138, 90,0.22)", token("--s-high")],
-  Medium:   ["rgba(217, 182, 92,0.18)", token("--s-medium")],
-  Low:      ["rgba(139, 156, 175,0.18)",token("--s-low")],
+const severityColor = (sev: string): string | undefined =>
+  sev in SEV_TOKEN ? token(SEV_TOKEN[sev]) : undefined;
+
+const SEVERITY_BADGE_BG: Record<string, string> = {
+  Critical: "rgba(232, 117, 107,0.22)",
+  High:     "rgba(240, 138, 90,0.22)",
+  Medium:   "rgba(217, 182, 92,0.18)",
+  Low:      "rgba(139, 156, 175,0.18)",
 };
 
 export function drawDarkNodeHover(
@@ -62,7 +68,7 @@ export function drawDarkNodeHover(
     context.font = `${weight} ${fontSize}px ${font}`;
   }
 
-  const accentW   = SEVERITY_COLORS[severity ?? ""] ? ACCENT_W : 0;
+  const accentW   = severityColor(severity ?? "") ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
   const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
   const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
@@ -98,7 +104,7 @@ export function drawDarkNodeHover(
   context.stroke();
 
   // ── Layer 4: severity accent bar (left edge, clipped to rounded shape) ───
-  const sevColor = severity && SEVERITY_COLORS[severity];
+  const sevColor = severity && severityColor(severity);
   if (sevColor && accentW > 0) {
     context.save();
     roundedRect(context, x, y, boxWidth, boxHeight, radius);
@@ -122,7 +128,8 @@ export function drawDarkNodeHover(
   let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
-    const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(245, 248, 251,0.08)", token("--t-muted")];
+    const badgeFg = severityColor(severity) ?? token("--t-muted");
+    const badgeBg = SEVERITY_BADGE_BG[severity] ?? "rgba(245, 248, 251,0.08)";
     const sevW   = context.measureText(severity).width + 14;
     const badgeH = Math.round(fontSize - 1);
 
