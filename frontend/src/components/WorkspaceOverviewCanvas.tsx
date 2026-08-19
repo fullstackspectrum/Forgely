@@ -3,7 +3,7 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
-import { NodeImageProgram } from "@sigma/node-image";
+import { NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
@@ -21,22 +21,9 @@ interface Props {
   onRefresh?: () => void;
 }
 
-const SEV_BORDER: Record<string, string> = {
-  Critical: token("--s-critical"),
-  High:     token("--s-high"),
-  Medium:   token("--s-medium"),
-  Low:      token("--s-low"),
-  None:     token("--s-none"),
-};
-
 function getSevColor(sev: string | null): string {
   if (!sev) return token("--fg-n-600");
   return SEVERITY_COLORS[sev] ?? token("--fg-n-600");
-}
-
-function getSevBorder(sev: string | null): string {
-  if (!sev) return token("--t-muted");
-  return SEV_BORDER[sev] ?? token("--t-muted");
 }
 
 function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
@@ -189,8 +176,11 @@ export default function WorkspaceOverviewCanvas({
         y,
         size: repoNodeSize(repo.package_count),
         label: repo.name,
-        color: getSevColor(sev),
-        borderColor: getSevBorder(sev),
+        /* Fill is what the node is, ring is severity (§6). borderColor was
+           already being set here and silently discarded — NodeImageProgram has
+           no border support — so it now goes through the compound program. */
+        color: token("--fg-blue-400"),
+        ...severityRing(sev),
         nodeType: "repo",
         slug: repo.slug,
         max_severity: sev,
@@ -214,7 +204,7 @@ export default function WorkspaceOverviewCanvas({
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
       defaultEdgeType: "curvedArrow",
-      nodeProgramClasses: { image: NodeImageProgram },
+      nodeProgramClasses: { image: NodeImageWithRingProgram },
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
@@ -343,7 +333,7 @@ export default function WorkspaceOverviewCanvas({
         highlighted: isSelected,
         hidden: hiddenByRepo,
         color: dimmed ? token("--c-surface") : attrs.color,
-        borderColor: dimmed ? token("--c-border-strong") : attrs.borderColor,
+        borderSize: dimmed ? 0 : attrs.borderSize,
       };
     });
     sigma.setSetting("edgeReducer", (edge, attrs) => {

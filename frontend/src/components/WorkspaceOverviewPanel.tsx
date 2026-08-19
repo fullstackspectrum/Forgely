@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import SeverityMark from "./SeverityMark";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse } from "../types";
 import { getFormatIcon } from "../lib/formatIcons";
@@ -237,7 +238,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect, formatFilte
               return (
                 <button key={r.slug} className="wo-search-result-row" onClick={() => onRepoSelect(r.slug, query.trim() || undefined)}>
                   <div className="wo-search-result-header">
-                    <span className="wo-repo-sev-dot" style={{ background: color }} />
+                    <SeverityMark severity={r.maxSev} className="wo-repo-sev-dot" />
                     <span className="wo-search-result-name"><Hl text={r.name} query={query} /></span>
                   </div>
                   {r.matchedCves.length > 0 && (
@@ -268,7 +269,7 @@ export default function WorkspaceOverviewPanel({ data, onRepoSelect, formatFilte
           <div className="wo-repo-list">
             {[...data.repos].sort((a, b) => b.vuln_count - a.vuln_count).map((repo) => (
               <button key={repo.slug} className="wo-repo-row" onClick={() => onRepoSelect(repo.slug)}>
-                <span className="wo-repo-sev-dot" style={{ background: repo.max_severity ? SEVERITY_COLORS[repo.max_severity] ?? "var(--fg-n-600)" : "var(--fg-n-600)" }} />
+                <SeverityMark severity={repo.max_severity} className="wo-repo-sev-dot" />
                 <span className="wo-repo-row-name">{repo.name}</span>
                 <span className="wo-repo-row-count">{repo.package_count} pkg{repo.package_count !== 1 ? "s" : ""}</span>
                 {(repo.critical + repo.high + repo.medium + repo.low) > 0 && (

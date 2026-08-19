@@ -5238,3 +5238,100 @@ td, th,
 .legend-title {
   letter-spacing: 0.08em;
 }
+
+/* ============================================================
+   Severity — BRANDING.md §2.4
+   Never communicated by colour alone: each level has a distinct shape.
+   ============================================================ */
+
+.sev-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Hollow variants, the two the shape set was missing. */
+.dot-hollow {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  background: transparent;
+}
+
+.dot-square-hollow {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  border: 1.5px solid;
+  background: transparent;
+}
+
+.sev-mark-label {
+  margin-left: 6px;
+  font-size: var(--fg-text-xs);
+  font-weight: 600;
+}
+
+/* Badges carry the severity as text on a tinted background — never white text
+   on a solid severity fill, which fails contrast for High, Medium and Low.
+   Critical is the documented exception (6.54:1) and may be solid when one
+   thing needs to shout; it is opted into with .severity-badge-solid. */
+.severity-badge {
+  background: var(--sev-bg, transparent);
+  color: var(--sev-fg, var(--t-primary));
+  border: 1px solid var(--sev-fg, transparent);
+}
+
+/* Solid Critical, for the rare case where one thing must shout.
+ *
+ * The text colour is --t-inverse, not white. §2.4's "passes at 6.54:1" is
+ * Critical measured on white — a light-mode figure. Dark mode lightens
+ * --s-critical to #E8756B so it reads on dark surfaces, and white on that is
+ * 2.92:1, well under AA. --t-inverse flips with the theme and is legible in
+ * both. */
+.severity-badge-solid {
+  background: var(--s-critical);
+  color: var(--t-inverse);
+  border-color: var(--s-critical);
+}
+
+.severity-badge[data-severity="Critical"] { --sev-bg: var(--fg-sev-critical-bg); --sev-fg: var(--s-critical); }
+.severity-badge[data-severity="High"]     { --sev-bg: var(--fg-sev-high-bg);     --sev-fg: var(--s-high); }
+.severity-badge[data-severity="Medium"]   { --sev-bg: var(--fg-sev-medium-bg);   --sev-fg: var(--s-medium); }
+.severity-badge[data-severity="Low"]      { --sev-bg: var(--fg-sev-low-bg);      --sev-fg: var(--s-low); }
+/* None takes a neutral text colour rather than --s-none. BRANDING.md §2.4
+   marks that value "background/icon only" — as text on its own tinted
+   background it measures 4.06:1, under AA. The hollow-square mark still
+   carries the severity, so nothing is lost by making the label legible. */
+.severity-badge[data-severity="None"]     { --sev-bg: var(--fg-sev-none-bg);     --sev-fg: var(--t-secondary); }
+
+/* The severity dots in dense rows are replaced by SeverityMark, which brings
+   its own shape; these keep only the sizing they had. */
+.ag-sev-dot,
+.wo-repo-sev-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+/* Badges that wrap a mark and a number need the two spaced and aligned. */
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Legend swatch matching a graph node: blue body, severity ring outside it. */
+.legend-node-ring {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg-blue-400);
+  border-style: solid;
+  box-sizing: content-box;
+  vertical-align: middle;
+}

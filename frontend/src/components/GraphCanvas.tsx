@@ -6,6 +6,7 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
+import { NodeCircleWithRingProgram, NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
@@ -407,8 +408,6 @@ export default function GraphCanvas({
     for (const node of data.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
-      const sevColor =
-        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? token("--s-none") : token("--t-primary"));
 
       const size =
         node.type === "repo"
@@ -425,15 +424,25 @@ export default function GraphCanvas({
         nodeImage = getFormatIcon(node.data.format);
       }
 
+      /* Fill encodes what the node *is*; the ring encodes severity (§6). When
+         hop-distance fills land, only this expression changes. */
+      const fill =
+        node.type === "repo"
+          ? token("--c-bg")
+          : node.type === "dependency"
+            ? token("--fg-blue-200")   /* transitive reads as Mist */
+            : token("--fg-blue-400");  /* Signal blue for packages */
+
+      const ring = node.type === "package"
+        ? severityRing(node.data.max_severity)
+        : { borderColor: token("--g-node-stroke"), borderSize: 0 };
+
       graph.addNode(node.id, {
         label: node.type === "repo" ? "" : node.label,
         size,
-        color:
-          node.type === "repo"
-            ? token("--c-bg")
-            : node.type === "dependency"
-              ? token("--fg-blue-300")
-              : sevColor,
+        color: fill,
+        borderColor: ring.borderColor,
+        borderSize: ring.borderSize,
         x: 0,
         y: 0,
         nodeType: node.type,
@@ -522,7 +531,8 @@ export default function GraphCanvas({
       hideEdgesOnMove: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
+      defaultNodeType: "circleRing",
+      nodeProgramClasses: { circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -736,6 +746,7 @@ export default function GraphCanvas({
           } else {
             /* Everything else: ghost — tiny, near-background, pushed to back */
             res.color = token("--c-bg");
+            res.borderSize = 0;
             res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
             res.label = "";
             res.zIndex = -2;
@@ -744,6 +755,7 @@ export default function GraphCanvas({
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
             res.color = token("--c-bg");
+            res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
             res.label = "";
             res.zIndex = -1;
