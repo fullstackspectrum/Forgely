@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { currentTheme } from "../lib/theme";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceRepoSummary, WorkspaceCveSummary } from "../types";
 import { apiFetch } from "../lib/auth";
@@ -116,7 +117,7 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(data.slug)}`,
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(data.slug)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));

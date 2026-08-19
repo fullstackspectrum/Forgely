@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { currentTheme } from "../lib/theme";
 import SeverityMark from "./SeverityMark";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
@@ -197,7 +198,7 @@ export default function SidePanel({
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}`,
+        `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
@@ -822,7 +823,7 @@ function RepoDetail({
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
