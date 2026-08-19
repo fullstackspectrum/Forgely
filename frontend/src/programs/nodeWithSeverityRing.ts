@@ -111,7 +111,10 @@ export { RingProgram as NodeRingOnlyProgram };
  *  reducer once an origin is selected. */
 export function nodeFill(nodeType: string | undefined): string {
   return nodeType === "repo"
-    ? token("--c-bg")
+    /* The repository is the mark's ember centre cell — the one disturbed
+       square everything else sits around. §1 allows exactly one ember per
+       view, and this is it; selection is marked by the tilt instead. */
+    ? token("--c-origin")
     : nodeType === "dependency"
       ? token("--fg-blue-200")   /* transitive reads as Mist */
       : token("--fg-blue-400");  /* Signal blue for packages */
