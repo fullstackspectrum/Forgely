@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import type { Theme } from "../lib/theme";
+import ThemeToggle from "./ThemeToggle";
 import SeverityMark from "./SeverityMark";
 import type { FilterType } from "../types";
 import ChangelogModal from "./ChangelogModal";
@@ -6,6 +8,8 @@ import ChangelogModal from "./ChangelogModal";
 type TabType = "packages" | "organisation";
 
 interface Props {
+  theme: Theme;
+  onThemeChange: (t: Theme) => void;
   filter: FilterType;
   filterFlags: Set<string>;
   filterFlagsMode: "and" | "or";
@@ -44,6 +48,8 @@ const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
 ];
 
 export default function FilterBar({
+  theme,
+  onThemeChange,
   filter,
   filterFlags,
   filterFlagsMode,
@@ -86,7 +92,8 @@ export default function FilterBar({
   return (
     <div className="left-panel">
       <div className="left-panel-header">
-        <img src="/forgely-lockup-horizontal-reversed.svg" alt="Forgely" className="left-panel-logo" />
+        <img src="/forgely-lockup-horizontal.svg" alt="Forgely" className="left-panel-logo logo-light" />
+        <img src="/forgely-lockup-horizontal-reversed.svg" alt="" aria-hidden="true" className="left-panel-logo logo-dark" />
       </div>
 
       <div className="left-panel-tabs">
@@ -190,6 +197,7 @@ export default function FilterBar({
       </div>
 
       <div className="left-panel-bottom">
+        <ThemeToggle theme={theme} onChange={onThemeChange} />
         <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
           v{__APP_VERSION__}
         </button>

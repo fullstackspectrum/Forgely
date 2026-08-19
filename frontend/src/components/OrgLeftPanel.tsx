@@ -60,7 +60,8 @@ export default function OrgLeftPanel({
   return (
     <div className="left-panel org-left-panel">
       <div className="left-panel-header">
-        <img src="/forgely-lockup-horizontal-reversed.svg" alt="Forgely" className="left-panel-logo" />
+        <img src="/forgely-lockup-horizontal.svg" alt="Forgely" className="left-panel-logo logo-light" />
+        <img src="/forgely-lockup-horizontal-reversed.svg" alt="" aria-hidden="true" className="left-panel-logo logo-dark" />
       </div>
 
       <div className="left-panel-tabs">

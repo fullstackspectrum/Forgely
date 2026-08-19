@@ -6,7 +6,7 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
-import { NodeCircleWithRingProgram, NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
+import { NodeCircleWithRingProgram, NodeImageWithRingProgram, nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
 import { hopColor, withAlpha } from "../lib/palette";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
@@ -169,6 +169,8 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
 }
 
 interface Props {
+  /** Resolved theme. Only used to re-read colours; the DOM is themed by CSS. */
+  theme?: "light" | "dark";
   data: GraphResponse;
   selectedNode: string | null;
   hoveredNode: string | null;
@@ -192,6 +194,7 @@ interface Props {
 }
 
 export default function GraphCanvas({
+  theme,
   data,
   selectedNode,
   hoveredNode,
@@ -420,6 +423,19 @@ export default function GraphCanvas({
     sigma.getCamera().animatedReset({ duration: 400 });
   }, [layout, data]);
 
+  /* Re-resolve colours after a theme change.
+     Node colours are graph attributes resolved at build time, and sigma's
+     label settings are resolved at construction — neither follows CSS. The
+     palette cache is cleared by applyTheme before this runs. */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+    recolorGraph(graph);
+    sigma.setSetting("labelColor", { color: token("--t-secondary") });
+    sigma.refresh();
+  }, [theme]);
+
   /* Switch edge style (curved ↔ straight) */
   useEffect(() => {
     const graph = graphRef.current;
@@ -487,12 +503,7 @@ export default function GraphCanvas({
 
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
          hop-distance fills land, only this expression changes. */
-      const fill =
-        node.type === "repo"
-          ? token("--c-bg")
-          : node.type === "dependency"
-            ? token("--fg-blue-200")   /* transitive reads as Mist */
-            : token("--fg-blue-400");  /* Signal blue for packages */
+      const fill = nodeFill(node.type);
 
       const ring = node.type === "package"
         ? severityRing(node.data.max_severity)
