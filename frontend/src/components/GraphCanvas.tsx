@@ -248,9 +248,25 @@ export default function GraphCanvas({
 
   /* Keep the ref in sync and tell sigma to re-render */
   useEffect(() => {
+    /* An edge the user has hidden is not a relationship they are looking at,
+       so it must not keep a node bright either. forEachNeighbor ignores edge
+       kind entirely, which meant every vulnerable package counted as a
+       neighbour of every other through shared-CVE edges — even with those
+       edges hidden. Selecting a vulnerable package therefore dimmed the safe
+       nodes and left every vulnerable one at full strength, with its edges
+       invisible: a highlight with nothing visible to justify it. */
+    const traversable = (attrs: { edgeKind?: string }) => {
+      if (attrs.edgeKind === "shared_cve" && hideSharedCveEdges) return false;
+      if (attrs.edgeKind === "dependency" && hideDependencies) return false;
+      return true;
+    };
+
     const neighbors = new Set<string>();
     if (selectedNode && graphRef.current) {
-      graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
+      graphRef.current.forEachEdge(selectedNode, (_e, attrs, src, tgt) => {
+        if (!traversable(attrs)) return;
+        neighbors.add(src === selectedNode ? tgt : src);
+      });
     }
 
     /* Hop distance from the origin (§2.5). Fill encodes reach; the ring
@@ -280,6 +296,7 @@ export default function GraphCanvas({
                measured on neuro-containers, a vulnerable package gives
                {0:1, 1:39, 2:2, far:161} instead of {0:1, 1:40, 2:162}. */
             if (attrs.edgeKind === "repo_package") return;
+            if (!traversable(attrs)) return;
             const n = src === id ? tgt : src;
             if (hops.has(n)) return;
             hops.set(n, d);
@@ -292,7 +309,10 @@ export default function GraphCanvas({
 
     const hoverNeighbors = new Set<string>();
     if (hoveredNode && graphRef.current) {
-      graphRef.current.forEachNeighbor(hoveredNode, (n) => hoverNeighbors.add(n));
+      graphRef.current.forEachEdge(hoveredNode, (_e, attrs, src, tgt) => {
+        if (!traversable(attrs)) return;
+        hoverNeighbors.add(src === hoveredNode ? tgt : src);
+      });
     }
 
     /* Nodes connected to search results via shared_cve or dependency edges */
@@ -812,6 +832,14 @@ export default function GraphCanvas({
                encoding; opacity doesn't." Painting these the background colour
                erased the hop fill, which is the thing the dimming is meant to
                make legible. */
+            /* Rendered as a plain disc, not the format icon. The image
+               program computes its output alpha as max(texel.a, v_color.a),
+               so an opaque icon pins the node to full opacity and discards
+               any alpha set here — which is why dimming appeared to do
+               nothing while edges faded correctly. Dropping to circleRing
+               takes the node off the textured program so the alpha applies. */
+            res.type = "circleRing";
+            res.image = undefined;
             res.color = withAlpha(res.color as string, 0.25);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
@@ -821,6 +849,8 @@ export default function GraphCanvas({
         } else if (st.hoveredNode) {
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
+            res.type = "circleRing";
+            res.image = undefined;
             res.color = withAlpha(res.color as string, 0.35);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.7);

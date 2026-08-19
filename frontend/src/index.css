@@ -1484,9 +1484,12 @@ body {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  background: rgba(217, 182, 92, 0.15);
-  border: 1px solid rgba(217, 182, 92, 0.40);
-  color: var(--s-medium);
+  /* Neutral, matching the node badge. This was --s-medium: a severity colour
+     on a state that is not a severity, and gold enough to compete with the
+     ember origin for attention (§1, §2.4). */
+  background: rgba(139, 156, 175, 0.15);
+  border: 1px solid rgba(139, 156, 175, 0.40);
+  color: var(--t-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -2470,10 +2473,10 @@ body {
   position: fixed;
   bottom: 14px;
   left: 274px;
-  background: rgba(10, 22, 34, 0.80);
-  border: 1px solid rgba(245, 248, 251, 0.10);
-  border-radius: var(--fg-radius-md);
-  padding: 12px 16px;
+  background: rgba(18, 32, 46, 0.92);
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-lg);
+  padding: 16px;
   z-index: 100;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -5458,55 +5461,14 @@ td, th,
   font-weight: 600;
 }
 
-/* Filter rows */
-.btn.btn-block {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 8px 12px;
-  border: none;
-  border-radius: var(--fg-radius-md);
-  background: none;
-  color: var(--t-secondary);
-  font-family: inherit;
-  font-size: var(--fg-text-sm);
-  font-weight: 400;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--fg-dur-instant) var(--fg-ease);
-}
-
-.btn.btn-block:hover {
-  background: var(--c-surface-raised);
-}
-
-/* The checkbox that replaces the button's border. */
-.btn.btn-block::before {
-  content: "";
-  width: 15px;
-  height: 15px;
-  flex: none;
-  border: 1.5px solid var(--c-border-strong);
-  border-radius: var(--fg-radius-sm);
-  transition: background var(--fg-dur-instant) var(--fg-ease),
-              border-color var(--fg-dur-instant) var(--fg-ease);
-}
-
-.btn.btn-block.btn-active {
-  background: none;
-  color: var(--t-primary);
-}
-
-.btn.btn-block.btn-active::before {
-  background: var(--c-action);
-  border-color: var(--c-action);
-}
-
+/* Sidebar filter rows keep the bordered-button treatment. An earlier pass
+   restyled these as checkbox rows via .btn.btn-block::before — but btn-block
+   is also worn by "Load Graph", "Workspace Overview" and the workspace load
+   button, so every one of those grew a checkbox. */
 .left-panel-btn-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 /* Severity rows show the mark rather than a colour-filled button — the level
