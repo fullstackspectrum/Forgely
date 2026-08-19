@@ -5,8 +5,7 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
-import { NodeImageProgram } from "@sigma/node-image";
-import { NodeCircleWithRingProgram, NodeImageWithRingProgram, nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
+import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
 import { hopColor, withAlpha } from "../lib/palette";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
@@ -18,36 +17,6 @@ import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from 
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import { token } from "../lib/palette";
-
-/** Map Cloudsmith package format → Devicon SVG URL (jsDelivr CDN).
- *  Using .svg URLs so @sigma/node-image detects them as SVGs and
- *  uses the dedicated SVG→bitmap loading path for best rendering. */
-const DI = "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons";
-const FORMAT_ICONS: Record<string, string> = {
-  docker:    `${DI}/docker/docker-original.svg`,
-  npm:       `${DI}/npm/npm-original-wordmark.svg`,
-  python:    `${DI}/python/python-original.svg`,
-  nuget:     `${DI}/nuget/nuget-original.svg`,
-  ruby:      `${DI}/ruby/ruby-original.svg`,
-  go:        `${DI}/go/go-original.svg`,
-  cargo:     `${DI}/rust/rust-line.svg`,
-  helm:      `${DI}/helm/helm-original.svg`,
-  deb:       `${DI}/debian/debian-original.svg`,
-  debian:    `${DI}/debian/debian-original.svg`,
-  rpm:       `${DI}/redhat/redhat-original.svg`,
-  composer:  `${DI}/composer/composer-line.svg`,
-  swift:     `${DI}/swift/swift-original.svg`,
-  dart:      `${DI}/dart/dart-original.svg`,
-  terraform: `${DI}/terraform/terraform-original.svg`,
-  cran:      `${DI}/r/r-original.svg`,
-  conan:     `${DI}/cplusplus/cplusplus-original.svg`,
-  hex:       `${DI}/elixir/elixir-original.svg`,
-  luarocks:  `${DI}/lua/lua-original.svg`,
-};
-
-function getFormatIcon(format: string): string | null {
-  return FORMAT_ICONS[format.toLowerCase()] ?? null;
-}
 
 /**
  * BFS-based hierarchical layout with adaptive spacing.
@@ -493,11 +462,6 @@ export default function GraphCanvas({
             : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
-      /* The repository is the mark's centre cell, drawn rather than imaged:
-         as a bitmap clipped to a disc it was cut off at its own boundary. */
-      const nodeImage: string | null =
-        node.type === "repo" ? null : getFormatIcon(node.data.format);
-
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
          hop-distance fills land, only this expression changes. */
       const fill = nodeFill(node.type);
@@ -521,12 +485,16 @@ export default function GraphCanvas({
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
         is_quarantined: node.data.is_quarantined ?? false,
-        /* Squares from the mark. Dependencies keep the hexagon: they are a
+        /* Squares from the mark. The repository is its centre cell, which is
+           the displaced one — so it carries the tilt permanently rather than
+           only while selected. Dependencies keep the hexagon: they are a
            different kind of thing from a package, and shape is the only
            channel saying so now that fill carries hop distance. */
         ...(node.type === "dependency"
           ? { type: "hexagon" }
-          : { type: "square" }),
+          : node.type === "repo"
+            ? { type: "tilted" }
+            : { type: "square" }),
       });
       nodeData[node.id] = node.data;
     }
@@ -603,8 +571,10 @@ export default function GraphCanvas({
       hideEdgesOnMove: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      defaultNodeType: "circleRing",
-      nodeProgramClasses: { origin: NodeTiltedSquareProgram, square: NodeSquareProgram, circleRing: NodeCircleWithRingProgram, image: NodeImageWithRingProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
+      /* Every node gets an explicit type; this is the fallback if one ever
+         does not, and it should be a square like the rest. */
+      defaultNodeType: "square",
+      nodeProgramClasses: { tilted: NodeTiltedSquareProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
@@ -830,7 +800,7 @@ export default function GraphCanvas({
                repository — the mark's centre cell — and §1 allows exactly one
                of it on screen, so the selected package stays blue and is
                distinguished by being displaced, enlarged and labelled. */
-            res.type = "origin";
+            res.type = "tilted";
             res.size = 22;
             res.forceLabel = true;
             res.highlighted = true;
@@ -838,20 +808,21 @@ export default function GraphCanvas({
           } else if (st.neighbors.has(node)) {
             /* Direct neighbours stay visible, just slightly behind selected */
             res.zIndex = 5;
+          } else if (attrs.nodeType === "repo") {
+            /* The repository anchors the graph — everything is arranged around
+               it. Fading it to a ghost removes the centre of the picture, so it
+               keeps its ember and its tilt and simply sits behind. */
+            res.zIndex = 0;
           } else {
             /* Dimmed, not recoloured. §6: "non-path nodes drop to 25% opacity
                rather than changing colour. Colour changes break the distance
-               encoding; opacity doesn't." Painting these the background colour
-               erased the hop fill, which is the thing the dimming is meant to
-               make legible. */
-            /* Rendered as a plain disc, not the format icon. The image
-               program computes its output alpha as max(texel.a, v_color.a),
-               so an opaque icon pins the node to full opacity and discards
-               any alpha set here — which is why dimming appeared to do
-               nothing while edges faded correctly. Dropping to circleRing
-               takes the node off the textured program so the alpha applies. */
-            res.type = "circleRing";
-            res.image = undefined;
+               encoding; opacity doesn't."
+
+               This used to force the node onto a circle program: the image
+               program computes its output alpha as max(texel.a, v_color.a), so
+               an opaque format icon pinned it to full opacity and the dimming
+               did nothing. Nodes are drawn squares now, which honour alpha, so
+               the shape survives. */
             res.color = withAlpha(res.color as string, 0.25);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
@@ -861,8 +832,6 @@ export default function GraphCanvas({
         } else if (st.hoveredNode) {
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.type = "circleRing";
-            res.image = undefined;
             res.color = withAlpha(res.color as string, 0.35);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
