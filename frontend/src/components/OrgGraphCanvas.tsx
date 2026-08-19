@@ -267,7 +267,7 @@ export default function OrgGraphCanvas({
           };
           if (isOrg) {
             nodeAttrs.type = "image";
-            nodeAttrs.image = "/forgely-icon.png";
+            nodeAttrs.image = "/forgely-icon.svg";
           } else if (node.type === "repo") {
             nodeAttrs.type = "square";
           } else if (node.type === "upstream") {

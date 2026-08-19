@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Forgely">
+  <title>Forgely</title>
+  <rect width="512" height="512" rx="114" fill="#378ADD"/>
+  <g transform="translate(102 102) scale(3.02)"><rect x="2" y="2" width="26" height="26" rx="6" fill="#FFFFFF" opacity="0.45"/><rect x="74" y="2" width="26" height="26" rx="6" fill="#FFFFFF" opacity="0.45"/><rect x="2" y="74" width="26" height="26" rx="6" fill="#FFFFFF" opacity="0.45"/><rect x="74" y="74" width="26" height="26" rx="6" fill="#FFFFFF" opacity="0.45"/><rect x="38" y="0" width="26" height="26" rx="6" fill="#FFFFFF"/><rect x="0" y="38" width="26" height="26" rx="6" fill="#FFFFFF"/><rect x="76" y="38" width="26" height="26" rx="6" fill="#FFFFFF"/><rect x="38" y="76" width="26" height="26" rx="6" fill="#FFFFFF"/><rect x="36.5" y="36.5" width="29" height="29" rx="7" fill="#EF9F27" transform="rotate(12 51 51)"/></g>
+</svg>

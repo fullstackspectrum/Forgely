@@ -460,6 +460,13 @@ body {
 
 .left-panel-logo {
   width: 80%;
+  /* README: the horizontal lockup has a 140px minimum width, and one grid cell
+     (25% of the mark) of clear space on all sides. The width above is a
+     percentage, so without this floor a narrower panel would silently take the
+     lockup under its legible size. */
+  min-width: 140px;
+  max-width: 100%;
+  margin: 8px auto;
   height: auto;
   object-fit: contain;
   align-self: center;
@@ -2560,20 +2567,9 @@ body {
   background: var(--bg-primary);
 }
 
-.loading-logo-pulse {
-  animation: logoPulse 2s ease-in-out infinite;
-}
-
-.loading-logo-img {
-  width: 72px;
-  height: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 0 20px rgba(55, 138, 221, 0.4));
-}
-
-@keyframes logoPulse {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.08); opacity: 1; }
+.loading-loader {
+  width: 96px;
+  height: 96px;
 }
 
 .loading-stages {

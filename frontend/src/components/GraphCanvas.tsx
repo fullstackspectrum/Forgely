@@ -419,7 +419,7 @@ export default function GraphCanvas({
       /* Resolve icon for this node */
       let nodeImage: string | null = null;
       if (node.type === "repo") {
-        nodeImage = "/forgely-icon.png";
+        nodeImage = "/forgely-icon.svg";
       } else {
         nodeImage = getFormatIcon(node.data.format);
       }
