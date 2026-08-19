@@ -263,7 +263,7 @@ export default function SidePanel({
               type="button"
               className="attack-graph-btn"
               onClick={onOpenAttackGraph}
-              title="View Attack Path"
+              title="View attack path"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3"/>
@@ -272,7 +272,7 @@ export default function SidePanel({
                 <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
               </svg>
-              <span>Attack Path</span>
+              <span>Attack path</span>
             </button>
           )}
           {(canGenerateReport || cloudsmithUrl) && (
@@ -334,7 +334,7 @@ export default function SidePanel({
         <MetaRow label="License" value={d.license} />
         <MetaRow label="Size" value={sizeStr} />
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
-        <MetaRow label="Scan Status" value={d.scan_status} />
+        <MetaRow label="Scan status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
       </div>
       </div>
@@ -716,7 +716,7 @@ function DependencyDetail({
 
       <div className="panel-details">
         <div className="panel-section">
-          <h3 className="section-title">Linked Packages</h3>
+          <h3 className="section-title">Linked packages</h3>
           <input
             className="dep-panel-search"
             type="search"
@@ -937,7 +937,7 @@ function RepoDetail({
         </div>
         <div className="repo-card">
           <span className="repo-card-value">{stats.totalVulns}</span>
-          <span className="repo-card-label">Total Findings</span>
+          <span className="repo-card-label">Total findings</span>
         </div>
       </div>
       </div>
@@ -946,7 +946,7 @@ function RepoDetail({
 
       {/* Format breakdown */}
       <div className="panel-section">
-        <h3 className="section-title">Package Formats</h3>
+        <h3 className="section-title">Package formats</h3>
         <div className="repo-format-grid">
           {stats.formats.map(([fmt, count]) => {
             const icon = getFormatIcon(fmt);
@@ -987,7 +987,7 @@ function RepoDetail({
       {/* Severity breakdown */}
       {(["Critical", "High", "Medium", "Low"] as const).some((s) => stats.sevCounts[s] > 0) && (
         <div className="panel-section">
-          <h3 className="section-title">Severity Breakdown</h3>
+          <h3 className="section-title">Severity breakdown</h3>
           <div className="repo-sev-bars">
             {(["Critical", "High", "Medium", "Low"] as const)
               .filter((s) => stats.sevCounts[s] > 0)
@@ -1023,7 +1023,7 @@ function RepoDetail({
       {/* Most vulnerable packages */}
       {stats.topVuln.length > 0 && (
         <div className="panel-section">
-          <h3 className="section-title">Most Vulnerable</h3>
+          <h3 className="section-title">Most vulnerable</h3>
           <div className="repo-top-vuln">
             {stats.topVuln.map((p) => {
               const s = p.data.max_severity || "None";
