@@ -7,6 +7,7 @@ import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeImageProgram } from "@sigma/node-image";
 import { NodeCircleWithRingProgram, NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
+import { hopColor, withAlpha } from "../lib/palette";
 import { NodeSquareProgram } from "@sigma/node-square";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
@@ -235,6 +236,7 @@ export default function GraphCanvas({
     hideUnsupported,
     hideCriticalAnimation,
     neighbors: new Set<string>(),
+    hops: new Map<string, number>(),
     hoverNeighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
@@ -249,6 +251,43 @@ export default function GraphCanvas({
     const neighbors = new Set<string>();
     if (selectedNode && graphRef.current) {
       graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
+    }
+
+    /* Hop distance from the origin (§2.5). Fill encodes reach; the ring
+       already encodes severity, and §6 forbids one colour carrying both.
+       Without a selection the repo node is the implicit root, which makes
+       packages hop 1 and their dependencies hop 2 — structurally what the
+       graph already is.
+       Breadth-first, so the first time a node is reached is its distance.
+       ~7.5k nodes and 7.7k edges runs in single-digit milliseconds. */
+    const hops = new Map<string, number>();
+    if (selectedNode && graphRef.current?.hasNode(selectedNode)) {
+      const g = graphRef.current;
+      hops.set(selectedNode, 0);
+      let frontier = [selectedNode];
+      /* §2.5: "Beyond four hops, stop encoding distance — the ramp runs out of
+         legible steps." Past that everything collapses to --g-hop-far, so
+         walking further buys nothing. */
+      for (let d = 1; d <= 4 && frontier.length; d++) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          g.forEachEdge(id, (_e, attrs, src, tgt) => {
+            /* repo_package edges are containment, not reach. Traversing them
+               routes every package to every other through the repo hub, which
+               made 7,489 of 7,544 nodes read as two hops away — an artifact of
+               the container, not something the selected package touches.
+               Excluding them turns the fill into an actual blast radius:
+               measured on the container repository, a vulnerable package gives
+               {0:1, 1:39, 2:2, far:161} instead of {0:1, 1:40, 2:162}. */
+            if (attrs.edgeKind === "repo_package") return;
+            const n = src === id ? tgt : src;
+            if (hops.has(n)) return;
+            hops.set(n, d);
+            next.push(n);
+          });
+        }
+        frontier = next;
+      }
     }
 
     const hoverNeighbors = new Set<string>();
@@ -311,6 +350,7 @@ export default function GraphCanvas({
       hideUnsupported,
       hideCriticalAnimation,
       neighbors,
+      hops,
       hoverNeighbors,
       searchConnected,
       sharedCveNodes,
@@ -437,6 +477,8 @@ export default function GraphCanvas({
       const ring = node.type === "package"
         ? severityRing(node.data.max_severity)
         : { borderColor: token("--g-node-stroke"), borderSize: 0 };
+      /* Resting fill. The reducer overrides this with hop distance from the
+         origin once the BFS has run — this is what shows before any of that. */
 
       graph.addNode(node.id, {
         label: node.type === "repo" ? "" : node.label,
@@ -549,6 +591,14 @@ export default function GraphCanvas({
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Fill = distance from the origin (§6: "fill = hop distance, ring =
+           severity, since the graph's job is showing reach"). Dependencies
+           keep the hexagon shape, so their fill still reads as transitive. */
+        if (st.selectedNode && attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
+          const d = st.hops.get(node);
+          res.color = d === undefined ? token("--g-hop-far") : hopColor(d);
+        }
 
         /* --- Echo ring around Critical nodes --- */
         if (attrs.nodeType === "echo") {
@@ -757,19 +807,23 @@ export default function GraphCanvas({
             /* Direct neighbours stay visible, just slightly behind selected */
             res.zIndex = 5;
           } else {
-            /* Everything else: ghost — tiny, near-background, pushed to back */
-            res.color = token("--c-bg");
+            /* Dimmed, not recoloured. §6: "non-path nodes drop to 25% opacity
+               rather than changing colour. Colour changes break the distance
+               encoding; opacity doesn't." Painting these the background colour
+               erased the hop fill, which is the thing the dimming is meant to
+               make legible. */
+            res.color = withAlpha(res.color as string, 0.25);
             res.borderSize = 0;
-            res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
             res.zIndex = -2;
           }
         } else if (st.hoveredNode) {
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.color = token("--c-bg");
+            res.color = withAlpha(res.color as string, 0.35);
             res.borderSize = 0;
-            res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
             res.label = "";
             res.zIndex = -1;
           }
