@@ -197,6 +197,36 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
         </div>
       </div>
 
+      {/* Primary actions sit above the findings, not below them. Paginated or
+          not, a list of hundreds of CVEs pushed these off the bottom of the
+          panel — §8: lead with what the user can act on. */}
+      <div className="wo-actions">
+      {/* Vulnly repo summary */}
+      <button
+        className={`vulnly-report-btn wo-vulnly-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
+        onClick={handleRepoReport}
+        disabled={reportLoading || reportDone}
+        title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
+      >
+        {reportLoading ? (
+          <span className="vulnly-spinner" aria-hidden="true" />
+        ) : reportDone ? (
+          <span aria-hidden="true">✓</span>
+        ) : (
+          <span aria-hidden="true">⬇</span>
+        )}
+        <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Repo Report"}</span>
+      </button>
+      {reportError && (
+        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
+      )}
+
+      {/* Load full graph */}
+      <button className="btn btn-accent btn-block wo-load-btn" onClick={onLoadFullGraph}>
+        Load Full Graph
+      </button>
+      </div>
+
       {/* Severity bar */}
       <SevBar repo={data} />
       <SevStats repo={data} />
@@ -263,30 +293,6 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
         </div>
       )}
 
-      {/* Vulnly repo summary */}
-      <button
-        className={`vulnly-report-btn wo-vulnly-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
-        onClick={handleRepoReport}
-        disabled={reportLoading || reportDone}
-        title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
-      >
-        {reportLoading ? (
-          <span className="vulnly-spinner" aria-hidden="true" />
-        ) : reportDone ? (
-          <span aria-hidden="true">✓</span>
-        ) : (
-          <span aria-hidden="true">⬇</span>
-        )}
-        <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Repo Report"}</span>
-      </button>
-      {reportError && (
-        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
-      )}
-
-      {/* Load full graph */}
-      <button className="btn btn-accent btn-block wo-load-btn" onClick={onLoadFullGraph}>
-        Load Full Graph
-      </button>
     </div>
   );
 }
