@@ -5500,7 +5500,7 @@ td, th,
    below carry their own inset. */
 .panel-header {
   display: block;
-  margin: 0 0 16px;
+  margin: 0 -20px 16px;
   padding: 18px 20px 16px;
   border-bottom: 1px solid var(--c-border);
 }
@@ -5530,13 +5530,8 @@ td, th,
   transform: rotate(12deg);
 }
 
-.panel-status-row,
-.panel-stats,
-.panel-meta,
-.panel-section,
-.panel-actions {
-  padding-left: 20px;
-  padding-right: 20px;
+.side-panel {
+  padding: 0 20px 20px;
 }
 
 /* Stat grid: two columns of large display numerals, replacing the dense
@@ -5631,4 +5626,126 @@ td, th,
 .btn.btn-accent:hover {
   background: var(--c-action-hover);
   border-color: var(--c-action-hover);
+}
+
+/* ============================================================
+   Floating panel — fit, density and small screens
+   ============================================================ */
+
+/* Header stays put while the body scrolls, so the thing being described is
+   always on screen. The panel used to scroll as one column, which meant the
+   package name left the viewport as soon as you read past the summary. */
+.panel-overlay {
+  display: flex;
+  flex-direction: column;
+  /* Clipped so the rounded corners hold; the body below does the scrolling.
+     Without moving the scroll onto .side-panel this hides everything past the
+     fold, because overflow: hidden overrides the overflow-y: auto declared
+     earlier on this same selector. */
+  overflow: hidden;
+}
+
+.panel-overlay > .side-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.panel-overlay .panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--c-surface);
+  flex: none;
+}
+
+.panel-overlay .panel-summary,
+.panel-overlay .panel-details {
+  min-height: 0;
+}
+
+/* Primary actions, pinned under the header. */
+/* Actions sit on a row and are sized to their labels. Stretching a button to
+   the full panel width makes a 376px target for a two-word action and gives no
+   sense of which is primary. */
+.wo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 -20px 16px;
+  padding: 0 20px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.wo-actions .wo-load-btn,
+.wo-actions .wo-vulnly-btn {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* Stats: two columns rather than four across a 376px panel, where 43,424 had
+   about 60px to render in. */
+.wo-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+  justify-content: initial;
+}
+
+.wo-stat-item {
+  align-items: flex-start;
+  padding: 12px 14px;
+}
+
+/* The findings list gets its own scroll and a bounded height, so the panel
+   stops growing without limit and everything below it stays reachable. */
+.wo-cve-list,
+.cve-list {
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ---- narrower viewports ----------------------------------------------
+   The panel is positioned with inline styles from App, so these overrides
+   need !important to win. Below 1200px it gives back width to the canvas;
+   below 900px it spans the area beside the sidebar instead of floating. */
+@media (max-width: 1200px) {
+  .panel-overlay {
+    width: min(376px, calc(100vw - 300px)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .panel-overlay {
+    left: 268px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: calc(100vh - 96px) !important;
+  }
+
+  .wo-stats-row {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
+@media (max-height: 760px) {
+  .wo-cve-list,
+  .cve-list {
+    max-height: 32vh;
+  }
+}
+
+
+/* Package formats are reference data — fourteen of them filled more of the
+   panel than the findings did. Bounded and scrollable, like the CVE list. */
+.repo-format-grid {
+  max-height: min(30vh, 260px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.repo-format-card {
+  padding: 6px 10px;
 }
