@@ -1,3 +1,5 @@
+import { token } from "../lib/palette";
+
 export interface CVERecord {
   id: string;
   severity: string;
@@ -75,13 +77,20 @@ export type LayoutType = "force" | "circular" | "radial" | "tree" | "horizontal"
 
 export type EdgeStyle = "curved" | "straight";
 
+/* Resolved from the stylesheet rather than duplicated, so there is one
+   definition of severity colour. Getters rather than plain values because this
+   module is evaluated during import, which can precede the stylesheet being
+   applied — reading on first access defers that to render time.
+
+   Consumers that render to the DOM should prefer `var(--s-critical)` directly;
+   these exist for Sigma and canvas, which need a resolved string. */
 export const SEVERITY_COLORS: Record<string, string> = {
-  Critical: "#ff4d4d",
-  High: "#ff8c1a",
-  Medium: "#ffd11a",
-  Low: "#79b8ff",
-  None: "#28a745",
-  Unknown: "#ffffff",
+  get Critical() { return token("--s-critical"); },
+  get High() { return token("--s-high"); },
+  get Medium() { return token("--s-medium"); },
+  get Low() { return token("--s-low"); },
+  get None() { return token("--s-none"); },
+  get Unknown() { return token("--t-muted"); },
 };
 
 export const SEVERITY_RANK: Record<string, number> = {
@@ -156,12 +165,16 @@ export interface WorkspaceOverviewResponse {
   repos: WorkspaceRepoSummary[];
 }
 
+/* Node kinds in the org graph. These are categories, not severities, so they
+   take the blue ramp plus one amber — the palette has no green, purple, pink
+   or cyan, and inventing them would put six competing hues on a canvas whose
+   whole job is encoding distance in blue. */
 export const ORG_NODE_COLORS: Record<string, string> = {
-  org: "#4a90d9",
-  repo: "#28a745",
-  user: "#ff8c1a",
-  service: "#a76dff",
-  team: "#ff4d87",
-  entitlement: "#ffd11a",
-  upstream: "#00bcd4",
+  get org() { return token("--c-action"); },
+  get repo() { return token("--fg-blue-300"); },
+  get user() { return token("--fg-blue-200"); },
+  get service() { return token("--fg-blue-100"); },
+  get team() { return token("--fg-n-400"); },
+  get entitlement() { return token("--c-origin"); },
+  get upstream() { return token("--fg-n-300"); },
 };

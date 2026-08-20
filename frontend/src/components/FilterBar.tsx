@@ -1,10 +1,15 @@
 import React, { useState } from "react";
+import type { Theme } from "../lib/theme";
+import ThemeToggle from "./ThemeToggle";
+import SeverityMark from "./SeverityMark";
 import type { FilterType } from "../types";
 import ChangelogModal from "./ChangelogModal";
 
 type TabType = "packages" | "organisation";
 
 interface Props {
+  theme: Theme;
+  onThemeChange: (t: Theme) => void;
   filter: FilterType;
   filterFlags: Set<string>;
   filterFlagsMode: "and" | "or";
@@ -27,22 +32,24 @@ interface Props {
   onDisconnect: () => void;
 }
 
-const STATUS_FILTERS: { key: string; label: string; icon?: React.ReactNode }[] = [
-  { key: "vulnerable", label: "Vulnerable", icon: "⚠" },
-  { key: "safe",       label: "Safe",       icon: "✔" },
-  { key: "quarantined",label: "Quarantined",icon: "🔒" },
-  { key: "shared_cve", label: "Shared CVEs",icon: "🔗" },
-  { key: "has_deps",   label: "Has Dependencies", icon: "🔀" },
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "vulnerable",  label: "Vulnerable" },
+  { key: "safe",        label: "Safe" },
+  { key: "quarantined", label: "Quarantined" },
+  { key: "shared_cve",  label: "Shared CVEs" },
+  { key: "has_deps",    label: "Has dependencies" },
 ];
 
 const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
-  { key: "Critical", label: "Critical", color: "#ff4d4d" },
-  { key: "High",     label: "High",     color: "#ff8c1a" },
-  { key: "Medium",   label: "Medium",   color: "#ffd11a" },
-  { key: "Low",      label: "Low",      color: "#79b8ff" },
+  { key: "Critical", label: "Critical", color: "var(--s-critical)" },
+  { key: "High",     label: "High",     color: "var(--s-high)" },
+  { key: "Medium",   label: "Medium",   color: "var(--s-medium)" },
+  { key: "Low",      label: "Low",      color: "var(--s-low)" },
 ];
 
 export default function FilterBar({
+  theme,
+  onThemeChange,
   filter,
   filterFlags,
   filterFlagsMode,
@@ -85,7 +92,8 @@ export default function FilterBar({
   return (
     <div className="left-panel">
       <div className="left-panel-header">
-        <img src="/forgely-logo.png" alt="Forgely" className="left-panel-logo" />
+        <img src="/forgely-lockup-horizontal.svg" alt="Forgely" className="left-panel-logo logo-light" />
+        <img src="/forgely-lockup-horizontal-reversed.svg" alt="" aria-hidden="true" className="left-panel-logo logo-dark" />
       </div>
 
       <div className="left-panel-tabs">
@@ -129,27 +137,24 @@ export default function FilterBar({
                   className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
                   onClick={() => toggleFlag(f.key)}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                    {f.icon && <span aria-hidden="true">{f.icon}</span>}
-                    {f.label}
-                  </span>
+                  {f.label}
                 </button>
               );
             })}
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Max Severity" defaultOpen={true}>
+        <CollapsibleSection title="Max severity" defaultOpen={true}>
           <div className="left-panel-btn-group">
             {SEVERITY_FILTERS.map((f) => {
               const active = filter === f.key;
               return (
                 <button
                   key={f.key}
-                  className={`btn btn-block ${active ? "btn-active" : "btn-muted"}`}
-                  style={!active ? { color: f.color } : { background: f.color, borderColor: f.color, color: "#fff" }}
+                  className={`btn btn-block btn-sev ${active ? "btn-active" : "btn-muted"}`}
                   onClick={() => toggleSeverity(f.key)}
                 >
+                  <SeverityMark severity={f.key} />
                   {f.label}
                 </button>
               );
@@ -192,6 +197,7 @@ export default function FilterBar({
       </div>
 
       <div className="left-panel-bottom">
+        <ThemeToggle theme={theme} onChange={onThemeChange} />
         <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
           v{__APP_VERSION__}
         </button>

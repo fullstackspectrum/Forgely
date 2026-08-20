@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { currentTheme } from "../lib/theme";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceRepoSummary, WorkspaceCveSummary } from "../types";
 import { apiFetch } from "../lib/auth";
@@ -15,7 +16,7 @@ interface Props {
 const SEV_ORDER = ["Critical", "High", "Medium", "Low"];
 
 function SevBadge({ severity }: { severity: string }) {
-  const color = SEVERITY_COLORS[severity] ?? "#888";
+  const color = SEVERITY_COLORS[severity] ?? "var(--t-muted)";
   return (
     <span className="cve-severity-badge" style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}>
       {severity}
@@ -116,7 +117,7 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(data.slug)}`,
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(data.slug)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -186,7 +187,7 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
           <span className="wo-stat-label">Packages</span>
         </div>
         <div className="wo-stat-item">
-          <span className="wo-stat-value" style={{ color: data.vuln_count > 0 ? SEVERITY_COLORS[data.max_severity ?? ""] ?? "#ff4d4d" : "#28a745" }}>
+          <span className="wo-stat-value" style={{ color: data.vuln_count > 0 ? SEVERITY_COLORS[data.max_severity ?? ""] ?? "var(--s-critical)" : "var(--s-none)" }}>
             {data.vuln_count}
           </span>
           <span className="wo-stat-label">Vulnerabilities</span>
@@ -195,6 +196,36 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
           <span className="wo-stat-value">{data.cves.length}</span>
           <span className="wo-stat-label">Unique CVEs</span>
         </div>
+      </div>
+
+      {/* Primary actions sit above the findings, not below them. Paginated or
+          not, a list of hundreds of CVEs pushed these off the bottom of the
+          panel — §8: lead with what the user can act on. */}
+      <div className="wo-actions">
+      {/* Vulnly repo summary */}
+      <button
+        className={`vulnly-report-btn wo-vulnly-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
+        onClick={handleRepoReport}
+        disabled={reportLoading || reportDone}
+        title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
+      >
+        {reportLoading ? (
+          <span className="vulnly-spinner" aria-hidden="true" />
+        ) : reportDone ? (
+          <span aria-hidden="true">✓</span>
+        ) : (
+          <span aria-hidden="true">⬇</span>
+        )}
+        <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Repo Report"}</span>
+      </button>
+      {reportError && (
+        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
+      )}
+
+      {/* Load full graph */}
+      <button className="btn btn-accent btn-block wo-load-btn" onClick={onLoadFullGraph}>
+        Load Full Graph
+      </button>
       </div>
 
       {/* Severity bar */}
@@ -263,30 +294,6 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
         </div>
       )}
 
-      {/* Vulnly repo summary */}
-      <button
-        className={`vulnly-report-btn wo-vulnly-btn${reportDone ? " vulnly-report-btn-done" : ""}`}
-        onClick={handleRepoReport}
-        disabled={reportLoading || reportDone}
-        title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly repo summary report"}
-      >
-        {reportLoading ? (
-          <span className="vulnly-spinner" aria-hidden="true" />
-        ) : reportDone ? (
-          <span aria-hidden="true">✓</span>
-        ) : (
-          <span aria-hidden="true">⬇</span>
-        )}
-        <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Repo Report"}</span>
-      </button>
-      {reportError && (
-        <div className="vulnly-report-error" role="alert">⚠ {reportError}</div>
-      )}
-
-      {/* Load full graph */}
-      <button className="btn btn-accent btn-block wo-load-btn" onClick={onLoadFullGraph}>
-        Load Full Graph
-      </button>
     </div>
   );
 }

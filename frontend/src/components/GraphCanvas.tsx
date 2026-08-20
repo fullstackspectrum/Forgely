@@ -5,8 +5,9 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
-import { NodeImageProgram } from "@sigma/node-image";
-import { NodeSquareProgram } from "@sigma/node-square";
+import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
+import { hopColor, withAlpha } from "../lib/palette";
+import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
@@ -15,36 +16,7 @@ import { placeRadially, refineForceLayout } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
-
-/** Map Cloudsmith package format → Devicon SVG URL (jsDelivr CDN).
- *  Using .svg URLs so @sigma/node-image detects them as SVGs and
- *  uses the dedicated SVG→bitmap loading path for best rendering. */
-const DI = "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons";
-const FORMAT_ICONS: Record<string, string> = {
-  docker:    `${DI}/docker/docker-original.svg`,
-  npm:       `${DI}/npm/npm-original-wordmark.svg`,
-  python:    `${DI}/python/python-original.svg`,
-  nuget:     `${DI}/nuget/nuget-original.svg`,
-  ruby:      `${DI}/ruby/ruby-original.svg`,
-  go:        `${DI}/go/go-original.svg`,
-  cargo:     `${DI}/rust/rust-line.svg`,
-  helm:      `${DI}/helm/helm-original.svg`,
-  deb:       `${DI}/debian/debian-original.svg`,
-  debian:    `${DI}/debian/debian-original.svg`,
-  rpm:       `${DI}/redhat/redhat-original.svg`,
-  composer:  `${DI}/composer/composer-line.svg`,
-  swift:     `${DI}/swift/swift-original.svg`,
-  dart:      `${DI}/dart/dart-original.svg`,
-  terraform: `${DI}/terraform/terraform-original.svg`,
-  cran:      `${DI}/r/r-original.svg`,
-  conan:     `${DI}/cplusplus/cplusplus-original.svg`,
-  hex:       `${DI}/elixir/elixir-original.svg`,
-  luarocks:  `${DI}/lua/lua-original.svg`,
-};
-
-function getFormatIcon(format: string): string | null {
-  return FORMAT_ICONS[format.toLowerCase()] ?? null;
-}
+import { token } from "../lib/palette";
 
 /**
  * BFS-based hierarchical layout with adaptive spacing.
@@ -165,6 +137,8 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
 }
 
 interface Props {
+  /** Resolved theme. Only used to re-read colours; the DOM is themed by CSS. */
+  theme?: "light" | "dark";
   data: GraphResponse;
   selectedNode: string | null;
   hoveredNode: string | null;
@@ -188,6 +162,7 @@ interface Props {
 }
 
 export default function GraphCanvas({
+  theme,
   data,
   selectedNode,
   hoveredNode,
@@ -232,6 +207,7 @@ export default function GraphCanvas({
     hideUnsupported,
     hideCriticalAnimation,
     neighbors: new Set<string>(),
+    hops: new Map<string, number>(),
     hoverNeighbors: new Set<string>(),
     searchConnected: new Set<string>(),
     sharedCveNodes: new Set<string>(),
@@ -243,14 +219,71 @@ export default function GraphCanvas({
 
   /* Keep the ref in sync and tell sigma to re-render */
   useEffect(() => {
+    /* An edge the user has hidden is not a relationship they are looking at,
+       so it must not keep a node bright either. forEachNeighbor ignores edge
+       kind entirely, which meant every vulnerable package counted as a
+       neighbour of every other through shared-CVE edges — even with those
+       edges hidden. Selecting a vulnerable package therefore dimmed the safe
+       nodes and left every vulnerable one at full strength, with its edges
+       invisible: a highlight with nothing visible to justify it. */
+    const traversable = (attrs: { edgeKind?: string }) => {
+      if (attrs.edgeKind === "shared_cve" && hideSharedCveEdges) return false;
+      if (attrs.edgeKind === "dependency" && hideDependencies) return false;
+      return true;
+    };
+
     const neighbors = new Set<string>();
     if (selectedNode && graphRef.current) {
-      graphRef.current.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
+      graphRef.current.forEachEdge(selectedNode, (_e, attrs, src, tgt) => {
+        if (!traversable(attrs)) return;
+        neighbors.add(src === selectedNode ? tgt : src);
+      });
+    }
+
+    /* Hop distance from the origin (§2.5). Fill encodes reach; the ring
+       already encodes severity, and §6 forbids one colour carrying both.
+       Without a selection the repo node is the implicit root, which makes
+       packages hop 1 and their dependencies hop 2 — structurally what the
+       graph already is.
+       Breadth-first, so the first time a node is reached is its distance.
+       ~7.5k nodes and 7.7k edges runs in single-digit milliseconds. */
+    const hops = new Map<string, number>();
+    if (selectedNode && graphRef.current?.hasNode(selectedNode)) {
+      const g = graphRef.current;
+      hops.set(selectedNode, 0);
+      let frontier = [selectedNode];
+      /* §2.5: "Beyond four hops, stop encoding distance — the ramp runs out of
+         legible steps." Past that everything collapses to --g-hop-far, so
+         walking further buys nothing. */
+      for (let d = 1; d <= 4 && frontier.length; d++) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          g.forEachEdge(id, (_e, attrs, src, tgt) => {
+            /* repo_package edges are containment, not reach. Traversing them
+               routes every package to every other through the repo hub, which
+               made 7,489 of 7,544 nodes read as two hops away — an artifact of
+               the container, not something the selected package touches.
+               Excluding them turns the fill into an actual blast radius:
+               measured on the container repository, a vulnerable package gives
+               {0:1, 1:39, 2:2, far:161} instead of {0:1, 1:40, 2:162}. */
+            if (attrs.edgeKind === "repo_package") return;
+            if (!traversable(attrs)) return;
+            const n = src === id ? tgt : src;
+            if (hops.has(n)) return;
+            hops.set(n, d);
+            next.push(n);
+          });
+        }
+        frontier = next;
+      }
     }
 
     const hoverNeighbors = new Set<string>();
     if (hoveredNode && graphRef.current) {
-      graphRef.current.forEachNeighbor(hoveredNode, (n) => hoverNeighbors.add(n));
+      graphRef.current.forEachEdge(hoveredNode, (_e, attrs, src, tgt) => {
+        if (!traversable(attrs)) return;
+        hoverNeighbors.add(src === hoveredNode ? tgt : src);
+      });
     }
 
     /* Nodes connected to search results via shared_cve or dependency edges */
@@ -308,6 +341,7 @@ export default function GraphCanvas({
       hideUnsupported,
       hideCriticalAnimation,
       neighbors,
+      hops,
       hoverNeighbors,
       searchConnected,
       sharedCveNodes,
@@ -356,6 +390,19 @@ export default function GraphCanvas({
     sigma.refresh();
     sigma.getCamera().animatedReset({ duration: 400 });
   }, [layout, data]);
+
+  /* Re-resolve colours after a theme change.
+     Node colours are graph attributes resolved at build time, and sigma's
+     label settings are resolved at construction — neither follows CSS. The
+     palette cache is cleared by applyTheme before this runs. */
+  useEffect(() => {
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+    recolorGraph(graph);
+    sigma.setSetting("labelColor", { color: token("--t-secondary") });
+    sigma.refresh();
+  }, [theme]);
 
   /* Switch edge style (curved ↔ straight) */
   useEffect(() => {
@@ -406,8 +453,6 @@ export default function GraphCanvas({
     for (const node of data.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
-      const sevColor =
-        SEVERITY_COLORS[sev] || (node.data.vuln_count === 0 && node.type === "package" ? "#28a745" : "#ffffff");
 
       const size =
         node.type === "repo"
@@ -417,22 +462,22 @@ export default function GraphCanvas({
             : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
-      let nodeImage: string | null = null;
-      if (node.type === "repo") {
-        nodeImage = "/forgely-icon.png";
-      } else {
-        nodeImage = getFormatIcon(node.data.format);
-      }
+      /* Fill encodes what the node *is*; the ring encodes severity (§6). When
+         hop-distance fills land, only this expression changes. */
+      const fill = nodeFill(node.type);
+
+      const ring = node.type === "package"
+        ? severityRing(node.data.max_severity)
+        : { borderColor: token("--g-node-stroke"), borderSize: 0 };
+      /* Resting fill. The reducer overrides this with hop distance from the
+         origin once the BFS has run — this is what shows before any of that. */
 
       graph.addNode(node.id, {
         label: node.type === "repo" ? "" : node.label,
         size,
-        color:
-          node.type === "repo"
-            ? "#0f0f1a"
-            : node.type === "dependency"
-              ? "#9b59b6"
-              : sevColor,
+        color: fill,
+        borderColor: ring.borderColor,
+        borderSize: ring.borderSize,
         x: 0,
         y: 0,
         nodeType: node.type,
@@ -440,11 +485,16 @@ export default function GraphCanvas({
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
         is_quarantined: node.data.is_quarantined ?? false,
+        /* Squares from the mark. The repository is its centre cell, which is
+           the displaced one — so it carries the tilt permanently rather than
+           only while selected. Dependencies keep the hexagon: they are a
+           different kind of thing from a package, and shape is the only
+           channel saying so now that fill carries hop distance. */
         ...(node.type === "dependency"
           ? { type: "hexagon" }
-          : nodeImage
-            ? { type: "image", image: nodeImage }
-            : {}),
+          : node.type === "repo"
+            ? { type: "tilted" }
+            : { type: "square" }),
       });
       nodeData[node.id] = node.data;
     }
@@ -458,7 +508,7 @@ export default function GraphCanvas({
       const isDep = edge.type === "dependency";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
         size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(255,77,77,0.6)" : isDep ? "rgba(120,70,160,0.6)" : "rgba(70,130,210,0.6)",
+        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
         type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
@@ -490,7 +540,7 @@ export default function GraphCanvas({
           size: cn.size,
           baseSize: cn.size,
           phaseOffset: i / RING_COUNT,
-          color: "rgba(255,77,77,0)",
+          color: "rgba(232, 117, 107,0)",
           nodeType: "echo",
           type: "ring",
           parentId: cn.id,
@@ -521,12 +571,16 @@ export default function GraphCanvas({
       hideEdgesOnMove: true,
       defaultEdgeType: useCurved ? "curvedArrow" : "arrow",
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram },
-      nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
+      /* Every node gets an explicit type; this is the fallback if one ever
+         does not, and it should be a square like the rest. */
+      defaultNodeType: "square",
+      nodeProgramClasses: { tilted: NodeTiltedSquareProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
       labelRenderedSizeThreshold: 5,
-      labelFont: "Geist, system-ui, sans-serif",
-      labelColor: { color: "#ddd" },
+      // Resolved, not var(): sigma passes this straight to canvas ctx.font.
+      labelFont: token("--fg-font-body"),
+      labelColor: { color: token("--t-secondary") },
       labelSize: 13,
       stagePadding: 40,
       zIndex: true,
@@ -536,6 +590,14 @@ export default function GraphCanvas({
       nodeReducer: (node, attrs) => {
         const st = stateRef.current;
         const res = { ...attrs };
+
+        /* Fill = distance from the origin (§6: "fill = hop distance, ring =
+           severity, since the graph's job is showing reach"). Dependencies
+           keep the hexagon shape, so their fill still reads as transitive. */
+        if (st.selectedNode && attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
+          const d = st.hops.get(node);
+          res.color = d === undefined ? token("--g-hop-far") : hopColor(d);
+        }
 
         /* --- Echo ring around Critical nodes --- */
         if (attrs.nodeType === "echo") {
@@ -726,23 +788,53 @@ export default function GraphCanvas({
           res.zIndex = 9;
         } else if (st.selectedNode) {
           if (node === st.selectedNode) {
+            /* The origin: the one thing under investigation (§1). Ember fill,
+               tilted rounded square, 22px, label always shown. Exactly one of
+               these exists at a time, which is what makes amber mean
+               something — "if your UI has three amber things in it, the
+               metaphor is dead and so is the colour's meaning".
+
+               The severity ring stays: you still need to know whether the
+               thing you are investigating is Critical. */
+            /* Selection is the tilt, not the colour. Ember now belongs to the
+               repository — the mark's centre cell — and §1 allows exactly one
+               of it on screen, so the selected package stays blue and is
+               distinguished by being displaced, enlarged and labelled. */
+            res.type = "tilted";
+            res.size = 22;
+            res.forceLabel = true;
             res.highlighted = true;
             res.zIndex = 10;
           } else if (st.neighbors.has(node)) {
             /* Direct neighbours stay visible, just slightly behind selected */
             res.zIndex = 5;
+          } else if (attrs.nodeType === "repo") {
+            /* The repository anchors the graph — everything is arranged around
+               it. Fading it to a ghost removes the centre of the picture, so it
+               keeps its ember and its tilt and simply sits behind. */
+            res.zIndex = 0;
           } else {
-            /* Everything else: ghost — tiny, near-background, pushed to back */
-            res.color = "#111220";
-            res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
+            /* Dimmed, not recoloured. §6: "non-path nodes drop to 25% opacity
+               rather than changing colour. Colour changes break the distance
+               encoding; opacity doesn't."
+
+               This used to force the node onto a circle program: the image
+               program computes its output alpha as max(texel.a, v_color.a), so
+               an opaque format icon pinned it to full opacity and the dimming
+               did nothing. Nodes are drawn squares now, which honour alpha, so
+               the shape survives. */
+            res.color = withAlpha(res.color as string, 0.25);
+            res.borderSize = 0;
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
             res.zIndex = -2;
           }
         } else if (st.hoveredNode) {
           /* Hover-only (no selection): fade non-connected nodes more subtly */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.color = "#0e0f1c";
-            res.size = Math.max(3, (attrs.size ?? 1) * 0.45);
+            res.color = withAlpha(res.color as string, 0.35);
+            res.borderSize = 0;
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
             res.label = "";
             res.zIndex = -1;
           }
@@ -799,9 +891,9 @@ export default function GraphCanvas({
           } else {
             res.size = (attrs.size ?? 1) * 2;
             const kind = graph.getEdgeAttribute(edge, "edgeKind");
-            if (kind === "shared_cve")    res.color = "rgba(255,90,90,0.90)";
-            else if (kind === "dependency") res.color = "rgba(155,80,210,0.90)";
-            else                            res.color = "rgba(74,144,217,0.90)";
+            if (kind === "shared_cve")    res.color = "rgba(232, 117, 107,0.90)";
+            else if (kind === "dependency") res.color = "rgba(92, 159, 228,0.90)";
+            else                            res.color = "rgba(55, 138, 221,0.90)";
           }
         }
 
@@ -809,7 +901,7 @@ export default function GraphCanvas({
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
-            res.color = "rgba(30, 32, 50, 0.08)";
+            res.color = "rgba(18, 32, 46, 0.08)";
           }
         }
 
@@ -928,10 +1020,10 @@ export default function GraphCanvas({
       console.error("Graph build failed:", err);
       if (containerRef.current) {
         containerRef.current.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#8888aa;gap:8px;">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--t-muted);gap:8px;">
             <span style="font-size:32px;">⚠</span>
             <span style="font-size:14px;font-weight:600;">Failed to render graph</span>
-            <span style="font-size:12px;color:#555570;">${err instanceof Error ? err.message : "Unknown error"}</span>
+            <span style="font-size:12px;color:var(--fg-n-600);">${err instanceof Error ? err.message : "Unknown error"}</span>
           </div>`;
       }
     }
@@ -1009,26 +1101,26 @@ export default function GraphCanvas({
           />
         )}
         <div className="graph-nav-cluster">
-          <button className="graph-nav-btn" title="Pan Up" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Pan up" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
           </button>
           <div className="graph-nav-row">
-            <button className="graph-nav-btn" title="Pan Left" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
+            <button className="graph-nav-btn" title="Pan left" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-            <button className="graph-nav-btn" title="Pan Right" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
+            <button className="graph-nav-btn" title="Pan right" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
-          <button className="graph-nav-btn" title="Pan Down" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Pan down" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
         </div>
         <div className="graph-zoom-cluster">
-          <button className="graph-nav-btn" title="Zoom In" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Zoom in" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <button className="graph-nav-btn" title="Zoom Out" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Zoom out" onClick={() => { const c = sigmaRef.current?.getCamera(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -1056,7 +1148,7 @@ export default function GraphCanvas({
           ⊙
         </button>
         {onRefresh && (
-          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">
+          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh data">
             ↻
           </button>
         )}

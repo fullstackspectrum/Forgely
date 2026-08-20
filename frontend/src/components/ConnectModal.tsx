@@ -28,7 +28,7 @@ export default function ConnectModal({ open, onClose, onConnected }: Props) {
       });
       const data = await resp.json();
       if (!data.valid) {
-        setError(data.error || "Invalid API key");
+        setError(data.error || "Cloudsmith rejected that key — check it has read access to the workspace");
         return;
       }
       saveApiKey(trimmed);
@@ -36,7 +36,7 @@ export default function ConnectModal({ open, onClose, onConnected }: Props) {
       setKey("");
       onConnected();
     } catch {
-      setError("Failed to validate key. Check your connection.");
+      setError("Couldn't reach Cloudsmith — check your connection and try again");
     } finally {
       setValidating(false);
     }
@@ -50,10 +50,10 @@ export default function ConnectModal({ open, onClose, onConnected }: Props) {
       if (data.valid) {
         setUser({ name: data.name, slug: data.slug, email: data.email });
       } else {
-        setError("Stored key is no longer valid");
+        setError("The saved key no longer works — enter a new one");
       }
     } catch {
-      setError("Connection failed");
+      setError("Couldn't reach Cloudsmith — check your connection and try again");
     }
   }
 

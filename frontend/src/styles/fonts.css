@@ -1,0 +1,40 @@
+/* Self-hosted per BRANDING.md §9.4 — Latin subset, font-display: swap.
+ *
+ * Self-hosted rather than loaded from the Google CDN so the app has no
+ * third-party request on first paint and no dependency on an external host
+ * staying reachable. The previous CDN link pulled Geist in four weights the
+ * design never used.
+ *
+ * Inter and JetBrains Mono are variable fonts. Google serves the same file for
+ * every weight you request, so asking for 400/500/600 separately downloads
+ * identical bytes three times — 215 KB for what is really 92 KB. One file per
+ * family, declared with its weight range, gives every weight in between rather
+ * than only the three the design happens to use today.
+ *
+ * Space Grotesk is static: only 700 is used (display headings), so only 700
+ * is shipped.
+ */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-var.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-var.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-700.woff2") format("woff2");
+}
