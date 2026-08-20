@@ -1,23 +1,31 @@
 /**
- * Glass-style node hover renderer: layered canvas card with gradient body,
- * top sheen, severity accent bar, and an inline severity badge.
+ * Node hover card: a flat surface with a 1px border, a severity accent bar,
+ * and an inline severity badge. Drawn on canvas rather than in the DOM
+ * because it tracks a WebGL node position.
  * Also exports a custom label drawer that renders a lock badge for quarantined nodes.
  */
 import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
+import { token } from "./palette";
 
-const SEVERITY_COLORS: Record<string, string> = {
-  Critical: "#ff4d4d",
-  High:     "#ff8c1a",
-  Medium:   "#ffd11a",
-  Low:      "#79b8ff",
+/* Resolved on call, not at module scope. token() reads computed styles, and
+   this module is imported before the stylesheet is guaranteed to be applied —
+   a map built at import time would cache the fallback colour forever. */
+const SEV_TOKEN: Record<string, string> = {
+  Critical: "--s-critical",
+  High: "--s-high",
+  Medium: "--s-medium",
+  Low: "--s-low",
 };
 
-const SEVERITY_BADGE: Record<string, [string, string]> = {
-  Critical: ["rgba(255,77,77,0.22)",  "#ff7070"],
-  High:     ["rgba(255,140,26,0.22)", "#ffaa50"],
-  Medium:   ["rgba(255,209,26,0.18)", "#ffdd50"],
-  Low:      ["rgba(121,184,255,0.18)","#90ccff"],
+const severityColor = (sev: string): string | undefined =>
+  sev in SEV_TOKEN ? token(SEV_TOKEN[sev]) : undefined;
+
+const SEVERITY_BADGE_BG: Record<string, string> = {
+  Critical: "rgba(232, 117, 107,0.22)",
+  High:     "rgba(240, 138, 90,0.22)",
+  Medium:   "rgba(217, 182, 92,0.18)",
+  Low:      "rgba(139, 156, 175,0.18)",
 };
 
 export function drawDarkNodeHover(
@@ -27,7 +35,7 @@ export function drawDarkNodeHover(
   settings: Settings,
 ): void {
   const fontSize  = settings.labelSize  ?? 13;
-  const font      = settings.labelFont  ?? "Geist, system-ui, sans-serif";
+  const font      = settings.labelFont  ?? token("--fg-font-body");
   const weight    = settings.labelWeight ?? "600";
   const label          = (data.label as string | null | undefined) ?? "";
   const severity       = data.severity      as string | undefined;
@@ -43,7 +51,7 @@ export function drawDarkNodeHover(
   const PAD_X     = 12;
   const PAD_Y     = 8;
   const INNER_GAP = 5;
-  const radius    = 9;
+  const radius    = 10;   // --fg-radius-lg: popovers and panels
 
   const showSeverity = nodeType === "package" && !!severity && !(severity === "Unknown" || severity === "None");
 
@@ -61,7 +69,7 @@ export function drawDarkNodeHover(
     context.font = `${weight} ${fontSize}px ${font}`;
   }
 
-  const accentW   = SEVERITY_COLORS[severity ?? ""] ? ACCENT_W : 0;
+  const accentW   = severityColor(severity ?? "") ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
   const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
   const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
@@ -69,35 +77,23 @@ export function drawDarkNodeHover(
   const x = data.x + data.size + 8;
   const y = data.y - boxHeight / 2;
 
-  // ── Layer 1: drop shadow + glass body ────────────────────────────────────
-  context.save();
-  context.shadowColor    = "rgba(0, 0, 0, 0.65)";
-  context.shadowBlur     = 22;
-  context.shadowOffsetY  = 5;
-  const bodyGrad = context.createLinearGradient(x, y, x, y + boxHeight);
-  bodyGrad.addColorStop(0, "rgba(30, 33, 52, 0.97)");
-  bodyGrad.addColorStop(1, "rgba(16, 18, 30, 0.97)");
-  context.fillStyle = bodyGrad;
-  roundedRect(context, x, y, boxWidth, boxHeight, radius);
-  context.fill();
-  context.restore();
-
-  // ── Layer 2: top sheen (glass highlight) ─────────────────────────────────
-  const sheen = context.createLinearGradient(x, y, x, y + boxHeight * 0.5);
-  sheen.addColorStop(0, "rgba(255, 255, 255, 0.11)");
-  sheen.addColorStop(1, "rgba(255, 255, 255, 0)");
-  context.fillStyle = sheen;
+  // ── Body: flat surface, 1px border ───────────────────────────────────────
+  // Was three layers — drop shadow, vertical gradient body, and a top sheen
+  // faking a glass highlight. §4: "Elevation: use borders and background
+  // steps, not shadows. The identity is flat geometric shapes; drop shadows
+  // fight it." A hover card is a popover, so §4 would permit one soft shadow,
+  // but the sheen and gradient are not elevation — they are ornament.
+  context.fillStyle = token("--c-surface");
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.fill();
 
-  // ── Layer 3: outer border ────────────────────────────────────────────────
-  context.strokeStyle = "rgba(255, 255, 255, 0.11)";
+  context.strokeStyle = token("--c-border");
   context.lineWidth   = 1;
   roundedRect(context, x, y, boxWidth, boxHeight, radius);
   context.stroke();
 
   // ── Layer 4: severity accent bar (left edge, clipped to rounded shape) ───
-  const sevColor = severity && SEVERITY_COLORS[severity];
+  const sevColor = severity && severityColor(severity);
   if (sevColor && accentW > 0) {
     context.save();
     roundedRect(context, x, y, boxWidth, boxHeight, radius);
@@ -112,7 +108,7 @@ export function drawDarkNodeHover(
   const textX = x + accentW + PAD_X;
   if (label) {
     context.font         = `${weight} ${fontSize}px ${font}`;
-    context.fillStyle    = "#ededf5";
+    context.fillStyle    = token("--t-primary");
     context.textBaseline = "top";
     context.fillText(label, textX, y + PAD_Y);
   }
@@ -121,7 +117,8 @@ export function drawDarkNodeHover(
   let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
-    const [badgeBg, badgeFg] = SEVERITY_BADGE[severity] ?? ["rgba(255,255,255,0.08)", "#aaa"];
+    const badgeFg = severityColor(severity) ?? token("--t-muted");
+    const badgeBg = SEVERITY_BADGE_BG[severity] ?? "rgba(245, 248, 251,0.08)";
     const sevW   = context.measureText(severity).width + 14;
     const badgeH = Math.round(fontSize - 1);
 
@@ -142,24 +139,26 @@ export function drawDarkNodeHover(
     const qW     = context.measureText(qText).width + 22;
     const badgeH = Math.round(fontSize - 1);
 
-    context.fillStyle = "rgba(245,158,11,0.20)";
-    roundedRect(context, textX, nextRowY, qW, badgeH, 3);
+    /* Neutral, for the same reason as the node badge: quarantine is a state,
+       not a severity, and the severity ramp has to stay meaningful. */
+    context.fillStyle = "rgba(139, 156, 175, 0.18)";
+    roundedRect(context, textX, nextRowY, qW, badgeH, 4);
     context.fill();
 
-    context.fillStyle    = "#f59e0b";
+    context.fillStyle    = token("--fg-n-300");
     context.textBaseline = "top";
     context.fillText(qText, textX + 15, nextRowY + 1);
 
     // Small lock glyph before the text
     const lx = textX + 7, ly = nextRowY + badgeH / 2;
     const lr = badgeH * 0.28;
-    context.strokeStyle = "#f59e0b";
+    context.strokeStyle = token("--fg-n-300");
     context.lineWidth   = lr * 0.7;
     context.lineCap     = "round";
     context.beginPath();
     context.arc(lx, ly - lr * 0.5, lr * 0.6, Math.PI, 0);
     context.stroke();
-    context.fillStyle = "#f59e0b";
+    context.fillStyle = token("--fg-n-300");
     context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
   }
 
@@ -187,13 +186,19 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   // Dark border ring for contrast against any node colour
   ctx.beginPath();
   ctx.arc(cx, cy, r + r * 0.18, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillStyle = "rgba(10, 22, 34,0.55)";
   ctx.fill();
 
   // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#f59e0b";
+  /* Not a severity colour. This was --s-medium (gold), which meant every
+     quarantined package put a Medium-severity disc on the canvas for a state
+     that is not a severity at all — and on a container repo that is dozens of
+     amber discs competing with the single ember origin. §1: "there is exactly
+     one of it on screen. If your UI has three amber things in it, the
+     metaphor is dead and so is the colour's meaning." */
+  ctx.fillStyle = token("--fg-n-400");
   ctx.fill();
 
   // White lock — shackle (open-bottom arch)
@@ -202,7 +207,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   const shackleW   = r * 0.22;
   ctx.beginPath();
   ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
-  ctx.strokeStyle = "#fff";
+  ctx.strokeStyle = token("--t-primary");
   ctx.lineWidth   = shackleW;
   ctx.lineCap     = "round";
   ctx.stroke();
@@ -224,7 +229,7 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   ctx.lineTo(bX, bY + br);
   ctx.arcTo(bX, bY, bX + br, bY, br);
   ctx.closePath();
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = token("--t-primary");
   ctx.fill();
 
   ctx.restore();

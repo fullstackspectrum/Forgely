@@ -5,7 +5,9 @@
 import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
+import type { Settings } from "sigma/settings";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { token } from "../lib/palette";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
 
@@ -125,16 +127,18 @@ void main() {
 function drawHexagonNodeHover(
   context: CanvasRenderingContext2D,
   data: NodeDisplayData & { label?: string | null },
-  settings: { labelSize: number; labelFont: string; labelWeight: string },
+  settings: Settings,
 ) {
   const { labelSize: size, labelFont: font, labelWeight: weight } = settings;
   context.font = `${weight} ${size}px ${font}`;
 
-  context.fillStyle = "#FFF";
-  context.shadowOffsetX = 0;
-  context.shadowOffsetY = 0;
-  context.shadowBlur = 8;
-  context.shadowColor = "#000";
+  context.fillStyle = token("--t-primary");
+  /* A stroke in the canvas colour rather than a drop shadow: §6 specifies
+     exactly this for separating a node from what it overlaps, "without adding
+     a visual layer", and §4 rules shadows out for anything that is not a
+     modal or popover. */
+  context.strokeStyle = token("--g-node-stroke");
+  context.lineWidth = 1.5;
 
   const PADDING = 2;
   const r = Math.max(data.size, size / 2) + PADDING;
@@ -150,8 +154,8 @@ function drawHexagonNodeHover(
   }
   context.closePath();
   context.fill();
+  context.stroke();
 
-  context.shadowBlur = 0;
   drawDiscNodeLabel(context, data, settings);
 }
 
@@ -171,11 +175,11 @@ export class NodeHexagonProgram extends NodeProgram<typeof UNIFORMS[number]> {
         { name: "a_size", size: 1, type: FLOAT },
         { name: "a_color", size: 4, type: UNSIGNED_BYTE, normalized: true },
         { name: "a_id", size: 4, type: UNSIGNED_BYTE, normalized: true },
-      ] as const,
+      ],
       CONSTANT_ATTRIBUTES: [
         { name: "a_angle", size: 1, type: FLOAT },
         { name: "a_sizeFactor", size: 1, type: FLOAT },
-      ] as const,
+      ],
       CONSTANT_DATA,
     };
   }

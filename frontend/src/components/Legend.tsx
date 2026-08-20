@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { SEVERITY_RING } from "../programs/nodeWithSeverityRing";
+import SeverityMark from "./SeverityMark";
 
 export default function Legend() {
   const [collapsed, setCollapsed] = useState(false);
@@ -13,18 +15,35 @@ export default function Legend() {
       </div>
       {!collapsed && (
         <>
+          {/* Severity is shape as well as colour (BRANDING.md §2.4), so the
+              legend has to teach the shapes, not just the palette. */}
+          <div className="legend-items">
+            {(["Critical", "High", "Medium", "Low", "None"] as const).map((sev) => (
+              <span key={sev}>
+                {/* Mirrors the canvas: blue node body, severity as a ring whose
+                    thickness scales with the level so it survives greyscale. */}
+                <i
+                  className="legend-node-ring"
+                  style={{
+                    borderWidth: `${SEVERITY_RING[sev] || 0}px`,
+                    borderColor: SEVERITY_RING[sev]
+                      ? `var(--g-sev-${sev.toLowerCase()})`
+                      : "transparent",
+                  }}
+                />
+                {sev === "None" ? "No findings" : sev}
+              </span>
+            ))}
+          </div>
           <div className="legend-items">
             <span>
-              <i className="dot" style={{ background: "#000000" }} /> Repository
+              <i className="dot" style={{ background: "var(--c-bg)", border: "1px solid var(--c-border-strong)" }} /> Repository
             </span>
             <span>
-              <i className="dot" style={{ background: "#28a745" }} /> Package (Safe)
+              <i className="dot" style={{ background: "var(--t-primary)", border: "1px solid var(--t-muted)" }} /> Not scanned
             </span>
             <span>
-              <i className="dot" style={{ background: "#ffffff", border: "1px solid #888" }} /> Package (Not Scanned)
-            </span>
-            <span>
-              <i className="dot-hexagon" style={{ background: "#9b59b6" }} /> Dependency
+              <i className="dot-hexagon" style={{ background: "var(--fg-blue-300)" }} /> Dependency
             </span>
           </div>
           <div className="legend-edges">

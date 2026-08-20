@@ -105,10 +105,10 @@ export class NodeRingProgram extends NodeProgram<typeof UNIFORMS[number]> {
         { name: "a_size", size: 1, type: FLOAT },
         { name: "a_color", size: 4, type: UNSIGNED_BYTE, normalized: true },
         { name: "a_id", size: 4, type: UNSIGNED_BYTE, normalized: true },
-      ] as const,
+      ],
       CONSTANT_ATTRIBUTES: [
         { name: "a_offset", size: 2, type: FLOAT },
-      ] as const,
+      ],
       CONSTANT_DATA,
     };
   }

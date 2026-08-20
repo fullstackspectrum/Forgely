@@ -20,6 +20,7 @@ import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
 import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
+import { applyTheme, resolveTheme, storedTheme, watchSystemTheme, type Theme } from "./lib/theme";
 import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
@@ -49,6 +50,26 @@ export default function App() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
+
+  /* Theme. The boot script in index.html has already set data-theme before
+     first paint; this picks up the same stored value so the UI agrees with it. */
+  const [theme, setTheme] = useState<Theme>(() => storedTheme());
+  const [resolvedTheme, setResolvedTheme] = useState(() => resolveTheme(storedTheme()));
+
+  const changeTheme = useCallback((t: Theme) => {
+    applyTheme(t);
+    setTheme(t);
+    setResolvedTheme(resolveTheme(t));
+  }, []);
+
+  /* Follow the OS only while set to "system". */
+  useEffect(() => {
+    if (theme !== "system") return;
+    return watchSystemTheme(() => {
+      applyTheme("system");
+      setResolvedTheme(resolveTheme("system"));
+    });
+  }, [theme]);
 
   /* Org graph state */
   const [orgData, setOrgData] = useState<OrgGraphResponse | null>(null);
@@ -253,6 +274,8 @@ export default function App() {
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
+          theme={theme}
+          onThemeChange={changeTheme}
           filter={filter}
           filterFlags={filterFlags}
           filterFlagsMode={filterFlagsMode}
@@ -359,7 +382,7 @@ export default function App() {
             />
           ) : error && !data && !workspaceOverviewData ? (
             <div className="graph-loading">
-              <h2>Connection Error</h2>
+              <h2>Couldn't load this repository</h2>
               <p>{error || workspaceOverviewError}</p>
               <button className="btn btn-accent" onClick={handleRefresh}>Retry</button>
             </div>
@@ -376,6 +399,7 @@ export default function App() {
             />
           ) : data ? (
             <GraphCanvas
+              theme={resolvedTheme}
               data={data}
               selectedNode={selectedNode}
               hoveredNode={hoveredNode}
@@ -400,7 +424,12 @@ export default function App() {
             />
           ) : (
             <div className="empty-state">
-              <p>Select a workspace and repository to visualize</p>
+              {/* The mark is the displacement illustration §7 asks for — a grid
+                  with one cell knocked out of line. No invented artwork needed. */}
+              <img src="/forgely-icon.svg" alt="" className="empty-state-mark" />
+              <h2>Start with a repository</h2>
+              <p>Forgely maps every package in it, and everything its vulnerabilities reach.</p>
+              <p className="empty-state-hint">Pick a workspace and repository above.</p>
             </div>
           )}
 
@@ -581,7 +610,7 @@ export default function App() {
             <LoadingIndicator variant="workspace" />
           ) : orgError && !orgData ? (
             <div className="graph-loading">
-              <h2>Connection Error</h2>
+              <h2>Couldn't load this repository</h2>
               <p>{orgError}</p>
               <button className="btn btn-accent" onClick={() => owner && fetchOrgGraph(owner)}>Retry</button>
             </div>
@@ -600,7 +629,10 @@ export default function App() {
             />
           ) : (
             <div className="empty-state">
-              <p>Select a workspace to view workspace graph</p>
+              <img src="/forgely-icon.svg" alt="" className="empty-state-mark" />
+              <h2>Start with a workspace</h2>
+              <p>Forgely maps who can reach what — members, teams, services and the repositories they touch.</p>
+              <p className="empty-state-hint">Pick a workspace above.</p>
             </div>
           )}
 
@@ -706,9 +738,9 @@ function ApiErrorToast({ message, onDismiss, onReconnect }: ApiErrorToastProps) 
         )}
       </div>
       <div className="api-error-toast-body">
-        <div className="api-error-toast-title">{isAuth ? "Not authenticated" : "Request failed"}</div>
+        <div className="api-error-toast-title">{isAuth ? "Not connected to Cloudsmith" : "Couldn't complete that request"}</div>
         <div className="api-error-toast-msg">
-          {isAuth ? "Your API key is missing or has been revoked." : body}
+          {isAuth ? "Your API key is missing or has been revoked. Reconnect to continue." : body}
         </div>
         {isAuth && body && body !== "Authentication required" && (
           <div className="api-error-toast-detail">{body}</div>

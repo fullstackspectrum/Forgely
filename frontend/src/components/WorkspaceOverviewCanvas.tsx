@@ -3,11 +3,12 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
-import { NodeImageProgram } from "@sigma/node-image";
+import { NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types";
+import { token } from "../lib/palette";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -20,22 +21,9 @@ interface Props {
   onRefresh?: () => void;
 }
 
-const SEV_BORDER: Record<string, string> = {
-  Critical: "#ff4d4d",
-  High:     "#ff8c1a",
-  Medium:   "#ffd11a",
-  Low:      "#79b8ff",
-  None:     "#28a745",
-};
-
 function getSevColor(sev: string | null): string {
-  if (!sev) return "#555577";
-  return SEVERITY_COLORS[sev] ?? "#555577";
-}
-
-function getSevBorder(sev: string | null): string {
-  if (!sev) return "#888899";
-  return SEV_BORDER[sev] ?? "#888899";
+  if (!sev) return token("--fg-n-600");
+  return SEVERITY_COLORS[sev] ?? token("--fg-n-600");
 }
 
 function applyOverviewLayout(graph: Graph, layout: LayoutType, wsId: string) {
@@ -159,10 +147,10 @@ export default function WorkspaceOverviewCanvas({
       y: 0,
       size: 48,
       label: "",
-      color: "#0f0f1a",
+      color: token("--c-bg"),
       nodeType: "workspace",
       type: "image",
-      image: "/forgely-icon.png",
+      image: "/forgely-icon.svg",
     });
 
     /* Repo nodes arranged in a circle */
@@ -188,32 +176,35 @@ export default function WorkspaceOverviewCanvas({
         y,
         size: repoNodeSize(repo.package_count),
         label: repo.name,
-        color: getSevColor(sev),
-        borderColor: getSevBorder(sev),
+        /* Fill is what the node is, ring is severity (§6). borderColor was
+           already being set here and silently discarded — NodeImageProgram has
+           no border support — so it now goes through the compound program. */
+        color: token("--fg-blue-400"),
+        ...severityRing(sev),
         nodeType: "repo",
         slug: repo.slug,
         max_severity: sev,
       });
       graph.addEdge(wsId, repo.slug, {
         size: 2,
-        color: "rgba(70,130,210,0.5)",
+        color: "rgba(55, 138, 221,0.5)",
         type: "curvedArrow",
         curvature: 0.15,
       });
     });
 
     const sigma = new Sigma(graph, container, {
-      defaultNodeColor: "#4a90d9",
-      defaultEdgeColor: "rgba(120,130,180,0.25)",
-      labelFont: "Inter, system-ui, sans-serif",
+      defaultNodeColor: token("--c-action"),
+      defaultEdgeColor: "rgba(139, 156, 175,0.25)",
+      labelFont: token("--fg-font-body"),
       labelSize: 12,
       labelWeight: "500",
-      labelColor: { color: "#c8cadf" },
+      labelColor: { color: token("--t-secondary") },
       renderEdgeLabels: false,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
       defaultEdgeType: "curvedArrow",
-      nodeProgramClasses: { image: NodeImageProgram },
+      nodeProgramClasses: { image: NodeImageWithRingProgram },
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
@@ -341,8 +332,8 @@ export default function WorkspaceOverviewCanvas({
         zIndex: isSelected ? 2 : 1,
         highlighted: isSelected,
         hidden: hiddenByRepo,
-        color: dimmed ? "#2a2a3a" : attrs.color,
-        borderColor: dimmed ? "#3a3a4a" : attrs.borderColor,
+        color: dimmed ? token("--c-surface") : attrs.color,
+        borderSize: dimmed ? 0 : attrs.borderSize,
       };
     });
     sigma.setSetting("edgeReducer", (edge, attrs) => {
@@ -355,7 +346,7 @@ export default function WorkspaceOverviewCanvas({
         const repoNode = src === `ws:${data.owner}` ? tgt : src;
         const fmts = repoFormats.get(repoNode);
         const matches = fmts ? [...formatFilter].some((f) => fmts.has(f)) : false;
-        return { ...attrs, color: matches ? "rgba(70,130,210,0.5)" : "rgba(70,130,210,0.1)" };
+        return { ...attrs, color: matches ? "rgba(55, 138, 221,0.5)" : "rgba(55, 138, 221,0.1)" };
       }
       return attrs;
     });
@@ -382,28 +373,28 @@ export default function WorkspaceOverviewCanvas({
         />
         {/* Pan cluster */}
         <div className="graph-nav-cluster">
-          <button className="graph-nav-btn" title="Pan Up"    onClick={() => { const c = cam(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Pan up"    onClick={() => { const c = cam(); if (c) c.animate({ y: c.y + 0.1 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
           </button>
           <div className="graph-nav-row">
-            <button className="graph-nav-btn" title="Pan Left"  onClick={() => { const c = cam(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
+            <button className="graph-nav-btn" title="Pan left"  onClick={() => { const c = cam(); if (c) c.animate({ x: c.x - 0.1 }, { duration: 200 }); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-            <button className="graph-nav-btn" title="Pan Right" onClick={() => { const c = cam(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
+            <button className="graph-nav-btn" title="Pan right" onClick={() => { const c = cam(); if (c) c.animate({ x: c.x + 0.1 }, { duration: 200 }); }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
-          <button className="graph-nav-btn" title="Pan Down"  onClick={() => { const c = cam(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Pan down"  onClick={() => { const c = cam(); if (c) c.animate({ y: c.y - 0.1 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
         </div>
 
         {/* Zoom cluster */}
         <div className="graph-zoom-cluster">
-          <button className="graph-nav-btn" title="Zoom In"  onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Zoom in"  onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio / 1.3 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
-          <button className="graph-nav-btn" title="Zoom Out" onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
+          <button className="graph-nav-btn" title="Zoom out" onClick={() => { const c = cam(); if (c) c.animate({ ratio: c.ratio * 1.3 }, { duration: 200 }); }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -423,7 +414,7 @@ export default function WorkspaceOverviewCanvas({
         </button>
 
         {onRefresh && (
-          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh Data">↻</button>
+          <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh data">↻</button>
         )}
       </div>
     </div>

@@ -1,13 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="/forgely-logo.png" />
+    <link rel="icon" type="image/svg+xml" href="/forgely-icon-small.svg" />
+    <link rel="apple-touch-icon" href="/forgely-app-icon.svg" />
     <title>Forgely – Cloudsmith Security Map</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Fonts are self-hosted (src/styles/fonts.css). Body text is preloaded
+         because it blocks first paint; the display and mono faces are not, so
+         they do not compete for bandwidth with it. -->
+    <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin />
+  <script>
+    /* Set the theme before first paint. Doing this in React means one frame
+       rendered in the wrong theme on every load — a white flash for dark-mode
+       users, which is the one thing a theme toggle must not do.
+       Kept in sync with lib/theme.ts; the storage key and the "system"
+       fallback are the contract between them. */
+    (function () {
+      try {
+        var stored = localStorage.getItem("forgely_theme") || "dark";
+        var resolved = stored === "system"
+          ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+          : stored;
+        document.documentElement.setAttribute("data-theme", resolved);
+      } catch (e) {
+        /* Private mode can throw on localStorage; dark stays as the default. */
+      }
+    })();
+  </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
+import { currentTheme } from "../lib/theme";
+import SeverityMark from "./SeverityMark";
 import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { useCveDescriptions } from "../hooks/useCveDescriptions";
@@ -18,7 +20,7 @@ function VersionString({ version, mono = false }: { version: string; mono?: bool
       <span
         className="version-string-text"
         title={version}
-        style={mono ? { fontFamily: "ui-monospace, 'SF Mono', Consolas, monospace", color: "#a78bfa" } : undefined}
+        style={mono ? { fontFamily: "var(--fg-font-mono)", color: "var(--fg-blue-200)" } : undefined}
       >
         {version}
       </span>
@@ -196,7 +198,7 @@ export default function SidePanel({
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}`,
+        `/api/vulnly-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(d.slug)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
@@ -226,6 +228,7 @@ export default function SidePanel({
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
       <div className="panel-summary">
       <div className="panel-header">
+        <span className="panel-eyebrow">Package</span>
         <h2 className="panel-title">{node.label}</h2>
         {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
       </div>
@@ -235,7 +238,7 @@ export default function SidePanel({
           <button
             type="button"
             className={`severity-badge severity-badge-clickable${filter === sev ? " active" : ""}`}
-            style={{ background: sevColor }}
+            data-severity={sev}
             onClick={() => toggleSeverity(sev as FilterType)}
             title={filter === sev ? `Clear ${sev} filter — showing all` : `Filter graph by ${sev}`}
             disabled={!onFilterChange || sev === "None" || sev === "Unknown"}
@@ -262,7 +265,7 @@ export default function SidePanel({
               type="button"
               className="attack-graph-btn"
               onClick={onOpenAttackGraph}
-              title="View Attack Path"
+              title="View attack path"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3"/>
@@ -271,7 +274,7 @@ export default function SidePanel({
                 <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
               </svg>
-              <span>Attack Path</span>
+              <span>Attack path</span>
             </button>
           )}
           {(canGenerateReport || cloudsmithUrl) && (
@@ -322,6 +325,24 @@ export default function SidePanel({
         </div>
       )}
 
+      {/* Two stats first — "lead with consequence, not classification" (§8).
+          The vulnerability count is what the user acts on; format and licence
+          are reference detail and stay in the table below. */}
+      <div className="panel-stats">
+        <div className="panel-stat" data-severity={d.vuln_count > 0 ? (d.max_severity ?? undefined) : undefined}>
+          <div className="panel-stat-value">{d.vuln_count}</div>
+          <div className="panel-stat-key">
+            {d.vuln_count === 1 ? "Vulnerability" : "Vulnerabilities"}
+          </div>
+        </div>
+        <div className="panel-stat">
+          <div className="panel-stat-value">{dependencies.length}</div>
+          <div className="panel-stat-key">
+            {dependencies.length === 1 ? "Dependency" : "Dependencies"}
+          </div>
+        </div>
+      </div>
+
       {/* Metadata grid */}
       <div className="panel-meta">
         <MetaRow
@@ -333,7 +354,7 @@ export default function SidePanel({
         <MetaRow label="License" value={d.license} />
         <MetaRow label="Size" value={sizeStr} />
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
-        <MetaRow label="Scan Status" value={d.scan_status} />
+        <MetaRow label="Scan status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
       </div>
       </div>
@@ -381,10 +402,11 @@ export default function SidePanel({
                     )}
                     {hasVulns && (
                       <span
-                        className="dep-row-badge"
-                        style={{ background: sevColor }}
-                        title={`${dep.data.vuln_count} ${dep.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}`}
+                        className="dep-row-badge severity-badge"
+                        data-severity={sev}
+                        title={`${dep.data.vuln_count} ${dep.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}, highest severity ${sev}`}
                       >
+                        <SeverityMark severity={sev} />
                         {dep.data.vuln_count}
                       </span>
                     )}
@@ -456,8 +478,8 @@ export default function SidePanel({
               {filterOptions.map((s) => (
                 <button
                   key={s}
-                  className={`cve-filter-btn${sevFilter === s ? " active" : ""}`}
-                  style={sevFilter === s && s !== "All" ? { background: SEVERITY_COLORS[s], borderColor: SEVERITY_COLORS[s] } : undefined}
+                  className={`cve-filter-btn${sevFilter === s ? " active severity-badge" : ""}`}
+                  data-severity={sevFilter === s && s !== "All" ? s : undefined}
                   onClick={() => { setSevFilter(s); setCvePage(0); }}
                 >
                   {s}{s !== "All" ? ` (${sevCounts[s]})` : ""}
@@ -511,7 +533,7 @@ export default function SidePanel({
 
       {d.vuln_count > 0 && d.cves.length === 0 && (
         <div className="panel-section">
-          <p style={{ color: "#e8a845" }}>
+          <p style={{ color: "var(--s-medium)" }}>
             ⚠ {d.vuln_count} vulnerabilities detected but details could not be
             retrieved.
           </p>
@@ -600,7 +622,7 @@ function MetaRow({
    /api/cve after the graph has rendered, and falls back to the record's own
    value when the graph still carries one. */
 function CveCard({ cve, description }: { cve: CVERecord; description: string }) {
-  const color = SEVERITY_COLORS[cve.severity] || "#666";
+  const color = SEVERITY_COLORS[cve.severity] || "var(--fg-n-600)";
   return (
     <div className="cve-card" style={{ borderLeftColor: color }}>
       <div className="cve-header">
@@ -714,7 +736,7 @@ function DependencyDetail({
 
       <div className="panel-details">
         <div className="panel-section">
-          <h3 className="section-title">Linked Packages</h3>
+          <h3 className="section-title">Linked packages</h3>
           <input
             className="dep-panel-search"
             type="search"
@@ -746,7 +768,7 @@ function DependencyDetail({
                       <button
                         type="button"
                         className={`severity-badge severity-badge-clickable${isActive ? " active" : ""}`}
-                        style={{ background: sevColor }}
+                        data-severity={sev}
                         onClick={() => onFilterChange?.(isActive ? "all" : sev as FilterType)}
                         title={isActive ? `Clear ${sev} filter` : `Filter graph by ${sev}`}
                       >
@@ -801,7 +823,7 @@ function RepoDetail({
     setReportError(null);
     try {
       const resp = await apiFetch(
-        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        `/api/vulnly-repo-report/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}?theme=${currentTheme()}`,
       );
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -880,9 +902,14 @@ function RepoDetail({
     <div className={`side-panel${expanded ? " side-panel-expanded" : ""}`}>
       <div className="panel-summary">
       <div className="panel-header">
+        {/* The Cloudsmith logo used to sit here as a 36px avatar. It is not
+            our mark and it made the panel read as Cloudsmith's own UI; the
+            repository name is the thing the user is looking at, so it leads.
+            The "View in Cloudsmith" link below stays — it goes there, and §8
+            says to name things by what the user controls. */}
         <div className="repo-header-row">
-          <img src="/cloudsmith.png" alt="" className="repo-header-logo" />
           <div>
+            <span className="panel-eyebrow">Repository</span>
             <h2 className="panel-title">{node.label}</h2>
             <span className="panel-version">{owner}</span>
           </div>
@@ -935,7 +962,7 @@ function RepoDetail({
         </div>
         <div className="repo-card">
           <span className="repo-card-value">{stats.totalVulns}</span>
-          <span className="repo-card-label">Total Findings</span>
+          <span className="repo-card-label">Total findings</span>
         </div>
       </div>
       </div>
@@ -944,7 +971,7 @@ function RepoDetail({
 
       {/* Format breakdown */}
       <div className="panel-section">
-        <h3 className="section-title">Package Formats</h3>
+        <h3 className="section-title">Package formats</h3>
         <div className="repo-format-grid">
           {stats.formats.map(([fmt, count]) => {
             const icon = getFormatIcon(fmt);
@@ -985,7 +1012,7 @@ function RepoDetail({
       {/* Severity breakdown */}
       {(["Critical", "High", "Medium", "Low"] as const).some((s) => stats.sevCounts[s] > 0) && (
         <div className="panel-section">
-          <h3 className="section-title">Severity Breakdown</h3>
+          <h3 className="section-title">Severity breakdown</h3>
           <div className="repo-sev-bars">
             {(["Critical", "High", "Medium", "Low"] as const)
               .filter((s) => stats.sevCounts[s] > 0)
@@ -1021,7 +1048,7 @@ function RepoDetail({
       {/* Most vulnerable packages */}
       {stats.topVuln.length > 0 && (
         <div className="panel-section">
-          <h3 className="section-title">Most Vulnerable</h3>
+          <h3 className="section-title">Most vulnerable</h3>
           <div className="repo-top-vuln">
             {stats.topVuln.map((p) => {
               const s = p.data.max_severity || "None";
@@ -1035,7 +1062,12 @@ function RepoDetail({
                   title={onNodeSelect ? `Select ${p.label}` : undefined}
                 >
                   <span className="repo-vuln-name">{p.label}</span>
-                  <span className="repo-vuln-badge" style={{ background: SEVERITY_COLORS[s] }}>
+                  <span
+                    className="repo-vuln-badge severity-badge"
+                    data-severity={s}
+                    title={`${p.data.vuln_count} ${p.data.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}, highest severity ${s}`}
+                  >
+                    <SeverityMark severity={s} />
                     {p.data.vuln_count}
                   </span>
                 </button>
