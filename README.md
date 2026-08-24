@@ -1,6 +1,11 @@
 
 
-![Forgely](assets/readme/logo.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/forgely-lockup-reversed.svg">
+  <img src="assets/readme/forgely-lockup.svg" alt="Forgely" width="280">
+</picture>
+
+**From artifact to blast radius.**
 
 ---
 
@@ -213,17 +218,42 @@ npm run dev
 
 ---
 
-## 🎨 Severity Colour Key
+## Reading the graph
 
-| Colour | Severity |
-|--------|----------|
-| 🔴 `#ff4d4d` | Critical |
-| 🟠 `#ff8c1a` | High |
-| 🟡 `#ffd11a` | Medium |
-| 🔵 `#79b8ff` | Low |
-| 🟢 `#28a745` | Safe — no vulnerabilities detected |
-| ⚫ `#666666` | Unscanned — external or unscanned dependency |
-| 🟣 `#9b59b6` | Dependency — grouped dependency node |
+The graph uses the same vocabulary as the mark: a grid of rounded squares
+around one displaced ember cell.
+
+| Node | Meaning |
+|------|---------|
+| Ember square, tilted | The repository — the centre everything is arranged around |
+| Blue square | A package. The shade is its distance from whatever you have selected |
+| Blue square, tilted | The package you are currently investigating |
+| Hexagon | A dependency |
+
+**Fill encodes distance, not severity.** Selecting a package shades the graph by
+how far each node is from it — direct, two hops, three, then everything beyond.
+Containment edges are not traversed: reaching another package *through* the
+repository is not blast radius. Nodes it cannot reach fade back rather than
+changing colour, so the distance encoding survives the dimming.
+
+**Severity is a ring, and never colour alone.** Each level also has a distinct
+width and shape so it survives a greyscale screenshot — the ramp itself does
+not: desaturated, Critical and Low land three levels apart out of 255.
+
+| Level | Mark | Ring | Light | Dark |
+|-------|------|------|-------|------|
+| Critical | ● filled circle | 6px | `#D62B20` | `#FF3B30` |
+| High | ▲ filled triangle | 4px | `#C25E00` | `#FF8A1F` |
+| Medium | ■ filled square | 2.5px | `#8A6410` | `#F2CE3F` |
+| Low | ○ hollow circle | 1.5px | `#4E657D` | `#7FA8C9` |
+| None | □ hollow square | none | — | — |
+
+Graph rings are more saturated than the severity colours used in text and
+badges: a ring is a non-text element, so it is held to 3:1 rather than 4.5:1
+and can be far better separated. Text severities use the muted ramp.
+
+Both themes are supported — Light, Auto and Dark, in the sidebar footer. Auto
+follows the system setting.
 
 ---
 
@@ -249,7 +279,7 @@ Forgely/
 │   ├── models.py             # Pydantic response models
 │   └── requirements.txt      # Python dependencies
 ├── frontend/
-│   ├── public/               # Static assets (icons, logos)
+│   ├── public/               # Brand SVGs and self-hosted fonts
 │   └── src/
 │       ├── components/
 │       │   ├── GraphCanvas.tsx              # SCA artifact graph (Sigma.js WebGL)
@@ -270,12 +300,26 @@ Forgely/
 │       │   ├── Legend.tsx                   # SCA graph legend
 │       │   ├── OrgLegend.tsx                # CIEM graph legend
 │       │   ├── ConnectModal.tsx             # API key connect/disconnect modal
-│       │   └── LoadingIndicator.tsx         # Animated multi-stage loading screen
+│       │   ├── SeverityMark.tsx             # Severity as shape + colour, never colour alone
+│       │   ├── ThemeToggle.tsx              # Light / Auto / Dark
+│       │   └── LoadingIndicator.tsx         # Branded loader with real build progress
 │       ├── hooks/
-│       │   └── useGraphData.ts        # Data fetching and state for SCA graph
+│       │   ├── useGraphData.ts        # Streams the SCA graph, with progress
+│       │   └── useCveDescriptions.ts  # CVE descriptions, fetched on expand
 │       ├── lib/
 │       │   ├── auth.ts                # API key storage and fetch wrapper
-│       │   └── formatIcons.ts         # Package format → Devicon icon URL map
+│       │   ├── palette.ts             # Design tokens for canvas/WebGL code
+│       │   ├── theme.ts               # Light / Auto / Dark selection
+│       │   ├── layout.ts              # ForceAtlas2 placement and settling
+│       │   ├── hoverRenderer.ts       # Canvas hover card and node labels
+│       │   └── formatIcons.ts         # Package format → icon, used by panels
+│       ├── programs/
+│       │   ├── roundedSquare.ts       # Node shapes from the mark, with severity rings
+│       │   ├── NodeHexagonProgram.ts  # Dependency nodes
+│       │   └── NodeRingProgram.ts     # Pulse rings on Critical packages
+│       ├── styles/
+│       │   ├── tokens.css             # Design tokens (light + dark)
+│       │   └── fonts.css              # Self-hosted Inter / Space Grotesk / JetBrains Mono
 │       ├── types/
 │       │   └── index.ts               # TypeScript types and constants
 │       ├── App.tsx                    # Root component, tab routing, panel state
@@ -289,7 +333,9 @@ Forgely/
 ├── start.sh                          # Start script (backend + frontend)
 ├── .env                              # Credentials (not committed)
 ├── assets/
-│   └── readme/                       # README screenshots
+│   ├── brand/                        # Brand SVGs and the design tokens
+│   ├── img/
+│   └── readme/                       # README screenshots and brand lockups
 ├── CHANGELOG.md
 ├── LICENSE
 └── README.md
