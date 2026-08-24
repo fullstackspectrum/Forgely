@@ -1,18 +1,19 @@
-import { useState } from "react";
 import { SEVERITY_RING } from "../programs/nodeWithSeverityRing";
 import SeverityMark from "./SeverityMark";
 
-export default function Legend() {
-  /* Collapsed by default: the key teaches the vocabulary once, and after
-     that it is a box sitting over the graph. The header stays visible so
-     it can be opened again. */
-  const [collapsed, setCollapsed] = useState(true);
+/* State lives in App so it can be persisted and reset, and so both keys
+   agree — one open and one closed across tabs reads as a bug. */
+interface Props {
+  collapsed: boolean;
+  onToggle: () => void;
+}
 
+export default function Legend({ collapsed, onToggle }: Props) {
   return (
     <div className={`legend${collapsed ? " legend-collapsed" : ""}`}>
       <div className="legend-header">
         <div className="legend-title">Forgely</div>
-        <button className="collapse-toggle-btn" onClick={() => setCollapsed(c => !c)} title={collapsed ? "Show legend" : "Hide legend"}>
+        <button className="collapse-toggle-btn" onClick={onToggle} title={collapsed ? "Show legend" : "Hide legend"}>
           {collapsed ? "▲" : "▼"}
         </button>
       </div>

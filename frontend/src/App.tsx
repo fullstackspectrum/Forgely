@@ -55,6 +55,7 @@ export default function App() {
   const [hideCriticalAnimation, setHideCriticalAnimation] = useState(settings.hideCriticalAnimation);
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [legendCollapsed, setLegendCollapsed] = useState(settings.legendCollapsed);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
 
@@ -95,7 +96,6 @@ export default function App() {
   const [ciemAttackPathOpen, setCiemAttackPathOpen] = useState(false);
   const [apiToast, setApiToast] = useState<string | null>(null);
   const [topBarCollapsed, setTopBarCollapsed] = useState(false);
-  const [legendCollapsed, setLegendCollapsed] = useState(false);
 
   /* Workspace package overview state */
   const [viewMode, setViewMode] = useState<"graph" | "workspace">("graph");
@@ -117,6 +117,14 @@ export default function App() {
       (v: Settings[K]) => { set(v); saveSetting(key, v); },
     [],
   );
+
+  const toggleLegend = useCallback(() => {
+    setLegendCollapsed((c) => {
+      const next = !c;
+      saveSetting("legendCollapsed", next);
+      return next;
+    });
+  }, []);
 
   const changeEdgeStyle = useMemo(
     () => persist("edgeStyle", setEdgeStyle as (v: EdgeStyle) => void),
@@ -402,6 +410,7 @@ export default function App() {
           setHideCriticalAnimation(d.hideCriticalAnimation);
           setEdgeStyle(d.edgeStyle);
           setLayout(d.layout);
+          setLegendCollapsed(d.legendCollapsed);
         }}
       />
 
@@ -637,7 +646,7 @@ export default function App() {
             );
           })()}
 
-          {viewMode !== "workspace" && <Legend />}
+          {viewMode !== "workspace" && <Legend collapsed={legendCollapsed} onToggle={toggleLegend} />}
 
         </>
       )}
@@ -724,7 +733,7 @@ export default function App() {
             );
           })()}
 
-          <OrgLegend />
+          <OrgLegend collapsed={legendCollapsed} onToggle={toggleLegend} />
 
           {ciemAttackPathOpen && orgData && (
             <CiemAttackPathPanel

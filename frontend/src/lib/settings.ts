@@ -23,6 +23,7 @@ export interface Settings {
   hideCriticalAnimation: boolean;
   edgeStyle: EdgeStyle;
   layout: LayoutType;
+  legendCollapsed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +33,9 @@ export const DEFAULT_SETTINGS: Settings = {
   hideCriticalAnimation: false,
   edgeStyle: "curved",
   layout: "force",
+  /* Collapsed until the user opens it: the key teaches the vocabulary once,
+     and after that it is a box sitting over the graph. */
+  legendCollapsed: true,
 };
 
 /* Versioned: a rename or a type change in the shape above must not be handed a
@@ -64,6 +68,7 @@ export function loadSettings(): Settings {
       hideDependencies: bool("hideDependencies"),
       hideUnsupported: bool("hideUnsupported"),
       hideCriticalAnimation: bool("hideCriticalAnimation"),
+      legendCollapsed: bool("legendCollapsed"),
       edgeStyle: EDGE_STYLES.includes(parsed.edgeStyle as EdgeStyle)
         ? (parsed.edgeStyle as EdgeStyle) : DEFAULT_SETTINGS.edgeStyle,
       layout: LAYOUTS.includes(parsed.layout as LayoutType)
