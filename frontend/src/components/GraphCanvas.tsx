@@ -14,6 +14,7 @@ import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import { placeRadially, refineForceLayout, clusterAround, groupSpacing } from "../lib/layout";
+import { focusNodes } from "../lib/focus";
 import type { Point } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
@@ -225,9 +226,19 @@ export default function GraphCanvas({
      normally re-scatter and re-settle every node. Capturing where everything
      currently sits — and where the camera is — lets the rebuild put it all
      back, so the only thing that moves is the group being opened. */
-  const regroupRef = useRef<{ seed: Map<string, Point>; camera: unknown } | null>(null);
+  const regroupRef = useRef<{
+    seed: Map<string, Point>;
+    camera: unknown;
+    /* Nodes to frame once the rebuild has drawn them. Set only when the user
+       opened a group by clicking it — a group opened on their behalf, to
+       reveal a search hit, must not also move the camera. */
+    focus?: string[];
+  } | null>(null);
 
-  const changeGroups = useCallback((next: (prev: Set<string>) => Set<string>) => {
+  const changeGroups = useCallback((
+    next: (prev: Set<string>) => Set<string>,
+    focus?: string[],
+  ) => {
     const g = graphRef.current;
     if (g) {
       const seed = new Map<string, Point>();
@@ -235,13 +246,27 @@ export default function GraphCanvas({
         if (a.nodeType === "echo") return; // re-derived from their parents
         seed.set(id, { x: a.x as number, y: a.y as number });
       });
-      regroupRef.current = { seed, camera: sigmaRef.current?.getCamera().getState() };
+      regroupRef.current = { seed, camera: sigmaRef.current?.getCamera().getState(), focus };
     }
     /* Whatever was under the pointer is about to be replaced, and a hover on a
        node that no longer exists would dim the graph against nothing. */
     onNodeHover(null);
     setExpandedGroups(next);
   }, [onNodeHover]);
+
+  /* Frame a node and whatever it connects to, so a click lands on something
+     with its context rather than on a node alone in the middle of the view.
+     Edges the user has hidden are not context, so they do not widen the box. */
+  const focusAround = useCallback((sigma: Sigma, graph: Graph, node: string) => {
+    const st = stateRef.current;
+    const ids = [node];
+    graph.forEachEdge(node, (_e, attrs, src, tgt) => {
+      if (attrs.edgeKind === "shared_cve" && st.hideSharedCveEdges) return;
+      if (attrs.edgeKind === "dependency" && st.hideDependencies) return;
+      ids.push(src === node ? tgt : src);
+    });
+    focusNodes(sigma, ids);
+  }, []);
 
   /* Anything pointed at from outside the canvas — a search hit, a selection
      made in a panel — names a specific version. While that version is
@@ -1135,18 +1160,28 @@ export default function GraphCanvas({
          package behind it to show. */
       if (node.startsWith(GROUP_PREFIX)) {
         const name = node.slice(GROUP_PREFIX.length);
-        changeGroups((prev) => {
-          const next = new Set(prev);
-          /* The hub stays on screen once open, so the same click closes it —
-             otherwise the only way back is double-clicking the background. */
-          if (next.has(name)) next.delete(name);
-          else next.add(name);
-          return next;
-        });
+        /* Safe to read directly: the build effect is keyed on `grouped`, so
+           this handler is rebuilt whenever expandedGroups changes. */
+        const opening = !expandedGroups.has(name);
+        changeGroups(
+          (prev) => {
+            const next = new Set(prev);
+            /* The hub stays on screen once open, so the same click closes it —
+               otherwise the only way back is double-clicking the background. */
+            if (next.has(name)) next.delete(name);
+            else next.add(name);
+            return next;
+          },
+          /* Opening: frame the versions and the hub they came out of. Closing
+             leaves the camera alone — the user is stepping back out, and
+             yanking the view would undo the position they closed it from. */
+          opening ? [node, ...(versionsByName.get(name) ?? [])] : undefined,
+        );
         return;
       }
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeSelect(node);
+      focusAround(sigma, graph, node);
       setContextMenu(null);
     });
     const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
@@ -1228,6 +1263,9 @@ export default function GraphCanvas({
          only clicked one node. */
       if (regroup.camera) sigma.getCamera().setState(regroup.camera as never);
       sigma.refresh();
+      /* After the refresh: display data for nodes added by this rebuild does
+         not exist until sigma has processed them. */
+      if (regroup.focus) focusNodes(sigma, regroup.focus, { duration: 500 });
     } else {
       layoutRef.current = refineForceLayout(graph, repoNode, () => {
         if (cancelled) return;
