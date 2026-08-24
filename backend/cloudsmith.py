@@ -333,27 +333,51 @@ UPSTREAM_FORMATS = [
 ]
 
 
+# Formats queried at once per repo. See fetch_repo_upstreams.
+UPSTREAM_WORKERS = 6
+
+
 def fetch_repo_upstreams(session: requests.Session, owner: str, repo: str, fmt: str = "") -> list[dict]:
     """Fetch upstream proxy/cache configs for a repo.
 
-    If *fmt* is given, only the single matching format is queried (1 API call).
-    Otherwise all known formats are tried (18 calls) — kept for back-compat but
-    avoided in the org-graph builder to prevent rate-limit exhaustion.
+    Every format is queried unless *fmt* narrows it, because a repo can hold
+    any mix of formats and the API exposes no field listing them. Formats the
+    repo does not use answer 404 and are skipped.
+
+    Only pass *fmt* when the format is genuinely known. Passing a value that is
+    not a package format makes every request 404, which is indistinguishable
+    here from a repo that simply has no upstreams.
     """
     formats_to_check = [fmt.lower()] if fmt else UPSTREAM_FORMATS
-    upstreams: list[dict] = []
-    for f in formats_to_check:
+
+    def _one(f: str) -> list[dict]:
         url = f"{BASE_URL}/repos/{owner}/{repo}/upstream/{f}/"
         try:
             data = _api_get(session, url)
-            if isinstance(data, list):
-                for item in data:
-                    item["_format"] = f
-                upstreams.extend(data)
         except requests.HTTPError as exc:
+            # A format the repo does not support. Not an error: the only way to
+            # learn which formats a repo holds is to ask for each of them.
             if exc.response is not None and exc.response.status_code in (400, 403, 404, 405, 501):
-                continue
+                return []
             raise
+        if not isinstance(data, list):
+            return []
+        for item in data:
+            item["_format"] = f
+        return data
+
+    if len(formats_to_check) == 1:
+        return _one(formats_to_check[0])
+
+    # 18 formats at ~200ms each is 3.6s of latency per repo, and it is all
+    # waiting. Kept modest because the caller already runs several repos at
+    # once; the product of the two is what reaches the API.
+    upstreams: list[dict] = []
+    with ThreadPoolExecutor(max_workers=UPSTREAM_WORKERS) as pool:
+        for result in pool.map(_one, formats_to_check):
+            upstreams.extend(result)
+    # Deterministic regardless of which thread finished first.
+    upstreams.sort(key=lambda u: (u.get("_format", ""), u.get("upstream_url", ""), u.get("name", "")))
     return upstreams
 
 
