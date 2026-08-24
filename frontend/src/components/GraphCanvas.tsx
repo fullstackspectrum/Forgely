@@ -7,7 +7,7 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
-import { hopColor, dimToCanvas } from "../lib/palette";
+import { hopColor, dimToCanvas, DIM } from "../lib/palette";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
@@ -999,7 +999,7 @@ export default function GraphCanvas({
                an opaque format icon pinned it to full opacity and the dimming
                did nothing. Nodes are drawn squares now, which honour alpha, so
                the shape survives. */
-            res.color = dimToCanvas(res.color as string, 0.15);
+            res.color = dimToCanvas(res.color as string, DIM.selection);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
@@ -1012,7 +1012,7 @@ export default function GraphCanvas({
              colour instead of a fainter one. Kept the lightest of the three
              dims: hover is a glance, selection is a decision. */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.color = dimToCanvas(res.color as string, 0.25);
+            res.color = dimToCanvas(res.color as string, DIM.hover);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
             res.label = "";
@@ -1027,7 +1027,7 @@ export default function GraphCanvas({
 
              Fill only: the ring is what says how bad this name is overall,
              which is the one thing the hub is still for. */
-          res.color = dimToCanvas(res.color as string, 0.5);
+          res.color = dimToCanvas(res.color as string, DIM.openHub);
         } else if (st.expandedMembers.size > 0 && !st.expandedMembers.has(node)) {
           /* A group is open and this is not one of its versions.
              Held at 0.35 rather than selection's 0.25: nothing has been
@@ -1035,7 +1035,7 @@ export default function GraphCanvas({
              against, not a path that has been ruled out. The repository stays
              put — it is the centre everything is arranged around. */
           if (attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
-            res.color = dimToCanvas(res.color as string, 0.18);
+            res.color = dimToCanvas(res.color as string, DIM.group);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
@@ -1107,7 +1107,7 @@ export default function GraphCanvas({
             /* Was a hardcoded near-black, which is a dark-theme assumption:
                on the light canvas it painted the faded edges darker than the
                ones being highlighted. */
-            res.color = dimToCanvas(res.color as string, 0.12);
+            res.color = dimToCanvas(res.color as string, DIM.edge);
           }
         } else if (!st.selectedNode && st.expandedMembers.size > 0) {
           /* Faded rather than hidden: an edge that vanishes changes the shape
@@ -1116,7 +1116,7 @@ export default function GraphCanvas({
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (!st.expandedMembers.has(src) && !st.expandedMembers.has(tgt)) {
-            res.color = dimToCanvas(res.color as string, 0.12);
+            res.color = dimToCanvas(res.color as string, DIM.edge);
           }
         }
 

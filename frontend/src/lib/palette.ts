@@ -78,6 +78,27 @@ function parse(color: string): [number, number, number, number] | null {
  * 5.24:1 to 1.25:1 on dark and 3.34:1 to 1.22:1 on light — still legible as
  * shape and position, no longer competing for attention.
  */
+/**
+ * How much colour survives each kind of dimming, as a share of the original.
+ *
+ * Collected here because they only make sense relative to one another: the
+ * ordering is the meaning. A glance recedes less than a decision, and the node
+ * you opened stays ahead of both.
+ */
+export const DIM = {
+  /** Nothing selected, pointer over a node. */
+  hover: 0.12,
+  /** A package group is open; this is not part of it. */
+  group: 0.08,
+  /** A node is selected; this is not it or a neighbour. */
+  selection: 0.07,
+  /** Edges recede further than nodes: they are thin, and there are more of
+      them, so at equal strength they read as the louder layer. */
+  edge: 0.05,
+  /** The group node that was clicked open. */
+  openHub: 0.5,
+} as const;
+
 export function dimToCanvas(color: string, keep: number): string {
   const c = parse(color);
   const bg = parse(token("--g-canvas", "#0A1622"));
