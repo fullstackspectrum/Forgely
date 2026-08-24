@@ -235,6 +235,9 @@ export interface Separation {
   readonly passes: number;
   /** Pairs still closer than the required gap, once finished. */
   readonly unresolved: number;
+  /** False when the nodes cannot fit the viewport at their drawn sizes, in
+   *  which case no passes are run: only smaller nodes or fewer of them help. */
+  readonly feasible: boolean;
 }
 
 /**
@@ -259,7 +262,10 @@ export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX):
     ids.push(id);
     xs.push(a.x as number);
     ys.push(a.y as number);
-    radii.push(((a.size as number) ?? 1) / 2);
+    /* sigma's `size` is a node's radius in pixels, not its diameter. Halving
+       it here asked for half the space every node actually occupies, which is
+       why separated nodes still touched. */
+    radii.push((a.size as number) ?? 1);
   });
 
   const n = ids.length;
@@ -275,6 +281,23 @@ export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX):
   const pad = NODE_GAP_PX * unitsPerPx;
   const r = radii.map((v) => v * unitsPerPx);
   const cell = finished ? 1 : Math.max(2 * Math.max(...r) + pad, span / 1000);
+
+  /* Refuse a job that cannot be done.
+   *
+   * Separation can only move nodes, not shrink them, so it needs the nodes to
+   * fit in the space available. On neuro-packages they do not: 7,001 nodes at
+   * their drawn sizes cover 175% of the viewport, and asking anyway spends
+   * ~600ms spreading the layout ~30% wider — which, once sigma fits that back
+   * to the viewport, leaves marginally *more* overlap than it started with
+   * (85,083 pairs to 87,732). Better to leave the layout alone and say so.
+   *
+   * The margin is generous because packing is never perfect: circles cover at
+   * most ~91% of a plane even when arranged ideally, and a force layout is not
+   * arranging them ideally. */
+  const nodeArea = radii.reduce((t, v) => t + Math.PI * (v + NODE_GAP_PX / 2) ** 2, 0);
+  const canvasArea = viewportPx * viewportPx * 0.6;
+  const feasible = nodeArea <= canvasArea;
+  if (!feasible) finished = true;
 
   const commit = () => {
     for (let i = 0; i < n; i++) {
@@ -344,6 +367,8 @@ export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX):
   return {
     get passes() { return passes; },
     get unresolved() { return unresolved; },
+    /** False when the nodes cannot fit the viewport at their drawn sizes. */
+    get feasible() { return feasible; },
     step(count: number): boolean {
       if (finished) return true;
       for (let k = 0; k < count; k++) {
@@ -376,6 +401,115 @@ export function resolveOverlaps(
   const sep = beginSeparation(graph, viewportPx);
   while (!sep.step(1)) { /* keep going */ }
   return { passes: sep.passes, unresolved: sep.unresolved };
+}
+
+/**
+ * Lay every node on one ring, sized so none of them touches.
+ *
+ * graphology's `circular` puts nodes on a unit circle regardless of how big
+ * they are, so a graph either has room by luck or does not. The radius here
+ * comes from what the nodes need: a circumference of the summed diameters
+ * plus a gap each. Arc is shared in proportion to size, so a large hub takes
+ * the room it needs from its neighbours rather than sitting on top of them.
+ *
+ * Positions are in pixels at fit-all, which is the scale sigma renders at when
+ * the whole layout is in view.
+ */
+export function assignCircle(graph: Graph, gap = NODE_GAP_PX): void {
+  const ids: string[] = [];
+  graph.forEachNode((id, a) => { if (a.nodeType !== "echo") ids.push(id); });
+  if (ids.length === 0) return;
+  if (ids.length === 1) {
+    graph.setNodeAttribute(ids[0], "x", 0);
+    graph.setNodeAttribute(ids[0], "y", 0);
+    return;
+  }
+
+  const width = (id: string) => 2 * ((graph.getNodeAttribute(id, "size") as number) ?? 1) + gap;
+  const need = ids.reduce((t, id) => t + width(id), 0);
+  const radius = need / (2 * Math.PI);
+
+  let acc = 0;
+  for (const id of ids) {
+    const share = width(id) / need;
+    const angle = (acc + share / 2) * 2 * Math.PI;
+    acc += share;
+    graph.setNodeAttribute(id, "x", Math.cos(angle) * radius);
+    graph.setNodeAttribute(id, "y", Math.sin(angle) * radius);
+  }
+}
+
+/**
+ * Concentric rings by distance from a root, each sized to hold its own members.
+ *
+ * The previous "radial" layout was `circular` with the root moved to the
+ * middle, which is a ring with a hole in it rather than a radial arrangement —
+ * every node sat at the same distance whatever its relationship to the root.
+ *
+ * A ring's radius is the larger of two constraints: enough circumference for
+ * the nodes on it, and enough clearance from the ring inside it. Nodes with no
+ * path to the root go on one final ring of their own rather than being dropped
+ * at the origin.
+ */
+export function assignRings(graph: Graph, root: string | null, gap = NODE_GAP_PX): void {
+  const ids: string[] = [];
+  graph.forEachNode((id, a) => { if (a.nodeType !== "echo") ids.push(id); });
+  if (ids.length === 0) return;
+
+  const depth = new Map<string, number>();
+  if (root && graph.hasNode(root)) {
+    depth.set(root, 0);
+    let frontier = [root];
+    while (frontier.length) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        const d = depth.get(id)!;
+        graph.forEachNeighbor(id, (other) => {
+          if (depth.has(other)) return;
+          depth.set(other, d + 1);
+          next.push(other);
+        });
+      }
+      frontier = next;
+    }
+  }
+
+  /* Anything unreachable still has to go somewhere visible. */
+  const maxDepth = Math.max(0, ...depth.values());
+  const orphanRing = maxDepth + 1;
+  const rings = new Map<number, string[]>();
+  for (const id of ids) {
+    const d = depth.get(id) ?? orphanRing;
+    const list = rings.get(d);
+    if (list) list.push(id);
+    else rings.set(d, [id]);
+  }
+
+  const radiusOf = (id: string) => (graph.getNodeAttribute(id, "size") as number) ?? 1;
+
+  let inner = 0;
+  for (const d of [...rings.keys()].sort((a, b) => a - b)) {
+    const members = rings.get(d)!;
+    if (d === 0 && members.length === 1) {
+      graph.setNodeAttribute(members[0], "x", 0);
+      graph.setNodeAttribute(members[0], "y", 0);
+      inner = radiusOf(members[0]);
+      continue;
+    }
+    const widest = Math.max(...members.map(radiusOf));
+    const need = members.reduce((t, id) => t + 2 * radiusOf(id) + gap, 0);
+    const radius = Math.max(need / (2 * Math.PI), inner + widest + gap);
+
+    let acc = 0;
+    for (const id of members) {
+      const share = (2 * radiusOf(id) + gap) / need;
+      const angle = (acc + share / 2) * 2 * Math.PI;
+      acc += share;
+      graph.setNodeAttribute(id, "x", Math.cos(angle) * radius);
+      graph.setNodeAttribute(id, "y", Math.sin(angle) * radius);
+    }
+    inner = radius + widest;
+  }
 }
 
 /** Translate every node so `node` sits exactly at the origin. */

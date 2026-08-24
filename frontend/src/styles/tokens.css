@@ -161,6 +161,19 @@
   --g-canvas: var(--fg-n-50);
   --g-node-stroke: var(--fg-n-0);
 
+  /* Org-graph node kinds on the canvas.
+     The blue ramp's lighter steps are made for dark backgrounds — on the light
+     canvas --fg-blue-100 reads 1.41:1, which is invisible. These are the same
+     hues darkened to clear 3:1 (WCAG 1.4.11, non-text), keeping the ordering
+     that makes the ramp mean something. */
+  --g-org-org:         #B26A00;
+  --g-org-repo:        #2E6FB0;
+  --g-org-team:        #3D7EBE;
+  --g-org-user:        #4C7FA6;
+  --g-org-service:     #5E7C91;
+  --g-org-upstream:    #6B7C8C;
+  --g-org-entitlement: #7A6A50;
+
   /* Light-canvas equivalents, darkened to hold 3:1 against --fg-n-50. */
   --g-sev-critical: #D62B20;
   --g-sev-high:     #C25E00;
@@ -229,6 +242,15 @@
   --c-overlay:        rgba(18, 32, 46, 0.92);
   --c-overlay-strong: rgba(18, 32, 46, 0.97);
   --c-scrim:          rgba(10, 22, 34, 0.65);
+
+  /* On the dark canvas the ramp works as authored. */
+  --g-org-org:         var(--c-origin);
+  --g-org-repo:        var(--fg-blue-400);
+  --g-org-team:        var(--fg-blue-300);
+  --g-org-user:        var(--fg-blue-200);
+  --g-org-service:     var(--fg-blue-100);
+  --g-org-upstream:    var(--fg-n-300);
+  --g-org-entitlement: var(--fg-n-400);
 
   --g-hop-far: var(--fg-n-600);
   --g-edge-muted: var(--fg-n-700);
