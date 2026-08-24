@@ -7,7 +7,10 @@ const SHAPE_CLASS: Record<string, string> = {
 };
 
 export default function OrgLegend() {
-  const [collapsed, setCollapsed] = useState(false);
+  /* Collapsed by default: the key teaches the vocabulary once, and after
+     that it is a box sitting over the graph. The header stays visible so
+     it can be opened again. */
+  const [collapsed, setCollapsed] = useState(true);
 
   return (
     <div className={`legend${collapsed ? " legend-collapsed" : ""}`}>
