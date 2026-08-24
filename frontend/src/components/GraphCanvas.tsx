@@ -931,6 +931,12 @@ export default function GraphCanvas({
           res.highlighted = true;
           res.size = (attrs.size ?? 1) * 1.25;
           res.zIndex = 9;
+          /* Tilt on hover, as selection does: the mark's centre cell is the
+             displaced one, so displacement is how this design says "this one".
+             Only squares — a tilted hexagon is just a hexagon, and dependencies
+             are hexagons precisely to read as a different kind of thing. The
+             repository already carries the tilt permanently. */
+          if (attrs.type === "square") res.type = "tilted";
         } else if (st.selectedNode) {
           if (node === st.selectedNode) {
             /* The origin: the one thing under investigation (§1). Ember fill,
