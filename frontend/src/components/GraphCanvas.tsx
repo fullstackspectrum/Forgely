@@ -212,8 +212,12 @@ export default function GraphCanvas({
      whole graph by eye, which is the problem grouping was meant to solve. */
   const expandedMembers = useMemo(() => {
     const out = new Set<string>();
-    for (const name of expandedGroups)
-      for (const id of versionsByName.get(name) ?? []) out.add(id);
+    for (const name of expandedGroups) {
+      const ids = versionsByName.get(name);
+      if (!ids || ids.length <= 1) continue; // never had a group node
+      out.add(GROUP_PREFIX + name); // the hub the versions hang off
+      for (const id of ids) out.add(id);
+    }
     return out;
   }, [expandedGroups, versionsByName]);
 
@@ -233,8 +237,11 @@ export default function GraphCanvas({
       });
       regroupRef.current = { seed, camera: sigmaRef.current?.getCamera().getState() };
     }
+    /* Whatever was under the pointer is about to be replaced, and a hover on a
+       node that no longer exists would dim the graph against nothing. */
+    onNodeHover(null);
     setExpandedGroups(next);
-  }, []);
+  }, [onNodeHover]);
 
   /* Anything pointed at from outside the canvas — a search hit, a selection
      made in a panel — names a specific version. While that version is
@@ -307,8 +314,14 @@ export default function GraphCanvas({
       return true;
     };
 
+    /* hasNode guards, not decoration: graphology throws NotFoundGraphError
+       from forEachEdge on an id it does not hold, and that exception escapes
+       this effect before stateRef is assigned — leaving every reducer reading
+       the previous render's state. Opening a group deletes the very node the
+       pointer is sitting on, so this fired on every single expand and was why
+       the graph kept its old appearance. */
     const neighbors = new Set<string>();
-    if (selectedNode && graphRef.current) {
+    if (selectedNode && graphRef.current?.hasNode(selectedNode)) {
       graphRef.current.forEachEdge(selectedNode, (_e, attrs, src, tgt) => {
         if (!traversable(attrs)) return;
         neighbors.add(src === selectedNode ? tgt : src);
@@ -354,7 +367,7 @@ export default function GraphCanvas({
     }
 
     const hoverNeighbors = new Set<string>();
-    if (hoveredNode && graphRef.current) {
+    if (hoveredNode && graphRef.current?.hasNode(hoveredNode)) {
       graphRef.current.forEachEdge(hoveredNode, (_e, attrs, src, tgt) => {
         if (!traversable(attrs)) return;
         hoverNeighbors.add(src === hoveredNode ? tgt : src);
@@ -593,10 +606,14 @@ export default function GraphCanvas({
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
+      /* Hub to version. Straight and unarrowed: it is not a relationship the
+         API reported, it is the group holding its own versions, and drawing it
+         like a dependency would claim something false about the data. */
+      const isGroup = edge.type === "group_member";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
-        size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
-        type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
+        size: isGroup ? 1.2 : isSharedCve ? 2.5 : isDep ? 0.4 : 2,
+        color: isGroup ? "rgba(133, 183, 235,0.45)" : isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
+        type: isGroup ? "line" : isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -1097,7 +1114,10 @@ export default function GraphCanvas({
         const name = node.slice(GROUP_PREFIX.length);
         changeGroups((prev) => {
           const next = new Set(prev);
-          next.add(name);
+          /* The hub stays on screen once open, so the same click closes it —
+             otherwise the only way back is double-clicking the background. */
+          if (next.has(name)) next.delete(name);
+          else next.add(name);
           return next;
         });
         return;
