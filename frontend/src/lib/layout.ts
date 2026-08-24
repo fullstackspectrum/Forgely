@@ -235,6 +235,9 @@ export interface Separation {
   readonly passes: number;
   /** Pairs still closer than the required gap, once finished. */
   readonly unresolved: number;
+  /** False when the nodes cannot fit the viewport at their drawn sizes, in
+   *  which case no passes are run: only smaller nodes or fewer of them help. */
+  readonly feasible: boolean;
 }
 
 /**
@@ -278,6 +281,23 @@ export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX):
   const pad = NODE_GAP_PX * unitsPerPx;
   const r = radii.map((v) => v * unitsPerPx);
   const cell = finished ? 1 : Math.max(2 * Math.max(...r) + pad, span / 1000);
+
+  /* Refuse a job that cannot be done.
+   *
+   * Separation can only move nodes, not shrink them, so it needs the nodes to
+   * fit in the space available. On the language repository they do not: 7,001 nodes at
+   * their drawn sizes cover 175% of the viewport, and asking anyway spends
+   * ~600ms spreading the layout ~30% wider — which, once sigma fits that back
+   * to the viewport, leaves marginally *more* overlap than it started with
+   * (85,083 pairs to 87,732). Better to leave the layout alone and say so.
+   *
+   * The margin is generous because packing is never perfect: circles cover at
+   * most ~91% of a plane even when arranged ideally, and a force layout is not
+   * arranging them ideally. */
+  const nodeArea = radii.reduce((t, v) => t + Math.PI * (v + NODE_GAP_PX / 2) ** 2, 0);
+  const canvasArea = viewportPx * viewportPx * 0.6;
+  const feasible = nodeArea <= canvasArea;
+  if (!feasible) finished = true;
 
   const commit = () => {
     for (let i = 0; i < n; i++) {
@@ -347,6 +367,8 @@ export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX):
   return {
     get passes() { return passes; },
     get unresolved() { return unresolved; },
+    /** False when the nodes cannot fit the viewport at their drawn sizes. */
+    get feasible() { return feasible; },
     step(count: number): boolean {
       if (finished) return true;
       for (let k = 0; k < count; k++) {
