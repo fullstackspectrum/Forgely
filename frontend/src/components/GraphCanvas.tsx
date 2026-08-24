@@ -479,10 +479,17 @@ export default function GraphCanvas({
       sigma.refresh();
       sigma.getCamera().animatedReset({ duration: 400 });
       layoutRef.current?.();
-      layoutRef.current = refineForceLayout(graph, repoNode, () => {
-        sigma.refresh();
-        sigma.getCamera().animatedReset({ duration: 400 });
-      });
+      layoutRef.current = refineForceLayout(
+        graph,
+        repoNode,
+        () => {
+          sigma.refresh();
+          sigma.getCamera().animatedReset({ duration: 400 });
+        },
+        /* Nodes are still moving, so skip reindexing until they stop; the
+           full refresh above restores hit-testing. */
+        () => sigma.refresh({ skipIndexation: true }),
+      );
       return () => { layoutRef.current?.(); layoutRef.current = null; };
     }
 
@@ -1267,11 +1274,16 @@ export default function GraphCanvas({
          not exist until sigma has processed them. */
       if (regroup.focus) focusNodes(sigma, regroup.focus, { duration: 500 });
     } else {
-      layoutRef.current = refineForceLayout(graph, repoNode, () => {
-        if (cancelled) return;
-        sigma.refresh();
-        sigma.getCamera().animatedReset({ duration: 400 });
-      });
+      layoutRef.current = refineForceLayout(
+        graph,
+        repoNode,
+        () => {
+          if (cancelled) return;
+          sigma.refresh();
+          sigma.getCamera().animatedReset({ duration: 400 });
+        },
+        () => { if (!cancelled) sigma.refresh({ skipIndexation: true }); },
+      );
     }
 
     } catch (err) {
