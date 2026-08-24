@@ -24,8 +24,10 @@ export default function Legend({ collapsed, onToggle }: Props) {
           <div className="legend-items">
             {(["Critical", "High", "Medium", "Low", "None"] as const).map((sev) => (
               <span key={sev}>
-                {/* Mirrors the canvas: blue node body, severity as a ring whose
-                    thickness scales with the level so it survives greyscale. */}
+                {/* Mirrors the canvas: blue node body, severity as a ring of
+                    one width in the level's colour. Width is read from the
+                    same constant the canvas uses, so the key cannot drift from
+                    what it is describing. */}
                 <i
                   className="legend-node-ring"
                   style={{
