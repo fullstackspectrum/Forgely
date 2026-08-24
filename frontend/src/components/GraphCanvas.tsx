@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import { GROUP_PREFIX, groupPackages } from "../lib/groupPackages";
 
 
 import Sigma from "sigma";
@@ -184,6 +185,34 @@ export default function GraphCanvas({
   onEdgeStyleChange,
   onOpenAttackGraph,
 }: Props) {
+  /* Packages sharing a name collapse to one node until the user opens them.
+     Held here rather than fetched: the graph is already in memory, so this is
+     a local transform and expanding is instant. */
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const grouped = useMemo(() => groupPackages(data, expandedGroups), [data, expandedGroups]);
+
+  /* Anything pointed at from outside the canvas — a search hit, a selection
+     made in a panel — names a specific version. While that version is
+     collapsed its id is not in the graph, so the highlight would land on
+     nothing and search would appear broken. Open the groups that contain
+     them. */
+  useEffect(() => {
+    const wanted = [...searchResults, ...(selectedNode ? [selectedNode] : [])];
+    if (wanted.length === 0) return;
+    const nameOf = new Map<string, string>();
+    for (const [gid, ids] of Object.entries(grouped.groupMembers)) {
+      const name = gid.slice(GROUP_PREFIX.length);
+      for (const id of ids) nameOf.set(id, name);
+    }
+    const toOpen = wanted.map((id) => nameOf.get(id)).filter(Boolean) as string[];
+    if (toOpen.length === 0) return;
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      for (const n of toOpen) next.add(n);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [searchResults, selectedNode, grouped.groupMembers]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -450,16 +479,21 @@ export default function GraphCanvas({
     const nodeData: Record<string, NodeData> = {};
 
     /* --- Add nodes --- */
-    for (const node of data.nodes) {
+    for (const node of grouped.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
 
+      const groupSize = grouped.groupMembers[node.id]?.length ?? 0;
       const size =
         node.type === "repo"
           ? 48
           : node.type === "dependency"
             ? 6
-            : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
+            : groupSize
+              /* Sized by how many versions it stands for, so a fifty-version
+                 group reads as a cluster rather than as one package. */
+              ? Math.max(18, Math.min(44, 16 + Math.sqrt(groupSize) * 4))
+              : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
@@ -473,7 +507,10 @@ export default function GraphCanvas({
          origin once the BFS has run — this is what shows before any of that. */
 
       graph.addNode(node.id, {
-        label: node.type === "repo" ? "" : node.label,
+        label:
+          node.type === "repo" ? ""
+            : groupSize ? `${node.label} (${groupSize})`
+              : node.label,
         size,
         color: fill,
         borderColor: ring.borderColor,
@@ -481,6 +518,9 @@ export default function GraphCanvas({
         x: 0,
         y: 0,
         nodeType: node.type,
+        /* Set only on collapsed groups; the reducer and click handler both
+           key off it. */
+        groupCount: groupSize || undefined,
         severity: sev,
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
@@ -502,7 +542,7 @@ export default function GraphCanvas({
     /* --- Add edges --- */
     const useCurved = edgeStyle === "curved";
     let edgeIdx = 0;
-    for (const edge of data.edges) {
+    for (const edge of grouped.edges) {
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
@@ -939,6 +979,17 @@ export default function GraphCanvas({
 
     /* Events */
     sigma.on("clickNode", ({ node }) => {
+      /* A collapsed group opens rather than selects: there is no single
+         package behind it to show. */
+      if (node.startsWith(GROUP_PREFIX)) {
+        const name = node.slice(GROUP_PREFIX.length);
+        setExpandedGroups((prev) => {
+          const next = new Set(prev);
+          next.add(name);
+          return next;
+        });
+        return;
+      }
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeSelect(node);
       setContextMenu(null);
@@ -958,6 +1009,12 @@ export default function GraphCanvas({
     sigma.on("downNode", () => { setCursor("grabbing"); });
     sigma.on("clickNode", ({ node }) => { if (graph.getNodeAttribute(node, "nodeType") !== "echo") setCursor("grab"); });
     sigma.on("clickStage", () => { onNodeSelect(null); setContextMenu(null); });
+    /* Double-clicking the background collapses every group again — without a
+       way back, opening a fifty-version group is a one-way trip. */
+    sigma.on("doubleClickStage", (e) => {
+      e.preventSigmaDefault();
+      setExpandedGroups(new Set());
+    });
 
     /* Right-click context menu for package nodes */
     const handleContextMenu = (e: MouseEvent) => {
@@ -1048,7 +1105,7 @@ export default function GraphCanvas({
         graphRef.current = null;
       }
     };
-  }, [data]);
+  }, [grouped]);
 
   /* Close context menu on outside click */
   useEffect(() => {

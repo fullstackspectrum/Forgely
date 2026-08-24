@@ -45,6 +45,9 @@ export default function Legend() {
             <span>
               <i className="dot-hexagon" style={{ background: "var(--fg-blue-300)" }} /> Dependency
             </span>
+            <span>
+              <i className="dot" style={{ background: "var(--fg-blue-400)" }} /> Name (n) — click to show versions
+            </span>
           </div>
           <div className="legend-edges">
             <span>
