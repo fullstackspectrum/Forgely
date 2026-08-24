@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ORG_NODE_COLORS } from "../types";
 
 const SHAPE_CLASS: Record<string, string> = {
@@ -6,14 +5,19 @@ const SHAPE_CLASS: Record<string, string> = {
   upstream: "dot-triangle",
 };
 
-export default function OrgLegend() {
-  const [collapsed, setCollapsed] = useState(false);
+/* State lives in App so it can be persisted and reset, and so both keys
+   agree — one open and one closed across tabs reads as a bug. */
+interface Props {
+  collapsed: boolean;
+  onToggle: () => void;
+}
 
+export default function OrgLegend({ collapsed, onToggle }: Props) {
   return (
     <div className={`legend${collapsed ? " legend-collapsed" : ""}`}>
       <div className="legend-header">
         <div className="legend-title">Workspace</div>
-        <button className="collapse-toggle-btn" onClick={() => setCollapsed(c => !c)} title={collapsed ? "Show legend" : "Hide legend"}>
+        <button className="collapse-toggle-btn" onClick={onToggle} title={collapsed ? "Show legend" : "Hide legend"}>
           {collapsed ? "▲" : "▼"}
         </button>
       </div>

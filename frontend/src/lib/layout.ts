@@ -170,6 +170,214 @@ export function placeRadially(graph: Graph, seed?: Map<string, Point>): string |
   return repoNode;
 }
 
+/* Space every node has to itself, in screen pixels, on top of its own radius.
+ *
+ * ForceAtlas2's adjustSizes only discourages overlap through repulsion; it
+ * does not forbid it, and on a clustered graph it loses to gravity. This pass
+ * makes it a hard constraint after the fact. */
+const NODE_GAP_PX = 6;
+
+/* Assumed width of the graph viewport, in CSS pixels.
+ *
+ * Node sizes are given in pixels while positions are in graph units, so a
+ * scale is needed to compare them. Sigma fits the whole layout to the viewport
+ * at ratio 1, which makes the conversion span/viewport. Only the ratio of gap
+ * to layout matters, so an approximate width is enough — and a fixed one keeps
+ * the layout reproducible rather than depending on the window it was first
+ * drawn in. */
+const ASSUMED_VIEWPORT_PX = 1200;
+
+/* Relaxation passes. Each pass separates every overlapping pair it finds, but
+ * moving a node can push it into a third, so it converges rather than solving
+ * in one shot. The loop exits early once nothing overlaps. */
+const MAX_SEPARATION_PASSES = 200;
+
+/* Give up after this many passes without an improvement.
+ *
+ * Two ways a run stops making progress. A pair can sit just inside the
+ * required gap and oscillate across it forever, which is harmless and done
+ * after a handful of passes. Or the graph genuinely cannot satisfy the
+ * constraint — 7,001 nodes at 20px want 175% of the viewport — and passes 20
+ * through 200 buy almost nothing for most of the cost. Both are the same
+ * signal: the count stopped falling. */
+const STALL_PASSES = 8;
+
+/* A pass has to remove this share of the remaining overlaps to count as
+ * progress. A graph that cannot satisfy the constraint still chips away a
+ * fraction of a percent per pass forever — on neuro-packages that is 200
+ * passes and 1.7 seconds to halve a number that was never going to reach
+ * zero. Requiring real progress stops it while it is still worth doing. */
+const STALL_IMPROVEMENT = 0.02;
+
+/**
+ * Push nodes apart until none overlaps another.
+ *
+ * A uniform grid keeps this near linear: cells are one maximum diameter wide,
+ * so a node can only collide with something in its own cell or the eight
+ * around it, and the alternative — every pair — is 28 million comparisons on
+ * neuro-packages.
+ *
+ * The layout expands where it has to. That is the point: the constraint is
+ * measured against the span the layout settled at, so satisfying it can only
+ * mean taking more room, and sigma fits whatever comes out back to the
+ * viewport afterwards.
+ *
+ * What this cannot do is make a graph fit that does not: 7,001 nodes at 20px
+ * cover 175% of a 1400x900 viewport, so at fit-all they must overlap whatever
+ * any layout does. What it removes is *clumping*, which is scale-free — a
+ * clump stays a clump at every zoom level, while an evenly spread graph
+ * separates as soon as you zoom in.
+ */
+export interface Separation {
+  /** Run `passes` relaxation passes. Returns true once there is no more to do. */
+  step(passes: number): boolean;
+  /** Passes run so far. */
+  readonly passes: number;
+  /** Pairs still closer than the required gap, once finished. */
+  readonly unresolved: number;
+}
+
+/**
+ * Begin separating overlapping nodes, one slice at a time.
+ *
+ * Sliced for the same reason the force layout is: a pass over 7,001 nodes
+ * costs about 10ms, and running to completion in one go blocks for half a
+ * second. State is held here rather than re-derived per slice, so the pixel
+ * scale stays fixed at the span the layout settled at — recomputing it as the
+ * graph spreads would make the constraint chase its own tail.
+ */
+export function beginSeparation(graph: Graph, viewportPx = ASSUMED_VIEWPORT_PX): Separation {
+  const ids: string[] = [];
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const radii: number[] = [];
+
+  graph.forEachNode((id, a) => {
+    /* Echo rings are pinned to their parent every frame and would fight this
+       for the same space. */
+    if (a.nodeType === "echo") return;
+    ids.push(id);
+    xs.push(a.x as number);
+    ys.push(a.y as number);
+    radii.push(((a.size as number) ?? 1) / 2);
+  });
+
+  const n = ids.length;
+  const span = n < 2 ? 0 : layoutSpan(xs.map((x, i) => ({ x, y: ys[i] })));
+
+  let passes = 0;
+  let unresolved = 0;
+  let best = Infinity;
+  let stalled = 0;
+  let finished = n < 2 || !span;
+
+  const unitsPerPx = span / viewportPx;
+  const pad = NODE_GAP_PX * unitsPerPx;
+  const r = radii.map((v) => v * unitsPerPx);
+  const cell = finished ? 1 : Math.max(2 * Math.max(...r) + pad, span / 1000);
+
+  const commit = () => {
+    for (let i = 0; i < n; i++) {
+      graph.setNodeAttribute(ids[i], "x", xs[i]);
+      graph.setNodeAttribute(ids[i], "y", ys[i]);
+    }
+  };
+
+  /* One relaxation pass. A uniform grid keeps it near linear: cells are one
+     maximum diameter wide, so a node can only collide with something in its
+     own cell or the eight around it. Comparing every pair instead is 24
+     million tests on neuro-packages. */
+  const onePass = (): number => {
+    let minx = Infinity, miny = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (xs[i] < minx) minx = xs[i];
+      if (ys[i] < miny) miny = ys[i];
+    }
+    const key = (cx: number, cy: number) => cx * 1e6 + cy;
+    const cellX = (i: number) => Math.floor((xs[i] - minx) / cell);
+    const cellY = (i: number) => Math.floor((ys[i] - miny) / cell);
+
+    const buckets = new Map<number, number[]>();
+    for (let i = 0; i < n; i++) {
+      const k = key(cellX(i), cellY(i));
+      const b = buckets.get(k);
+      if (b) b.push(i);
+      else buckets.set(k, [i]);
+    }
+
+    let collisions = 0;
+    for (let i = 0; i < n; i++) {
+      const cx = cellX(i);
+      const cy = cellY(i);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const b = buckets.get(key(cx + dx, cy + dy));
+          if (!b) continue;
+          for (const j of b) {
+            if (j <= i) continue; // each pair once
+            const min = r[i] + r[j] + pad;
+            let ddx = xs[j] - xs[i];
+            let ddy = ys[j] - ys[i];
+            let d = Math.hypot(ddx, ddy);
+            if (d >= min) continue;
+            collisions++;
+            if (d === 0) {
+              /* Exactly coincident, which the radial scatter can produce. Any
+                 direction will do, but it has to be deterministic or the same
+                 graph lays out differently on each load. */
+              ddx = Math.cos(i);
+              ddy = Math.sin(i);
+              d = 1;
+            }
+            const push = (min - d) / 2 / d;
+            xs[i] -= ddx * push;
+            ys[i] -= ddy * push;
+            xs[j] += ddx * push;
+            ys[j] += ddy * push;
+          }
+        }
+      }
+    }
+    return collisions;
+  };
+
+  return {
+    get passes() { return passes; },
+    get unresolved() { return unresolved; },
+    step(count: number): boolean {
+      if (finished) return true;
+      for (let k = 0; k < count; k++) {
+        const collisions = onePass();
+        passes++;
+        if (collisions === 0) {
+          finished = true;
+          break;
+        }
+        if (collisions < best * (1 - STALL_IMPROVEMENT)) {
+          best = collisions;
+          stalled = 0;
+        } else if (++stalled >= STALL_PASSES || passes >= MAX_SEPARATION_PASSES) {
+          finished = true;
+          unresolved = collisions;
+          break;
+        }
+      }
+      commit();
+      return finished;
+    },
+  };
+}
+
+/** Run separation to completion. Blocking; used by tests and small graphs. */
+export function resolveOverlaps(
+  graph: Graph,
+  viewportPx = ASSUMED_VIEWPORT_PX,
+): { passes: number; unresolved: number } {
+  const sep = beginSeparation(graph, viewportPx);
+  while (!sep.step(1)) { /* keep going */ }
+  return { passes: sep.passes, unresolved: sep.unresolved };
+}
+
 /** Translate every node so `node` sits exactly at the origin. */
 function centreOn(graph: Graph, node: string | null): void {
   if (!node || !graph.hasNode(node)) return;
@@ -223,6 +431,8 @@ export function refineForceLayout(
   graph: Graph,
   repoNode: string | null,
   onSettled?: () => void,
+  /** Called after each separation pass, to repaint while nodes are moving. */
+  onSeparationStep?: () => void,
 ): () => void {
   const total = graph.order;
 
@@ -258,10 +468,31 @@ export function refineForceLayout(
   let raf = 0;
   let cancelled = false;
 
+  /* Separation runs after the force layout, not during it: FA2 would undo it
+     on the next iteration, and it only makes sense against a settled span. */
+  const separate = () => {
+    if (cancelled) return;
+    const sep = beginSeparation(graph);
+    const tick = () => {
+      if (cancelled) return;
+      /* One pass per frame. A pass costs ~10ms on 7,001 nodes, so a bigger
+         slice drops frames on exactly the graphs that need the most passes. */
+      if (sep.step(1)) {
+        centreOn(graph, repoNode);
+        onSettled?.();
+        return;
+      }
+      centreOn(graph, repoNode);
+      onSeparationStep?.();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  };
+
   const finish = () => {
     if (cancelled) return;
     centreOn(graph, repoNode);
-    onSettled?.();
+    separate();
   };
 
   /* Probe: one iteration, timed and measured. Tells us both how much this

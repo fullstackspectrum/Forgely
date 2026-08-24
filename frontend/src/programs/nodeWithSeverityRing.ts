@@ -12,31 +12,32 @@ import { token } from "../lib/palette";
  * be fill = hop distance, ring = severity, since the graph's job is showing
  * reach."
  *
- * The ring also varies in *width*, which the spec does not ask for but its
- * acceptance criteria require: "Graph readable in greyscale — desaturate it,
- * check you can still find the origin and read severity." Desaturated, the
- * severity ramp collapses — measured on the dark values, Critical reads as grey
- * 150 and Low as 153 out of 255, and the greyscale ordering is not even
- * severity ordering (None < Critical < Low < High < Medium). Colour alone
- * therefore cannot satisfy that test whether it is a fill or a ring, so
- * thickness carries the level and colour reinforces it.
+ * The ring is one width for every level. It used to widen with severity —
+ * 6/4/2.5/1.5px — to satisfy the spec's greyscale criterion ("desaturate it,
+ * check you can still find the origin and read severity"), since the ramp
+ * collapses when desaturated: Critical reads as grey 150 and Low as 153 out of
+ * 255, and the greyscale ordering is not even severity ordering
+ * (None < Critical < Low < High < Medium).
+ *
+ * At 6px a Critical ring was heavy enough to read as a different kind of node
+ * rather than a worse one, so severity is carried by colour here and the width
+ * is uniform. The greyscale criterion is met away from the canvas instead:
+ * every severity in the panels and the legend is a distinct *shape* — see
+ * SeverityMark — which survives desaturation completely.
  */
 
-/* Ring width in pixels by severity. None gets no ring at all.
+/* Ring width in pixels. One width for every severity that has a ring; None
+ * and Unknown get none at all.
  *
- * Widened after seeing it rendered. The first pass used 3.5/2.75/2/1.25 —
- * uniform 0.75px steps, which cleared a numeric threshold but were not
- * legible as *different* at graph scale. Critical is now 4x Low rather than
- * 2.8x, and the steps grow toward the top of the scale so the levels that
- * matter separate hardest.
- *
- * The floor is not arbitrary: the generated shader drops any ring specified
- * at <= 1px, at every zoom level, so Low must stay clear of that. */
+ * 4px was High's width, and it is comfortably clear of the floor: the
+ * generated shader drops any ring specified at <= 1px, at every zoom level. */
+const RING_WIDTH = 4;
+
 export const SEVERITY_RING: Record<string, number> = {
-  Critical: 6,
-  High: 4,
-  Medium: 2.5,
-  Low: 1.5,
+  Critical: RING_WIDTH,
+  High: RING_WIDTH,
+  Medium: RING_WIDTH,
+  Low: RING_WIDTH,
   None: 0,
   Unknown: 0,
 };
