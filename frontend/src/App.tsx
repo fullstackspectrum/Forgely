@@ -18,9 +18,11 @@ import WorkspaceOverviewPanel from "./components/WorkspaceOverviewPanel";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
 import ConnectModal from "./components/ConnectModal";
+import SettingsDialog from "./components/SettingsDialog";
 import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import { applyTheme, resolveTheme, storedTheme, watchSystemTheme, type Theme } from "./lib/theme";
+import { loadSettings, saveSetting, resetSettings, type Settings } from "./lib/settings";
 import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
@@ -40,14 +42,19 @@ export default function App() {
   const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
   const [filterFlagsMode, setFilterFlagsMode] = useState<"and" | "or">("and");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
-  const [layout, setLayout] = useState<LayoutType>("force");
-  const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>("curved");
+  /* Seeded from disk, then written back on every change. Read once: a second
+     loadSettings() during render would re-read localStorage on every keystroke
+     elsewhere in the app. */
+  const [settings] = useState(loadSettings);
+  const [layout, setLayout] = useState<LayoutType>(settings.layout);
+  const [edgeStyle, setEdgeStyle] = useState<EdgeStyle>(settings.edgeStyle);
   const [searchResults, setSearchResults] = useState<string[]>([]);
-  const [hideSharedCveEdges, setHideSharedCveEdges] = useState(false);
-  const [hideDependencies, setHideDependencies] = useState(false);
-  const [hideUnsupported, setHideUnsupported] = useState(false);
-  const [hideCriticalAnimation, setHideCriticalAnimation] = useState(false);
+  const [hideSharedCveEdges, setHideSharedCveEdges] = useState(settings.hideSharedCveEdges);
+  const [hideDependencies, setHideDependencies] = useState(settings.hideDependencies);
+  const [hideUnsupported, setHideUnsupported] = useState(settings.hideUnsupported);
+  const [hideCriticalAnimation, setHideCriticalAnimation] = useState(settings.hideCriticalAnimation);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasKey, setHasKey] = useState(!!getApiKey());
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
 
@@ -103,14 +110,29 @@ export default function App() {
   const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [woPanelExpanded, setWoPanelExpanded] = useState(false);
 
+  /* Apply a setting and remember it. Everything routed through here survives
+     a reload; anything calling the raw setter does not. */
+  const persist = useCallback(
+    <K extends keyof Settings>(key: K, set: (v: Settings[K]) => void) =>
+      (v: Settings[K]) => { set(v); saveSetting(key, v); },
+    [],
+  );
+
+  const changeEdgeStyle = useMemo(
+    () => persist("edgeStyle", setEdgeStyle as (v: EdgeStyle) => void),
+    [persist],
+  );
+
   /* Auto-switch edge style when layout changes */
   const handleLayoutChange = useCallback((l: LayoutType) => {
     setLayout(l);
-    if (l === "tree" || l === "horizontal") {
-      setEdgeStyle("straight");
-    } else {
-      setEdgeStyle("curved");
-    }
+    saveSetting("layout", l);
+    /* Tree and horizontal read as hierarchies; curves make the levels hard to
+       follow. The derived choice is stored too, or a reload would restore a
+       layout with the wrong edges. */
+    const style: EdgeStyle = l === "tree" || l === "horizontal" ? "straight" : "curved";
+    setEdgeStyle(style);
+    saveSetting("edgeStyle", style);
   }, []);
 
   const handleOrgLayoutChange = useCallback((l: LayoutType) => {
@@ -274,15 +296,9 @@ export default function App() {
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
-          theme={theme}
-          onThemeChange={changeTheme}
           filter={filter}
           filterFlags={filterFlags}
           filterFlagsMode={filterFlagsMode}
-          hideSharedCveEdges={hideSharedCveEdges}
-          hideDependencies={hideDependencies}
-          hideUnsupported={hideUnsupported}
-          hideCriticalAnimation={hideCriticalAnimation}
           hasKey={hasKey}
           tab={tab}
           disabled={viewMode === "workspace"}
@@ -290,12 +306,7 @@ export default function App() {
           onFilterChange={setFilter}
           onFilterFlagsChange={setFilterFlags}
           onFilterFlagsModeChange={setFilterFlagsMode}
-          onHideSharedCveEdgesChange={setHideSharedCveEdges}
-          onHideDependenciesChange={setHideDependencies}
-          onHideUnsupportedChange={setHideUnsupported}
-          onHideCriticalAnimationChange={setHideCriticalAnimation}
-          onConnectClick={() => setConnectOpen(true)}
-          onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
       {tab === "organisation" && (
@@ -305,8 +316,7 @@ export default function App() {
           filter={orgFilter}
           onFilterChange={setOrgFilter}
           onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
-          onConnectClick={() => setConnectOpen(true)}
-          onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+          onOpenSettings={() => setSettingsOpen(true)}
           onOpenAttackPaths={() => setCiemAttackPathOpen(true)}
         />
       )}
@@ -366,6 +376,35 @@ export default function App() {
         </div>
       )}
 
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        onThemeChange={changeTheme}
+        hideSharedCveEdges={hideSharedCveEdges}
+        hideDependencies={hideDependencies}
+        hideUnsupported={hideUnsupported}
+        hideCriticalAnimation={hideCriticalAnimation}
+        onHideSharedCveEdgesChange={persist("hideSharedCveEdges", setHideSharedCveEdges)}
+        onHideDependenciesChange={persist("hideDependencies", setHideDependencies)}
+        onHideUnsupportedChange={persist("hideUnsupported", setHideUnsupported)}
+        onHideCriticalAnimationChange={persist("hideCriticalAnimation", setHideCriticalAnimation)}
+        edgeStyle={edgeStyle}
+        onEdgeStyleChange={changeEdgeStyle}
+        hasKey={hasKey}
+        onConnectClick={() => setConnectOpen(true)}
+        onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+        onReset={() => {
+          const d = resetSettings();
+          setHideSharedCveEdges(d.hideSharedCveEdges);
+          setHideDependencies(d.hideDependencies);
+          setHideUnsupported(d.hideUnsupported);
+          setHideCriticalAnimation(d.hideCriticalAnimation);
+          setEdgeStyle(d.edgeStyle);
+          setLayout(d.layout);
+        }}
+      />
+
       <ConnectModal
         open={connectOpen}
         onClose={() => setConnectOpen(false)}
@@ -419,7 +458,7 @@ export default function App() {
 
               onRefresh={handleRefresh}
               onLayoutChange={handleLayoutChange}
-              onEdgeStyleChange={setEdgeStyle}
+              onEdgeStyleChange={changeEdgeStyle}
               onOpenAttackGraph={(nodeId) => { setSelectedNode(nodeId); setAttackGraphOpen(true); }}
             />
           ) : (

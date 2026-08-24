@@ -590,78 +590,6 @@ body {
 }
 
 /* Visibility toggle pills */
-.visibility-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
-.vis-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--fg-radius-md);
-  font: inherit;
-  font-size: 13px;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.vis-toggle:hover {
-  background: var(--c-tint-subtle);
-  border-color: var(--c-tint-strong);
-}
-.vis-toggle-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border-radius: var(--fg-radius-md);
-  transition: background 0.15s, color 0.15s;
-}
-.vis-toggle-label {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.vis-toggle-state {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 2px 8px;
-  border-radius: var(--fg-radius-lg);
-  flex-shrink: 0;
-}
-.vis-toggle-on .vis-toggle-icon {
-  background: rgba(55, 138, 221, 0.18);
-  color: var(--fg-blue-200);
-}
-.vis-toggle-on .vis-toggle-state {
-  color: var(--fg-blue-200);
-  background: rgba(55, 138, 221, 0.15);
-}
-.vis-toggle-off {
-  color: var(--text-muted);
-}
-.vis-toggle-off .vis-toggle-icon {
-  background: var(--c-tint-subtle);
-  color: var(--text-muted);
-}
-.vis-toggle-off .vis-toggle-state {
-  color: var(--text-muted);
-  background: var(--c-tint);
-}
-
 /* ===== Top bar (repo selector + search) ===== */
 
 .top-bar {
@@ -5748,4 +5676,176 @@ td, th,
 
 .repo-format-card {
   padding: 6px 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   Settings
+   ------------------------------------------------------------------------- */
+
+/* Bottom of the left panel. The version button sits beside it, so this takes
+   the space left over rather than stretching the pair apart. */
+.settings-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.settings-btn:hover {
+  color: var(--t-primary);
+  background: var(--c-tint-subtle);
+  border-color: var(--c-hairline);
+}
+
+.settings-btn-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Connection state, carried on the button because the control itself now lives
+   inside the dialog. */
+.settings-btn-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--t-muted);
+  /* Never colour alone: a title on the button names the state as well. */
+  box-shadow: 0 0 0 2px var(--c-scrim);
+}
+
+.settings-btn-dot.connected {
+  background: var(--s-none);
+}
+
+.settings-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--c-hairline);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+/* The label column may wrap; the control must not shrink to fit it. */
+.settings-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-row-label {
+  font-size: 13px;
+  color: var(--t-primary);
+}
+
+.settings-row-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--t-muted);
+}
+
+.settings-switch {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--c-hairline);
+  border-radius: 999px;
+  background: var(--c-tint-subtle);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.settings-switch.on {
+  background: var(--c-action);
+  border-color: var(--c-action);
+}
+
+.settings-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fg-n-0);
+  transition: transform 140ms ease;
+}
+
+.settings-switch.on .settings-switch-knob {
+  transform: translateX(16px);
+}
+
+.settings-switch:focus-visible {
+  outline: 2px solid var(--c-action);
+  outline-offset: 2px;
+}
+
+.settings-connection {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--c-hairline);
+}
+
+.settings-footer-note {
+  font-size: 11px;
+  color: var(--t-muted);
+}
+
+.settings-footer .btn {
+  flex: none;
+  width: auto;
 }

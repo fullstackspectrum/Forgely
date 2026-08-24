@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import type { Theme } from "../lib/theme";
-import ThemeToggle from "./ThemeToggle";
 import SeverityMark from "./SeverityMark";
 import type { FilterType } from "../types";
 import ChangelogModal from "./ChangelogModal";
@@ -8,15 +6,9 @@ import ChangelogModal from "./ChangelogModal";
 type TabType = "packages" | "organisation";
 
 interface Props {
-  theme: Theme;
-  onThemeChange: (t: Theme) => void;
   filter: FilterType;
   filterFlags: Set<string>;
   filterFlagsMode: "and" | "or";
-  hideSharedCveEdges: boolean;
-  hideDependencies: boolean;
-  hideUnsupported: boolean;
-  hideCriticalAnimation: boolean;
   hasKey: boolean;
   tab: TabType;
   disabled?: boolean;
@@ -24,12 +16,7 @@ interface Props {
   onFilterChange: (f: FilterType) => void;
   onFilterFlagsChange: (flags: Set<string>) => void;
   onFilterFlagsModeChange: (m: "and" | "or") => void;
-  onHideSharedCveEdgesChange: (v: boolean) => void;
-  onHideDependenciesChange: (v: boolean) => void;
-  onHideUnsupportedChange: (v: boolean) => void;
-  onHideCriticalAnimationChange: (v: boolean) => void;
-  onConnectClick: () => void;
-  onDisconnect: () => void;
+  onOpenSettings: () => void;
 }
 
 const STATUS_FILTERS: { key: string; label: string }[] = [
@@ -48,15 +35,9 @@ const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
 ];
 
 export default function FilterBar({
-  theme,
-  onThemeChange,
   filter,
   filterFlags,
   filterFlagsMode,
-  hideSharedCveEdges,
-  hideDependencies,
-  hideUnsupported,
-  hideCriticalAnimation,
   hasKey,
   tab,
   disabled = false,
@@ -64,12 +45,7 @@ export default function FilterBar({
   onFilterChange,
   onFilterFlagsChange,
   onFilterFlagsModeChange,
-  onHideSharedCveEdgesChange,
-  onHideDependenciesChange,
-  onHideUnsupportedChange,
-  onHideCriticalAnimationChange,
-  onConnectClick,
-  onDisconnect,
+  onOpenSettings,
 }: Props) {
   const [changelogOpen, setChangelogOpen] = useState(false);
   const hasAnyFilter = filter !== "all" || filterFlags.size > 0;
@@ -170,55 +146,20 @@ export default function FilterBar({
           </div>
         )}
 
-        <CollapsibleSection title="Visibility" defaultOpen={false}>
-          <div className="visibility-toggles">
-            <VisibilityToggle
-              label="Shared CVE edges"
-              visible={!hideSharedCveEdges}
-              onToggle={() => onHideSharedCveEdgesChange(!hideSharedCveEdges)}
-            />
-            <VisibilityToggle
-              label="Dependencies"
-              visible={!hideDependencies}
-              onToggle={() => onHideDependenciesChange(!hideDependencies)}
-            />
-            <VisibilityToggle
-              label="Unsupported scans"
-              visible={!hideUnsupported}
-              onToggle={() => onHideUnsupportedChange(!hideUnsupported)}
-            />
-            <VisibilityToggle
-              label="Critical animation"
-              visible={!hideCriticalAnimation}
-              onToggle={() => onHideCriticalAnimationChange(!hideCriticalAnimation)}
-            />
-          </div>
-        </CollapsibleSection>
       </div>
 
       <div className="left-panel-bottom">
-        <ThemeToggle theme={theme} onChange={onThemeChange} />
+        <button className="settings-btn" onClick={onOpenSettings} title="Settings">
+          <span className="settings-btn-icon" aria-hidden="true">⚙</span>
+          Settings
+          {/* The connection lives in the dialog now, so its state has to be
+              legible from the button or a disconnected app looks fine until
+              something fails. */}
+          <span className={`settings-btn-dot${hasKey ? " connected" : ""}`} />
+        </button>
         <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
           v{__APP_VERSION__}
         </button>
-        <div className="left-panel-connection">
-          <button
-            className={`connect-btn ${hasKey ? "connected" : ""}`}
-            onClick={onConnectClick}
-          >
-            <span className="connect-btn-dot" />
-            {hasKey ? "Connected" : "Connect"}
-          </button>
-          {hasKey && (
-            <button
-              className="disconnect-btn"
-              title="Disconnect"
-              onClick={onDisconnect}
-            >
-              ×
-            </button>
-          )}
-        </div>
       </div>
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
@@ -257,40 +198,3 @@ function CollapsibleSection({
   );
 }
 
-function VisibilityToggle({
-  label,
-  visible,
-  onToggle,
-}: {
-  label: string;
-  visible: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`vis-toggle${visible ? " vis-toggle-on" : " vis-toggle-off"}`}
-      onClick={onToggle}
-      aria-pressed={visible}
-      title={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-    >
-      <span className="vis-toggle-icon" aria-hidden="true">
-        {visible ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.77 19.77 0 0 1 5.06-5.94" />
-            <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-3.17 4.19" />
-            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-            <line x1="1" y1="1" x2="23" y2="23" />
-          </svg>
-        )}
-      </span>
-      <span className="vis-toggle-label">{label}</span>
-      <span className="vis-toggle-state">{visible ? "Visible" : "Hidden"}</span>
-    </button>
-  );
-}
