@@ -38,8 +38,10 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
-  type: "repo_package" | "dependency" | "shared_cve";
-  label: string;
+  /* "group_member" is added on the client when a package group is opened; the
+     API never sends one. */
+  type: "repo_package" | "dependency" | "shared_cve" | "group_member";
+  label?: string;
 }
 
 export interface GraphStats {

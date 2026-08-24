@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { GROUP_PREFIX, groupPackages, groupKeyOf } from "../lib/groupPackages";
 
 
 import Sigma from "sigma";
@@ -6,13 +7,14 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
-import { hopColor, withAlpha } from "../lib/palette";
+import { hopColor, withAlpha, dimToCanvas } from "../lib/palette";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
-import { placeRadially, refineForceLayout } from "../lib/layout";
+import { placeRadially, refineForceLayout, clusterAround, groupSpacing } from "../lib/layout";
+import type { Point } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
@@ -184,6 +186,85 @@ export default function GraphCanvas({
   onEdgeStyleChange,
   onOpenAttackGraph,
 }: Props) {
+  /* Packages sharing a name collapse to one node until the user opens them.
+     Held here rather than fetched: the graph is already in memory, so this is
+     a local transform and expanding is instant. */
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const grouped = useMemo(() => groupPackages(data, expandedGroups), [data, expandedGroups]);
+
+  /* Every package id that shares each name, so an opened group can find the
+     versions it is about to be replaced by. */
+  const versionsByName = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const n of data?.nodes ?? []) {
+      if (n.type !== "package") continue;
+      const k = groupKeyOf(n);
+      const list = m.get(k);
+      if (list) list.push(n.id);
+      else m.set(k, [n.id]);
+    }
+    return m;
+  }, [data]);
+
+  /* Every version an open group put on screen. Opening a group is a question
+     about one package name, so everything else recedes while it is open —
+     otherwise the versions that just appeared have to be picked out of the
+     whole graph by eye, which is the problem grouping was meant to solve. */
+  const expandedMembers = useMemo(() => {
+    const out = new Set<string>();
+    for (const name of expandedGroups) {
+      const ids = versionsByName.get(name);
+      if (!ids || ids.length <= 1) continue; // never had a group node
+      out.add(GROUP_PREFIX + name); // the hub the versions hang off
+      for (const id of ids) out.add(id);
+    }
+    return out;
+  }, [expandedGroups, versionsByName]);
+
+  /* Opening or closing a group rebuilds the graph, and a rebuild would
+     normally re-scatter and re-settle every node. Capturing where everything
+     currently sits — and where the camera is — lets the rebuild put it all
+     back, so the only thing that moves is the group being opened. */
+  const regroupRef = useRef<{ seed: Map<string, Point>; camera: unknown } | null>(null);
+
+  const changeGroups = useCallback((next: (prev: Set<string>) => Set<string>) => {
+    const g = graphRef.current;
+    if (g) {
+      const seed = new Map<string, Point>();
+      g.forEachNode((id, a) => {
+        if (a.nodeType === "echo") return; // re-derived from their parents
+        seed.set(id, { x: a.x as number, y: a.y as number });
+      });
+      regroupRef.current = { seed, camera: sigmaRef.current?.getCamera().getState() };
+    }
+    /* Whatever was under the pointer is about to be replaced, and a hover on a
+       node that no longer exists would dim the graph against nothing. */
+    onNodeHover(null);
+    setExpandedGroups(next);
+  }, [onNodeHover]);
+
+  /* Anything pointed at from outside the canvas — a search hit, a selection
+     made in a panel — names a specific version. While that version is
+     collapsed its id is not in the graph, so the highlight would land on
+     nothing and search would appear broken. Open the groups that contain
+     them. */
+  useEffect(() => {
+    const wanted = [...searchResults, ...(selectedNode ? [selectedNode] : [])];
+    if (wanted.length === 0) return;
+    const nameOf = new Map<string, string>();
+    for (const [gid, ids] of Object.entries(grouped.groupMembers)) {
+      const name = gid.slice(GROUP_PREFIX.length);
+      for (const id of ids) nameOf.set(id, name);
+    }
+    const toOpen = wanted.map((id) => nameOf.get(id)).filter(Boolean) as string[];
+    if (toOpen.length === 0) return;
+    changeGroups((prev) => {
+      const next = new Set(prev);
+      for (const n of toOpen) next.add(n);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [searchResults, selectedNode, grouped.groupMembers, changeGroups]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
@@ -213,6 +294,7 @@ export default function GraphCanvas({
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
     quarantinedDeps: new Set<string>(),
+    expandedMembers: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -232,8 +314,14 @@ export default function GraphCanvas({
       return true;
     };
 
+    /* hasNode guards, not decoration: graphology throws NotFoundGraphError
+       from forEachEdge on an id it does not hold, and that exception escapes
+       this effect before stateRef is assigned — leaving every reducer reading
+       the previous render's state. Opening a group deletes the very node the
+       pointer is sitting on, so this fired on every single expand and was why
+       the graph kept its old appearance. */
     const neighbors = new Set<string>();
-    if (selectedNode && graphRef.current) {
+    if (selectedNode && graphRef.current?.hasNode(selectedNode)) {
       graphRef.current.forEachEdge(selectedNode, (_e, attrs, src, tgt) => {
         if (!traversable(attrs)) return;
         neighbors.add(src === selectedNode ? tgt : src);
@@ -279,7 +367,7 @@ export default function GraphCanvas({
     }
 
     const hoverNeighbors = new Set<string>();
-    if (hoveredNode && graphRef.current) {
+    if (hoveredNode && graphRef.current?.hasNode(hoveredNode)) {
       graphRef.current.forEachEdge(hoveredNode, (_e, attrs, src, tgt) => {
         if (!traversable(attrs)) return;
         hoverNeighbors.add(src === hoveredNode ? tgt : src);
@@ -347,9 +435,10 @@ export default function GraphCanvas({
       sharedCveNodes,
       hasDepNodes,
       quarantinedDeps,
+      expandedMembers,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -450,16 +539,21 @@ export default function GraphCanvas({
     const nodeData: Record<string, NodeData> = {};
 
     /* --- Add nodes --- */
-    for (const node of data.nodes) {
+    for (const node of grouped.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
 
+      const groupSize = grouped.groupMembers[node.id]?.length ?? 0;
       const size =
         node.type === "repo"
           ? 48
           : node.type === "dependency"
             ? 6
-            : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
+            : groupSize
+              /* Sized by how many versions it stands for, so a fifty-version
+                 group reads as a cluster rather than as one package. */
+              ? Math.max(18, Math.min(44, 16 + Math.sqrt(groupSize) * 4))
+              : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
 
       /* Resolve icon for this node */
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
@@ -473,7 +567,10 @@ export default function GraphCanvas({
          origin once the BFS has run — this is what shows before any of that. */
 
       graph.addNode(node.id, {
-        label: node.type === "repo" ? "" : node.label,
+        label:
+          node.type === "repo" ? ""
+            : groupSize ? `${node.label} (${groupSize})`
+              : node.label,
         size,
         color: fill,
         borderColor: ring.borderColor,
@@ -481,6 +578,9 @@ export default function GraphCanvas({
         x: 0,
         y: 0,
         nodeType: node.type,
+        /* Set only on collapsed groups; the reducer and click handler both
+           key off it. */
+        groupCount: groupSize || undefined,
         severity: sev,
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
@@ -502,14 +602,18 @@ export default function GraphCanvas({
     /* --- Add edges --- */
     const useCurved = edgeStyle === "curved";
     let edgeIdx = 0;
-    for (const edge of data.edges) {
+    for (const edge of grouped.edges) {
       if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
       const isSharedCve = edge.type === "shared_cve";
       const isDep = edge.type === "dependency";
+      /* Hub to version. Straight and unarrowed: it is not a relationship the
+         API reported, it is the group holding its own versions, and drawing it
+         like a dependency would claim something false about the data. */
+      const isGroup = edge.type === "group_member";
       graph.addEdgeWithKey(`e-${edgeIdx++}`, edge.source, edge.target, {
-        size: isSharedCve ? 2.5 : isDep ? 0.4 : 2,
-        color: isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
-        type: isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
+        size: isGroup ? 1.2 : isSharedCve ? 2.5 : isDep ? 0.4 : 2,
+        color: isGroup ? "rgba(133, 183, 235,0.45)" : isSharedCve ? "rgba(232, 117, 107,0.6)" : isDep ? "rgba(133, 183, 235,0.6)" : "rgba(55, 138, 221,0.6)",
+        type: isGroup ? "line" : isSharedCve ? "dotted" : isDep ? "dotted" : (useCurved ? "curvedArrow" : "arrow"),
         curvature: isSharedCve ? 0.35 : isDep ? 0.2 : 0.15,
         edgeKind: edge.type,
         label: edge.label,
@@ -520,8 +624,42 @@ export default function GraphCanvas({
        Only the cheap scatter runs here. Settling it is deferred until sigma
        exists, so the first paint is not held behind it — on 7,544 nodes that
        was a 3.3s freeze between the loading screen disappearing and anything
-       being drawn. */
-    const repoNode = placeRadially(graph);
+       being drawn.
+
+       A regroup is different: it keeps the picture still. Every node that
+       already existed returns to where it was, the versions a group just
+       opened fan out from that group's own position, and a group that just
+       closed takes the centre of the versions it swallowed. */
+    const regroup = regroupRef.current;
+    regroupRef.current = null;
+    let seed: Map<string, Point> | undefined;
+    if (regroup) {
+      seed = new Map(regroup.seed);
+      const spacing = groupSpacing(regroup.seed.values());
+      /* A group present now but not before has just closed: it lands on the
+         centre of the versions it stands for. */
+      for (const [gid, ids] of Object.entries(grouped.groupMembers)) {
+        if (seed.has(gid)) continue;
+        const known = ids.map((id) => regroup.seed.get(id)).filter(Boolean) as Point[];
+        if (known.length === 0) continue;
+        seed.set(gid, {
+          x: known.reduce((t, q) => t + q.x, 0) / known.length,
+          y: known.reduce((t, q) => t + q.y, 0) / known.length,
+        });
+      }
+      /* Versions of a group that has just opened fan out around where the
+         group node was standing, so they visibly come out of the node that
+         was clicked. */
+      for (const name of expandedGroups) {
+        const anchor = regroup.seed.get(GROUP_PREFIX + name);
+        if (!anchor) continue;
+        const members = (versionsByName.get(name) ?? []).filter((id) => !seed!.has(id));
+        if (members.length === 0) continue;
+        const spots = clusterAround(anchor, members.length, spacing);
+        members.forEach((id, i) => seed!.set(id, spots[i]));
+      }
+    }
+    const repoNode = placeRadially(graph, seed);
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
@@ -652,6 +790,13 @@ export default function GraphCanvas({
           }
           // Hide ring when hovering dims the parent
           if (st.hoveredNode && !st.selectedNode && parentId !== st.hoveredNode && !st.hoverNeighbors.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
+          // Hide ring when an open group dims the parent. A pulsing ring is
+          // the loudest thing on the canvas; leaving it on a faded node would
+          // pull the eye straight back off the group that was opened.
+          if (!st.selectedNode && !st.hoveredNode && st.expandedMembers.size > 0 && !st.expandedMembers.has(parentId)) {
             res.hidden = true;
             return res;
           }
@@ -838,6 +983,19 @@ export default function GraphCanvas({
             res.label = "";
             res.zIndex = -1;
           }
+        } else if (st.expandedMembers.size > 0 && !st.expandedMembers.has(node)) {
+          /* A group is open and this is not one of its versions.
+             Held at 0.35 rather than selection's 0.25: nothing has been
+             selected yet, so the rest of the graph is still context to be read
+             against, not a path that has been ruled out. The repository stays
+             put — it is the centre everything is arranged around. */
+          if (attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
+            res.color = dimToCanvas(res.color as string, 0.18);
+            res.borderSize = 0;
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
+            res.label = "";
+            res.zIndex = -1;
+          }
         }
 
         return res;
@@ -903,6 +1061,15 @@ export default function GraphCanvas({
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
             res.color = "rgba(18, 32, 46, 0.08)";
           }
+        } else if (!st.selectedNode && st.expandedMembers.size > 0) {
+          /* Faded rather than hidden: an edge that vanishes changes the shape
+             of the graph, and the point of opening a group is to see it in
+             place. */
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          if (!st.expandedMembers.has(src) && !st.expandedMembers.has(tgt)) {
+            res.color = dimToCanvas(res.color as string, 0.12);
+          }
         }
 
         return res;
@@ -928,6 +1095,8 @@ export default function GraphCanvas({
           if (nodeId !== st.selectedNode && !st.neighbors.has(nodeId)) alpha = 0.08;
         } else if (st.hoveredNode) {
           if (!st.hoverNeighbors.has(nodeId) && nodeId !== st.hoveredNode && attrs.nodeType !== "repo") alpha = 0.2;
+        } else if (st.expandedMembers.size > 0) {
+          if (!st.expandedMembers.has(nodeId) && attrs.nodeType !== "repo") alpha = 0.2;
         }
 
         ctx.save();
@@ -939,6 +1108,20 @@ export default function GraphCanvas({
 
     /* Events */
     sigma.on("clickNode", ({ node }) => {
+      /* A collapsed group opens rather than selects: there is no single
+         package behind it to show. */
+      if (node.startsWith(GROUP_PREFIX)) {
+        const name = node.slice(GROUP_PREFIX.length);
+        changeGroups((prev) => {
+          const next = new Set(prev);
+          /* The hub stays on screen once open, so the same click closes it —
+             otherwise the only way back is double-clicking the background. */
+          if (next.has(name)) next.delete(name);
+          else next.add(name);
+          return next;
+        });
+        return;
+      }
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeSelect(node);
       setContextMenu(null);
@@ -958,6 +1141,12 @@ export default function GraphCanvas({
     sigma.on("downNode", () => { setCursor("grabbing"); });
     sigma.on("clickNode", ({ node }) => { if (graph.getNodeAttribute(node, "nodeType") !== "echo") setCursor("grab"); });
     sigma.on("clickStage", () => { onNodeSelect(null); setContextMenu(null); });
+    /* Double-clicking the background collapses every group again — without a
+       way back, opening a fifty-version group is a one-way trip. */
+    sigma.on("doubleClickStage", (e) => {
+      e.preventSigmaDefault();
+      changeGroups(() => new Set());
+    });
 
     /* Right-click context menu for package nodes */
     const handleContextMenu = (e: MouseEvent) => {
@@ -1010,11 +1199,19 @@ export default function GraphCanvas({
        refresh at the end is for the spatial index: the pulse loop skips
        indexation, which leaves hit-testing stale once positions have moved. */
     if (layoutRef.current) layoutRef.current();
-    layoutRef.current = refineForceLayout(graph, repoNode, () => {
-      if (cancelled) return;
+    if (regroup) {
+      /* Every position is already decided, and both settling the layout and
+         refitting the camera would move the graph out from under a user who
+         only clicked one node. */
+      if (regroup.camera) sigma.getCamera().setState(regroup.camera as never);
       sigma.refresh();
-      sigma.getCamera().animatedReset({ duration: 400 });
-    });
+    } else {
+      layoutRef.current = refineForceLayout(graph, repoNode, () => {
+        if (cancelled) return;
+        sigma.refresh();
+        sigma.getCamera().animatedReset({ duration: 400 });
+      });
+    }
 
     } catch (err) {
       console.error("Graph build failed:", err);
@@ -1048,7 +1245,7 @@ export default function GraphCanvas({
         graphRef.current = null;
       }
     };
-  }, [data]);
+  }, [grouped]);
 
   /* Close context menu on outside click */
   useEffect(() => {
