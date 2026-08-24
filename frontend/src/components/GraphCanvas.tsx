@@ -206,6 +206,17 @@ export default function GraphCanvas({
     return m;
   }, [data]);
 
+  /* Every version an open group put on screen. Opening a group is a question
+     about one package name, so everything else recedes while it is open —
+     otherwise the versions that just appeared have to be picked out of the
+     whole graph by eye, which is the problem grouping was meant to solve. */
+  const expandedMembers = useMemo(() => {
+    const out = new Set<string>();
+    for (const name of expandedGroups)
+      for (const id of versionsByName.get(name) ?? []) out.add(id);
+    return out;
+  }, [expandedGroups, versionsByName]);
+
   /* Opening or closing a group rebuilds the graph, and a rebuild would
      normally re-scatter and re-settle every node. Capturing where everything
      currently sits — and where the camera is — lets the rebuild put it all
@@ -276,6 +287,7 @@ export default function GraphCanvas({
     sharedCveNodes: new Set<string>(),
     hasDepNodes: new Set<string>(),
     quarantinedDeps: new Set<string>(),
+    expandedMembers: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -410,9 +422,10 @@ export default function GraphCanvas({
       sharedCveNodes,
       hasDepNodes,
       quarantinedDeps,
+      expandedMembers,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -763,6 +776,13 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
+          // Hide ring when an open group dims the parent. A pulsing ring is
+          // the loudest thing on the canvas; leaving it on a faded node would
+          // pull the eye straight back off the group that was opened.
+          if (!st.selectedNode && !st.hoveredNode && st.expandedMembers.size > 0 && !st.expandedMembers.has(parentId)) {
+            res.hidden = true;
+            return res;
+          }
           const phase = (st.pulsePhase / (2 * Math.PI) + (attrs as any).phaseOffset) % 1;
           const baseSize = (attrs as any).baseSize as number;
           // Each ring expands continuously from 1x → 4x its parent radius.
@@ -946,6 +966,19 @@ export default function GraphCanvas({
             res.label = "";
             res.zIndex = -1;
           }
+        } else if (st.expandedMembers.size > 0 && !st.expandedMembers.has(node)) {
+          /* A group is open and this is not one of its versions.
+             Held at 0.35 rather than selection's 0.25: nothing has been
+             selected yet, so the rest of the graph is still context to be read
+             against, not a path that has been ruled out. The repository stays
+             put — it is the centre everything is arranged around. */
+          if (attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
+            res.color = withAlpha(res.color as string, 0.35);
+            res.borderSize = 0;
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
+            res.label = "";
+            res.zIndex = -1;
+          }
         }
 
         return res;
@@ -1011,6 +1044,15 @@ export default function GraphCanvas({
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
             res.color = "rgba(18, 32, 46, 0.08)";
           }
+        } else if (!st.selectedNode && st.expandedMembers.size > 0) {
+          /* Faded rather than hidden: an edge that vanishes changes the shape
+             of the graph, and the point of opening a group is to see it in
+             place. */
+          const src = graph.source(edge);
+          const tgt = graph.target(edge);
+          if (!st.expandedMembers.has(src) && !st.expandedMembers.has(tgt)) {
+            res.color = withAlpha(res.color as string, 0.12);
+          }
         }
 
         return res;
@@ -1036,6 +1078,8 @@ export default function GraphCanvas({
           if (nodeId !== st.selectedNode && !st.neighbors.has(nodeId)) alpha = 0.08;
         } else if (st.hoveredNode) {
           if (!st.hoverNeighbors.has(nodeId) && nodeId !== st.hoveredNode && attrs.nodeType !== "repo") alpha = 0.2;
+        } else if (st.expandedMembers.size > 0) {
+          if (!st.expandedMembers.has(nodeId) && attrs.nodeType !== "repo") alpha = 0.2;
         }
 
         ctx.save();
