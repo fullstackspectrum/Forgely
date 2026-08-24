@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
-import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
@@ -13,6 +12,7 @@ import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
 import { token } from "../lib/palette";
+import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
 /* Size carries weight, and separates the two kinds that share a shape: a team
  * is a larger circle than the users in it, an entitlement a much smaller square
@@ -192,24 +192,28 @@ export default function OrgGraphCanvas({
     const sigma = sigmaRef.current;
     if (!graph || !sigma) return;
 
+    let orgNode: string | null = null;
+    graph.forEachNode((node, attrs) => { if (attrs.nodeType === "org") orgNode = node; });
+
     if (layout === "force") {
       forceAtlas2.assign(graph, {
         iterations: 300,
-        settings: { gravity: 2, scalingRatio: 15, barnesHutOptimize: true, strongGravityMode: true },
+        settings: { gravity: 2, scalingRatio: 15, adjustSizes: true, barnesHutOptimize: true, strongGravityMode: true },
       });
     } else if (layout === "circular") {
-      circular.assign(graph);
+      assignCircle(graph);
     } else if (layout === "radial") {
-      circular.assign(graph);
-      graph.forEachNode((node, attrs) => {
-        if (attrs.nodeType === "org") {
-          graph.setNodeAttribute(node, "x", 0);
-          graph.setNodeAttribute(node, "y", 0);
-        }
-      });
+      assignRings(graph, orgNode);
     } else if (layout === "tree" || layout === "horizontal") {
       assignOrgTreeLayout(graph, layout === "horizontal");
     }
+
+    /* Every layout ends here, including the ring ones. They are sized to fit
+       their own members, but nothing stops a node on one ring from meeting a
+       node on the next, and the tree layout spaces by depth rather than by how
+       large its nodes are. Without depth cues on this canvas — no shadows, no
+       layering — two shapes that touch read as one. */
+    resolveOverlaps(graph);
 
     sigma.refresh();
     sigma.getCamera().animatedReset({ duration: 400 });
@@ -284,13 +288,13 @@ export default function OrgGraphCanvas({
           });
         }
 
-        circular.assign(graph);
-        graph.forEachNode((node, attrs) => {
-          if (attrs.nodeType === "org") {
-            graph.setNodeAttribute(node, "x", 0);
-            graph.setNodeAttribute(node, "y", 0);
-          }
-        });
+        /* Initial placement, before the layout effect runs. Rings from the
+           workspace outward, so the first paint is already readable rather
+           than a circle that jumps a moment later. */
+        let initialOrg: string | null = null;
+        graph.forEachNode((node, attrs) => { if (attrs.nodeType === "org") initialOrg = node; });
+        assignRings(graph, initialOrg);
+        resolveOverlaps(graph);
 
         const sigma = new Sigma(graph, container, {
           allowInvalidContainer: true,

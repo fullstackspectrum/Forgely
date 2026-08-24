@@ -13,7 +13,7 @@ import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
-import { placeRadially, refineForceLayout, clusterAround, groupSpacing } from "../lib/layout";
+import { placeRadially, refineForceLayout, clusterAround, groupSpacing, assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 import { focusNodes } from "../lib/focus";
 import type { Point } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
@@ -494,19 +494,20 @@ export default function GraphCanvas({
     }
 
     if (layout === "circular") {
-      circular.assign(graph);
+      assignCircle(graph);
     } else if (layout === "radial") {
-      /* Place repo node at center, packages in ring, deps in outer ring */
-      circular.assign(graph);
-      graph.forEachNode((node, attrs) => {
-        if (attrs.nodeType === "repo") {
-          graph.setNodeAttribute(node, "x", 0);
-          graph.setNodeAttribute(node, "y", 0);
-        }
-      });
+      /* Repo at the centre, then a ring per hop: packages, then their
+         dependencies. This used to be `circular` with the repo dragged to the
+         middle, which put every node at the same distance regardless of how
+         far from the repo it actually was. */
+      let repo: string | null = null;
+      graph.forEachNode((node, attrs) => { if (attrs.nodeType === "repo") repo = node; });
+      assignRings(graph, repo);
     } else if (layout === "tree" || layout === "horizontal") {
       assignTreeLayout(graph, layout === "horizontal");
     }
+
+    resolveOverlaps(graph);
 
     sigma.refresh();
     sigma.getCamera().animatedReset({ duration: 400 });
