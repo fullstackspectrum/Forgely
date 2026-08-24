@@ -93,6 +93,26 @@ export function clusterAround(centre: Point, count: number, spacing: number): Po
   return out;
 }
 
+/**
+ * Gap between opened versions, as a fraction of the layout's extent.
+ *
+ * Relative rather than absolute because the two real graphs differ in extent
+ * by an order of magnitude, and a constant that suits one crowds the other.
+ * A fifty-version group fills four rings, so the cluster reaches about
+ * 4 x this — roughly a fifth of the graph's width, which is enough to read the
+ * versions and their labels as separate nodes without the group taking over
+ * the canvas.
+ */
+export const GROUP_SPACING_FRACTION = 0.05;
+
+/** Minimum gap, for graphs small enough that the fraction goes to nothing. */
+const MIN_GROUP_SPACING = 30;
+
+/** How far apart to place the versions of a group opened in `graph`. */
+export function groupSpacing(positions: Iterable<Point>): number {
+  return Math.max(layoutSpan(positions) * GROUP_SPACING_FRACTION, MIN_GROUP_SPACING);
+}
+
 /** Largest extent of the laid-out nodes, used to scale distances to a graph. */
 export function layoutSpan(positions: Iterable<Point>): number {
   let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;

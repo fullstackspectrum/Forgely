@@ -13,7 +13,7 @@ import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
-import { placeRadially, refineForceLayout, clusterAround, layoutSpan } from "../lib/layout";
+import { placeRadially, refineForceLayout, clusterAround, groupSpacing } from "../lib/layout";
 import type { Point } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
@@ -605,7 +605,7 @@ export default function GraphCanvas({
     let seed: Map<string, Point> | undefined;
     if (regroup) {
       seed = new Map(regroup.seed);
-      const spacing = Math.max(layoutSpan(regroup.seed.values()) * 0.022, 12);
+      const spacing = groupSpacing(regroup.seed.values());
       /* A group present now but not before has just closed: it lands on the
          centre of the versions it stands for. */
       for (const [gid, ids] of Object.entries(grouped.groupMembers)) {
