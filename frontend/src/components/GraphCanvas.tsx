@@ -974,16 +974,20 @@ export default function GraphCanvas({
                an opaque format icon pinned it to full opacity and the dimming
                did nothing. Nodes are drawn squares now, which honour alpha, so
                the shape survives. */
-            res.color = withAlpha(res.color as string, 0.25);
+            res.color = dimToCanvas(res.color as string, 0.15);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
             res.zIndex = -2;
           }
         } else if (st.hoveredNode) {
-          /* Hover-only (no selection): fade non-connected nodes more subtly */
+          /* Hover-only (no selection): fade non-connected nodes more subtly.
+             Mixed toward the canvas rather than given an alpha — alpha is not
+             premultiplied here, so the shaders drew it as a washed, shifted
+             colour instead of a fainter one. Kept the lightest of the three
+             dims: hover is a glance, selection is a decision. */
           if (!st.hoverNeighbors.has(node) && attrs.nodeType !== "repo") {
-            res.color = withAlpha(res.color as string, 0.35);
+            res.color = dimToCanvas(res.color as string, 0.25);
             res.borderSize = 0;
             res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
             res.label = "";
@@ -1065,7 +1069,10 @@ export default function GraphCanvas({
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (src !== st.hoveredNode && tgt !== st.hoveredNode) {
-            res.color = "rgba(18, 32, 46, 0.08)";
+            /* Was a hardcoded near-black, which is a dark-theme assumption:
+               on the light canvas it painted the faded edges darker than the
+               ones being highlighted. */
+            res.color = dimToCanvas(res.color as string, 0.12);
           }
         } else if (!st.selectedNode && st.expandedMembers.size > 0) {
           /* Faded rather than hidden: an edge that vanishes changes the shape
