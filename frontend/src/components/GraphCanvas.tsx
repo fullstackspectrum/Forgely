@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useMemo } from "react";
-import { GROUP_PREFIX, groupPackages } from "../lib/groupPackages";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { GROUP_PREFIX, groupPackages, groupKeyOf } from "../lib/groupPackages";
 
 
 import Sigma from "sigma";
@@ -13,7 +13,8 @@ import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
-import { placeRadially, refineForceLayout } from "../lib/layout";
+import { placeRadially, refineForceLayout, clusterAround, layoutSpan } from "../lib/layout";
+import type { Point } from "../lib/layout";
 import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
@@ -191,6 +192,39 @@ export default function GraphCanvas({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const grouped = useMemo(() => groupPackages(data, expandedGroups), [data, expandedGroups]);
 
+  /* Every package id that shares each name, so an opened group can find the
+     versions it is about to be replaced by. */
+  const versionsByName = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const n of data?.nodes ?? []) {
+      if (n.type !== "package") continue;
+      const k = groupKeyOf(n);
+      const list = m.get(k);
+      if (list) list.push(n.id);
+      else m.set(k, [n.id]);
+    }
+    return m;
+  }, [data]);
+
+  /* Opening or closing a group rebuilds the graph, and a rebuild would
+     normally re-scatter and re-settle every node. Capturing where everything
+     currently sits — and where the camera is — lets the rebuild put it all
+     back, so the only thing that moves is the group being opened. */
+  const regroupRef = useRef<{ seed: Map<string, Point>; camera: unknown } | null>(null);
+
+  const changeGroups = useCallback((next: (prev: Set<string>) => Set<string>) => {
+    const g = graphRef.current;
+    if (g) {
+      const seed = new Map<string, Point>();
+      g.forEachNode((id, a) => {
+        if (a.nodeType === "echo") return; // re-derived from their parents
+        seed.set(id, { x: a.x as number, y: a.y as number });
+      });
+      regroupRef.current = { seed, camera: sigmaRef.current?.getCamera().getState() };
+    }
+    setExpandedGroups(next);
+  }, []);
+
   /* Anything pointed at from outside the canvas — a search hit, a selection
      made in a panel — names a specific version. While that version is
      collapsed its id is not in the graph, so the highlight would land on
@@ -206,12 +240,12 @@ export default function GraphCanvas({
     }
     const toOpen = wanted.map((id) => nameOf.get(id)).filter(Boolean) as string[];
     if (toOpen.length === 0) return;
-    setExpandedGroups((prev) => {
+    changeGroups((prev) => {
       const next = new Set(prev);
       for (const n of toOpen) next.add(n);
       return next.size === prev.size ? prev : next;
     });
-  }, [searchResults, selectedNode, grouped.groupMembers]);
+  }, [searchResults, selectedNode, grouped.groupMembers, changeGroups]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -560,8 +594,42 @@ export default function GraphCanvas({
        Only the cheap scatter runs here. Settling it is deferred until sigma
        exists, so the first paint is not held behind it — on 7,544 nodes that
        was a 3.3s freeze between the loading screen disappearing and anything
-       being drawn. */
-    const repoNode = placeRadially(graph);
+       being drawn.
+
+       A regroup is different: it keeps the picture still. Every node that
+       already existed returns to where it was, the versions a group just
+       opened fan out from that group's own position, and a group that just
+       closed takes the centre of the versions it swallowed. */
+    const regroup = regroupRef.current;
+    regroupRef.current = null;
+    let seed: Map<string, Point> | undefined;
+    if (regroup) {
+      seed = new Map(regroup.seed);
+      const spacing = Math.max(layoutSpan(regroup.seed.values()) * 0.022, 12);
+      /* A group present now but not before has just closed: it lands on the
+         centre of the versions it stands for. */
+      for (const [gid, ids] of Object.entries(grouped.groupMembers)) {
+        if (seed.has(gid)) continue;
+        const known = ids.map((id) => regroup.seed.get(id)).filter(Boolean) as Point[];
+        if (known.length === 0) continue;
+        seed.set(gid, {
+          x: known.reduce((t, q) => t + q.x, 0) / known.length,
+          y: known.reduce((t, q) => t + q.y, 0) / known.length,
+        });
+      }
+      /* Versions of a group that has just opened fan out around where the
+         group node was standing, so they visibly come out of the node that
+         was clicked. */
+      for (const name of expandedGroups) {
+        const anchor = regroup.seed.get(GROUP_PREFIX + name);
+        if (!anchor) continue;
+        const members = (versionsByName.get(name) ?? []).filter((id) => !seed!.has(id));
+        if (members.length === 0) continue;
+        const spots = clusterAround(anchor, members.length, spacing);
+        members.forEach((id, i) => seed!.set(id, spots[i]));
+      }
+    }
+    const repoNode = placeRadially(graph, seed);
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
@@ -983,7 +1051,7 @@ export default function GraphCanvas({
          package behind it to show. */
       if (node.startsWith(GROUP_PREFIX)) {
         const name = node.slice(GROUP_PREFIX.length);
-        setExpandedGroups((prev) => {
+        changeGroups((prev) => {
           const next = new Set(prev);
           next.add(name);
           return next;
@@ -1013,7 +1081,7 @@ export default function GraphCanvas({
        way back, opening a fifty-version group is a one-way trip. */
     sigma.on("doubleClickStage", (e) => {
       e.preventSigmaDefault();
-      setExpandedGroups(new Set());
+      changeGroups(() => new Set());
     });
 
     /* Right-click context menu for package nodes */
@@ -1067,11 +1135,19 @@ export default function GraphCanvas({
        refresh at the end is for the spatial index: the pulse loop skips
        indexation, which leaves hit-testing stale once positions have moved. */
     if (layoutRef.current) layoutRef.current();
-    layoutRef.current = refineForceLayout(graph, repoNode, () => {
-      if (cancelled) return;
+    if (regroup) {
+      /* Every position is already decided, and both settling the layout and
+         refitting the camera would move the graph out from under a user who
+         only clicked one node. */
+      if (regroup.camera) sigma.getCamera().setState(regroup.camera as never);
       sigma.refresh();
-      sigma.getCamera().animatedReset({ duration: 400 });
-    });
+    } else {
+      layoutRef.current = refineForceLayout(graph, repoNode, () => {
+        if (cancelled) return;
+        sigma.refresh();
+        sigma.getCamera().animatedReset({ duration: 400 });
+      });
+    }
 
     } catch (err) {
       console.error("Graph build failed:", err);
