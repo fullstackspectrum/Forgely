@@ -993,6 +993,16 @@ export default function GraphCanvas({
             res.label = "";
             res.zIndex = -1;
           }
+        } else if (st.expandedMembers.has(node) && node.startsWith(GROUP_PREFIX)) {
+          /* The open hub. It is no longer the answer to anything — it is the
+             thing the versions came out of, and it still carries the whole
+             group's worst severity, so at full strength it competes with the
+             versions it was opened to reveal. Held halfway between them and
+             the receded graph.
+
+             Fill only: the ring is what says how bad this name is overall,
+             which is the one thing the hub is still for. */
+          res.color = dimToCanvas(res.color as string, 0.5);
         } else if (st.expandedMembers.size > 0 && !st.expandedMembers.has(node)) {
           /* A group is open and this is not one of its versions.
              Held at 0.35 rather than selection's 0.25: nothing has been
