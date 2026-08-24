@@ -7,7 +7,7 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
-import { hopColor, withAlpha } from "../lib/palette";
+import { hopColor, withAlpha, dimToCanvas } from "../lib/palette";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
@@ -990,9 +990,9 @@ export default function GraphCanvas({
              against, not a path that has been ruled out. The repository stays
              put — it is the centre everything is arranged around. */
           if (attrs.nodeType !== "repo" && attrs.nodeType !== "echo") {
-            res.color = withAlpha(res.color as string, 0.35);
+            res.color = dimToCanvas(res.color as string, 0.18);
             res.borderSize = 0;
-            res.size = Math.max(3, (attrs.size ?? 1) * 0.7);
+            res.size = Math.max(3, (attrs.size ?? 1) * 0.6);
             res.label = "";
             res.zIndex = -1;
           }
@@ -1068,7 +1068,7 @@ export default function GraphCanvas({
           const src = graph.source(edge);
           const tgt = graph.target(edge);
           if (!st.expandedMembers.has(src) && !st.expandedMembers.has(tgt)) {
-            res.color = withAlpha(res.color as string, 0.12);
+            res.color = dimToCanvas(res.color as string, 0.12);
           }
         }
 
