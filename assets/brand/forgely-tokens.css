@@ -48,7 +48,12 @@
   --fg-sev-none:     #8B9CAF;
 
   --fg-sev-critical-bg: #FBEAE8;
-  --fg-sev-high-bg:     #FCEEE7;
+  /* Lightened from #FCEEE7. High (#C4451F) as label text on the old tint
+     measured 4.39:1 — under AA. §2.4 quotes 4.98:1 for High, but that is
+     against pure white; the tint costs the difference. Adjusting the tint
+     rather than the brand colour keeps #C4451F correct everywhere it is used
+     as a fill or a mark, and only fixes the one failing pairing. */
+  --fg-sev-high-bg:     #FDF3EE;
   --fg-sev-medium-bg:   #F7F0DF;
   --fg-sev-low-bg:      #EDF1F5;
   --fg-sev-none-bg:     #F1F4F8;
@@ -96,8 +101,13 @@
   --c-border-strong: var(--fg-n-300);
 
   --t-primary:   var(--fg-n-900);
-  --t-secondary: var(--fg-n-600);
-  --t-muted:     var(--fg-n-500);
+  /* Shifted one step darker than the original mapping (n-600 / n-500).
+     §2.3 marks Neutral 500 "large text only — fails AA for body" at 3.74:1,
+     but --t-muted carries 11-12px labels throughout the app, so the original
+     light mapping could not pass. n-700/n-600 keeps a two-step hierarchy with
+     both at AA (9.03:1 and 6.03:1). Dark is untouched. */
+  --t-secondary: var(--fg-n-700);
+  --t-muted:     var(--fg-n-600);
   --t-inverse:   var(--fg-n-0);
   --t-brand:     var(--fg-blue-700);
 
@@ -119,7 +129,10 @@
   --s-none:     var(--fg-sev-none);
 
   /* Graph distance from origin — hop 0 is the origin itself */
-  --g-hop-0: var(--fg-amber-400);
+  /* Hop 0 is the selected node, and it is blue: ember is the repository's,
+     and the selection is marked by the tilt instead. Same value as hop 1 —
+     the displaced shape carries the distinction, not a colour step. */
+  --g-hop-0: var(--fg-blue-400);
   --g-hop-1: var(--fg-blue-400);
   --g-hop-2: var(--fg-blue-300);
   --g-hop-3: var(--fg-blue-200);
@@ -127,8 +140,32 @@
   --g-edge-direct: var(--fg-blue-400);
   --g-edge-transitive: var(--fg-blue-200);
   --g-edge-muted: var(--fg-n-200);
+  /* Floating chrome over the canvas — translucent, blurred, theme-aware.
+     Fifteen rules previously hardcoded rgba(10,22,34) or rgba(18,32,46), so
+     the legend, graph controls, context menu and toast all stayed dark on a
+     light canvas. A scrim darkens in both themes, which is what a scrim is
+     for, so it is not mirrored. */
+  /* Subtle fills and hairlines. These were written as near-white rgba, which
+     reads as a faint lift on a dark surface and disappears entirely on a light
+     one — 100 declarations across 77 rules. Mirroring them per theme keeps the
+     same visual weight in both. */
+  --c-tint-subtle:  rgba(12, 32, 54, 0.04);
+  --c-tint:         rgba(12, 32, 54, 0.07);
+  --c-tint-strong:  rgba(12, 32, 54, 0.12);
+  --c-hairline:     rgba(12, 32, 54, 0.10);
+
+  --c-overlay:        rgba(245, 248, 251, 0.92);
+  --c-overlay-strong: rgba(245, 248, 251, 0.97);
+  --c-scrim:          rgba(10, 22, 34, 0.45);
+
   --g-canvas: var(--fg-n-50);
   --g-node-stroke: var(--fg-n-0);
+
+  /* Light-canvas equivalents, darkened to hold 3:1 against --fg-n-50. */
+  --g-sev-critical: #D62B20;
+  --g-sev-high:     #C25E00;
+  --g-sev-medium:   #8A6410;
+  --g-sev-low:      #4E657D;
 }
 
 [data-theme="dark"] {
@@ -168,6 +205,30 @@
   --fg-sev-medium-bg:   #332C13;
   --fg-sev-low-bg:      #1F2C39;
   --fg-sev-none-bg:     #1B2733;
+
+  /* Severity as rendered on the graph canvas — a ring, not text.
+     The text values above are lightened to clear 4.5:1 on raised surfaces,
+     which desaturates them: Critical and High end up 14 degrees apart in hue
+     and read as one orange smear at graph scale. A ring is a non-text UI
+     component (3:1 under WCAG 1.4.11) sitting on the canvas, so it can be far
+     more saturated and far better separated. §2.3 sets the precedent by
+     exempting the canvas from the text-contrast rules.
+
+     Measured against --g-canvas: Critical 5.1:1, High 7.7:1, Medium 11.9:1,
+     Low 7.3:1. Hue separation Critical->High is 26 degrees, up from 14. */
+  --g-sev-critical: #FF3B30;
+  --g-sev-high:     #FF8A1F;
+  --g-sev-medium:   #F2CE3F;
+  --g-sev-low:      #7FA8C9;
+
+  --c-tint-subtle:  rgba(245, 248, 251, 0.04);
+  --c-tint:         rgba(245, 248, 251, 0.07);
+  --c-tint-strong:  rgba(245, 248, 251, 0.12);
+  --c-hairline:     rgba(245, 248, 251, 0.10);
+
+  --c-overlay:        rgba(18, 32, 46, 0.92);
+  --c-overlay-strong: rgba(18, 32, 46, 0.97);
+  --c-scrim:          rgba(10, 22, 34, 0.65);
 
   --g-hop-far: var(--fg-n-600);
   --g-edge-muted: var(--fg-n-700);
