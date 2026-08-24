@@ -10,7 +10,7 @@ import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
-import type { OrgGraphResponse, LayoutType, EdgeStyle, OrgNodeFilter } from "../types";
+import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 import { token } from "../lib/palette";
 
@@ -134,7 +134,8 @@ interface Props {
   selectedNode: string | null;
   layout: LayoutType;
   edgeStyle: EdgeStyle;
-  filter: OrgNodeFilter;
+  /** Node types to show. Empty means every type. */
+  filters: Set<string>;
   searchResults: string[];
   onNodeSelect: (id: string | null) => void;
   onLayoutChange: (l: LayoutType) => void;
@@ -147,7 +148,7 @@ export default function OrgGraphCanvas({
   selectedNode,
   layout,
   edgeStyle,
-  filter,
+  filters,
   searchResults,
   onNodeSelect,
   onLayoutChange,
@@ -162,8 +163,7 @@ export default function OrgGraphCanvas({
     hoveredNode: null as string | null,
     neighbors: new Set<string>(),
     hoverNeighbors: new Set<string>(),
-    filter,
-    filterConnected: new Set<string>(),
+    filters,
     searchResults: new Set<string>(),
   });
 
@@ -173,25 +173,15 @@ export default function OrgGraphCanvas({
     if (selectedNode && graph) {
       graph.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
-    /* Build set of nodes connected to any node matching the current filter */
-    const filterConnected = new Set<string>();
-    if (filter !== "all" && graph) {
-      graph.forEachNode((node, attrs) => {
-        if (attrs.nodeType === filter) {
-          graph.forEachNeighbor(node, (n) => filterConnected.add(n));
-        }
-      });
-    }
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
       neighbors,
-      filter,
-      filterConnected,
+      filters,
       searchResults: new Set(searchResults),
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, filter, searchResults]);
+  }, [selectedNode, filters, searchResults]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -323,14 +313,15 @@ export default function OrgGraphCanvas({
             const nType = attrs.nodeType as string;
             const isOrg = nType === "org";
 
-            /* Type filter: show org, matching type, and connected neighbors */
-            if (st.filter !== "all" && !isOrg && nType !== st.filter) {
-              if (st.filterConnected.has(node)) {
-                res.zIndex = 0;
-              } else {
-                res.hidden = true;
-                return res;
-              }
+            /* Type filter: the org hub and the selected types, nothing else.
+               This used to also show every neighbour of a match, which meant
+               picking one type still drew 83 of 109 nodes — and made choosing
+               two types identical to choosing one, since the first already
+               dragged the second in. "Filter by type" now means what it
+               says. */
+            if (st.filters.size > 0 && !isOrg && !st.filters.has(nType)) {
+              res.hidden = true;
+              return res;
             }
 
             /* Search highlight */
@@ -384,12 +375,14 @@ export default function OrgGraphCanvas({
             const kind = graph.getEdgeAttribute(edge, "edgeKind") as string;
 
             /* Type filter */
-            if (st.filter !== "all") {
+            if (st.filters.size > 0) {
               const srcType = graph.getNodeAttribute(src, "nodeType") as string;
               const tgtType = graph.getNodeAttribute(tgt, "nodeType") as string;
-              const srcMatch = srcType === "org" || srcType === st.filter;
-              const tgtMatch = tgtType === "org" || tgtType === st.filter;
-              if (!srcMatch && !tgtMatch) {
+              /* Both ends, not either: an edge to a node that is hidden has
+                 nothing at the far end of it. */
+              const srcMatch = srcType === "org" || st.filters.has(srcType);
+              const tgtMatch = tgtType === "org" || st.filters.has(tgtType);
+              if (!srcMatch || !tgtMatch) {
                 res.hidden = true;
                 return res;
               }
