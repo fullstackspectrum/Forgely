@@ -177,13 +177,38 @@ export interface WorkspaceOverviewResponse {
 /* Node kinds in the org graph. These are categories, not severities, so they
    take the blue ramp plus one amber — the palette has no green, purple, pink
    or cyan, and inventing them would put six competing hues on a canvas whose
-   whole job is encoding distance in blue. */
+   whole job is encoding distance in blue.
+
+   Ember belongs to the workspace and nothing else. BRANDING.md §1 allows one
+   ember per view, and it marks the origin — the same role the repository plays
+   in the package graph. Entitlements used to carry it, which put 51 embers on
+   screen and left the origin with no way to stand out. */
 export const ORG_NODE_COLORS: Record<string, string> = {
-  get org() { return token("--c-action"); },
-  get repo() { return token("--fg-blue-300"); },
-  get user() { return token("--fg-blue-200"); },
-  get service() { return token("--fg-blue-100"); },
-  get team() { return token("--fg-n-400"); },
-  get entitlement() { return token("--c-origin"); },
-  get upstream() { return token("--fg-n-300"); },
+  get org() { return token("--g-org-org"); },
+  get repo() { return token("--g-org-repo"); },
+  get team() { return token("--g-org-team"); },
+  get user() { return token("--g-org-user"); },
+  get service() { return token("--g-org-service"); },
+  get upstream() { return token("--g-org-upstream"); },
+  get entitlement() { return token("--g-org-entitlement"); },
+};
+
+/* Shape per kind, mirroring the package graph's vocabulary.
+ *
+ * The mark is a grid of rounded squares around one displaced ember cell, so a
+ * square is a Cloudsmith artefact store and the tilt is the origin. Identities
+ * are circles, the family sharing a shape and separating by size. Upstreams
+ * are hexagons for the same reason dependencies are in the package graph: they
+ * sit outside the boundary and are a different kind of thing.
+ *
+ * Never colour alone (§2.4): every kind here differs from its neighbours in
+ * shape or size as well as hue. */
+export const ORG_NODE_SHAPE: Record<string, string> = {
+  org: "tilted",
+  repo: "square",
+  entitlement: "square",   // a grant on a repo: same family, far less weight
+  team: "circle",
+  user: "circle",
+  service: "triangle",
+  upstream: "hexagon",
 };
