@@ -54,8 +54,87 @@ const MAX_CHUNK = 25;
  */
 const SUBPIXEL_SPAN_FRACTION = 1 / 2000;
 
-/** Repo node at the origin, everything else scattered in a ring around it. */
-export function placeRadially(graph: Graph): string | null {
+export interface Point { x: number; y: number }
+
+/**
+ * Positions for `count` nodes packed around a centre, in concentric rings.
+ *
+ * Used when a package group is opened: its versions have to appear to come out
+ * of the node that was clicked, so they are placed around where that node sat
+ * rather than being handed to the global layout, which would scatter them
+ * across the canvas with no visible relationship to the click.
+ *
+ * A single ring does not survive contact with real data — fifty versions of
+ * `library/node` on one circle either overlap or make a ring wider than the
+ * rest of the graph. Ring k sits at radius k*spacing and holds about 6k slots,
+ * which keeps neighbours roughly `spacing` apart however many there are.
+ */
+export function clusterAround(centre: Point, count: number, spacing: number): Point[] {
+  const out: Point[] = [];
+  let ring = 1;
+  while (out.length < count) {
+    const capacity = Math.max(1, Math.floor(2 * Math.PI * ring));
+    const n = Math.min(capacity, count - out.length);
+    const radius = ring * spacing;
+    /* The last ring is usually a partial one. Spreading those few over the
+       whole circle rather than filling the ring's first n slots keeps the
+       cluster symmetric about the node that was clicked — otherwise the
+       leftovers bunch to one side and the group appears to lean away. */
+    const slots = n < capacity ? n : capacity;
+    /* Odd rings are offset by half a step so nodes do not line up radially
+       into spokes. */
+    const phase = (ring % 2) * (Math.PI / slots);
+    for (let i = 0; i < n; i++) {
+      const a = (i / slots) * 2 * Math.PI + phase;
+      out.push({ x: centre.x + Math.cos(a) * radius, y: centre.y + Math.sin(a) * radius });
+    }
+    ring++;
+  }
+  return out;
+}
+
+/**
+ * Gap between opened versions, as a fraction of the layout's extent.
+ *
+ * Relative rather than absolute because the two real graphs differ in extent
+ * by an order of magnitude, and a constant that suits one crowds the other.
+ * A fifty-version group fills four rings, so the cluster reaches about
+ * 4 x this — roughly a fifth of the graph's width, which is enough to read the
+ * versions and their labels as separate nodes without the group taking over
+ * the canvas.
+ */
+export const GROUP_SPACING_FRACTION = 0.05;
+
+/** Minimum gap, for graphs small enough that the fraction goes to nothing. */
+const MIN_GROUP_SPACING = 30;
+
+/** How far apart to place the versions of a group opened in `graph`. */
+export function groupSpacing(positions: Iterable<Point>): number {
+  return Math.max(layoutSpan(positions) * GROUP_SPACING_FRACTION, MIN_GROUP_SPACING);
+}
+
+/** Largest extent of the laid-out nodes, used to scale distances to a graph. */
+export function layoutSpan(positions: Iterable<Point>): number {
+  let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+  for (const { x, y } of positions) {
+    if (x < minx) minx = x;
+    if (x > maxx) maxx = x;
+    if (y < miny) miny = y;
+    if (y > maxy) maxy = y;
+  }
+  if (!Number.isFinite(minx)) return 0;
+  return Math.max(maxx - minx, maxy - miny);
+}
+
+/**
+ * Repo node at the origin, everything else scattered in a ring around it.
+ *
+ * `seed` holds positions a node must keep. Opening a package group rebuilds
+ * the graph, and without seeding, every other node would be re-scattered and
+ * re-settled — the picture the user was reading jumps, and the versions that
+ * appeared have no visible connection to the node they came from.
+ */
+export function placeRadially(graph: Graph, seed?: Map<string, Point>): string | null {
   let repoNode: string | null = null;
   graph.forEachNode((id, attrs) => {
     if (attrs.nodeType === "repo") repoNode = id;
@@ -68,6 +147,12 @@ export function placeRadially(graph: Graph): string | null {
   const baseRadius = Math.max(250, total * 10);
   let idx = 0;
   graph.forEachNode((id) => {
+    const known = seed?.get(id);
+    if (known) {
+      graph.setNodeAttribute(id, "x", known.x);
+      graph.setNodeAttribute(id, "y", known.y);
+      return;
+    }
     if (id === repoNode) {
       graph.setNodeAttribute(id, "x", 0);
       graph.setNodeAttribute(id, "y", 0);
