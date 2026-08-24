@@ -11,8 +11,7 @@ interface Props {
   filter: OrgNodeFilter;
   onFilterChange: (f: OrgNodeFilter) => void;
   onTabChange: (t: TabType) => void;
-  onConnectClick: () => void;
-  onDisconnect: () => void;
+  onOpenSettings: () => void;
   onOpenAttackPaths?: () => void;
 }
 
@@ -31,8 +30,7 @@ export default function OrgLeftPanel({
   filter,
   onFilterChange,
   onTabChange,
-  onConnectClick,
-  onDisconnect,
+  onOpenSettings,
   onOpenAttackPaths,
 }: Props) {
   const [changelogOpen, setChangelogOpen] = useState(false);
@@ -137,16 +135,14 @@ export default function OrgLeftPanel({
       )}
 
       <div className="left-panel-bottom">
+        <button className="settings-btn" onClick={onOpenSettings} title="Settings">
+          <span className="settings-btn-icon" aria-hidden="true">⚙</span>
+          Settings
+          <span className={`settings-btn-dot${hasKey ? " connected" : ""}`} />
+        </button>
         <button className="left-panel-version" onClick={() => setChangelogOpen(true)}>
           v{__APP_VERSION__}
         </button>
-        <div className="left-panel-footer">
-          {hasKey ? (
-            <button className="btn btn-sm btn-muted" onClick={onDisconnect}>Disconnect</button>
-          ) : (
-            <button className="btn btn-sm btn-accent" onClick={onConnectClick}>Connect</button>
-          )}
-        </div>
       </div>
 
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
