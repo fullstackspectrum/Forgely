@@ -2,26 +2,29 @@ import { useEffect, useRef, useState } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
-import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
-import { NodeImageProgram } from "@sigma/node-image";
-import { NodeSquareProgram } from "@sigma/node-square";
+import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
+import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import { drawDarkNodeHover } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
-import { ORG_NODE_COLORS } from "../types";
+import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
 import { token } from "../lib/palette";
+import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
+/* Size carries weight, and separates the two kinds that share a shape: a team
+ * is a larger circle than the users in it, an entitlement a much smaller square
+ * than the repository it grants access to. */
 const NODE_SIZE: Record<string, number> = {
-  org: 28,
-  repo: 14,
-  user: 12,
+  org: 40,
+  repo: 20,
+  team: 16,
+  upstream: 14,
+  user: 11,
   service: 12,
-  team: 10,
   entitlement: 8,
-  upstream: 10,
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -189,24 +192,28 @@ export default function OrgGraphCanvas({
     const sigma = sigmaRef.current;
     if (!graph || !sigma) return;
 
+    let orgNode: string | null = null;
+    graph.forEachNode((node, attrs) => { if (attrs.nodeType === "org") orgNode = node; });
+
     if (layout === "force") {
       forceAtlas2.assign(graph, {
         iterations: 300,
-        settings: { gravity: 2, scalingRatio: 15, barnesHutOptimize: true, strongGravityMode: true },
+        settings: { gravity: 2, scalingRatio: 15, adjustSizes: true, barnesHutOptimize: true, strongGravityMode: true },
       });
     } else if (layout === "circular") {
-      circular.assign(graph);
+      assignCircle(graph);
     } else if (layout === "radial") {
-      circular.assign(graph);
-      graph.forEachNode((node, attrs) => {
-        if (attrs.nodeType === "org") {
-          graph.setNodeAttribute(node, "x", 0);
-          graph.setNodeAttribute(node, "y", 0);
-        }
-      });
+      assignRings(graph, orgNode);
     } else if (layout === "tree" || layout === "horizontal") {
       assignOrgTreeLayout(graph, layout === "horizontal");
     }
+
+    /* Every layout ends here, including the ring ones. They are sized to fit
+       their own members, but nothing stops a node on one ring from meeting a
+       node on the next, and the tree layout spaces by depth rather than by how
+       large its nodes are. Without depth cues on this canvas — no shadows, no
+       layering — two shapes that touch read as one. */
+    resolveOverlaps(graph);
 
     sigma.refresh();
     sigma.getCamera().animatedReset({ duration: 400 });
@@ -249,20 +256,20 @@ export default function OrgGraphCanvas({
           const nodeAttrs: Record<string, unknown> = {
             label: isOrg ? "" : node.label,
             size: NODE_SIZE[node.type] ?? 10,
-            color: isOrg ? token("--fg-n-950") : (ORG_NODE_COLORS[node.type] ?? token("--fg-n-600")),
+            /* Every kind takes its own colour, the workspace included. It used
+               to be painted the canvas colour so the logo bitmap could sit on
+               top of it; with the bitmap gone that left a near-black square. */
+            color: ORG_NODE_COLORS[node.type] ?? token("--fg-n-600"),
             x: Math.random() * 100,
             y: Math.random() * 100,
             nodeType: node.type,
             zIndex: isOrg ? 10 : node.type === "repo" ? 5 : 1,
           };
-          if (isOrg) {
-            nodeAttrs.type = "image";
-            nodeAttrs.image = "/forgely-icon.svg";
-          } else if (node.type === "repo") {
-            nodeAttrs.type = "square";
-          } else if (node.type === "upstream") {
-            nodeAttrs.type = "triangle";
-          }
+          /* The workspace was the whole logo clipped to a disc, which cut the
+             mark off at its own boundary. It is the mark's ember centre cell
+             instead — the one displaced square everything else sits around,
+             exactly as the repository is drawn in the package graph. */
+          nodeAttrs.type = ORG_NODE_SHAPE[node.type] ?? "circle";
           graph.addNode(node.id, nodeAttrs);
         }
 
@@ -281,13 +288,13 @@ export default function OrgGraphCanvas({
           });
         }
 
-        circular.assign(graph);
-        graph.forEachNode((node, attrs) => {
-          if (attrs.nodeType === "org") {
-            graph.setNodeAttribute(node, "x", 0);
-            graph.setNodeAttribute(node, "y", 0);
-          }
-        });
+        /* Initial placement, before the layout effect runs. Rings from the
+           workspace outward, so the first paint is already readable rather
+           than a circle that jumps a moment later. */
+        let initialOrg: string | null = null;
+        graph.forEachNode((node, attrs) => { if (attrs.nodeType === "org") initialOrg = node; });
+        assignRings(graph, initialOrg);
+        resolveOverlaps(graph);
 
         const sigma = new Sigma(graph, container, {
           allowInvalidContainer: true,
@@ -295,7 +302,12 @@ export default function OrgGraphCanvas({
           enableEdgeEvents: true,
           defaultEdgeType: "curvedArrow",
           edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram, dotted: EdgeDottedProgram, curvedDotted: EdgeCurvedDottedProgram },
-          nodeProgramClasses: { image: NodeImageProgram, square: NodeSquareProgram, triangle: NodeTriangleProgram },
+          nodeProgramClasses: {
+            tilted: NodeTiltedSquareProgram,
+            square: NodeSquareProgram,
+            hexagon: NodeHexagonProgram,
+            triangle: NodeTriangleProgram,
+          },
           labelDensity: 0.15,
           labelGridCellSize: 80,
           labelRenderedSizeThreshold: 5,
