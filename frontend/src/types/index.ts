@@ -104,7 +104,14 @@ export const SEVERITY_RANK: Record<string, number> = {
 
 /* ===== Org-level graph types ===== */
 
-export type OrgNodeFilter = "all" | "repo" | "user" | "service" | "team" | "entitlement" | "upstream";
+/* Node types the CIEM graph can be filtered to.
+ *
+ * The filter is a *set* of these, and an empty set means everything. There is
+ * no AND/OR mode as the SCA status filters have, because a node carries
+ * exactly one type — "repo AND upstream" matches nothing by construction,
+ * while the SCA flags describe independent properties one package can hold at
+ * once. Selecting several types is therefore always a union. */
+export type OrgNodeType = "repo" | "user" | "service" | "team" | "entitlement" | "upstream";
 
 export interface OrgGraphNode {
   id: string;
