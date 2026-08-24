@@ -62,19 +62,6 @@ function parse(color: string): [number, number, number, number] | null {
 }
 
 /**
- * Same colour at a given alpha.
- *
- * Handles rgb()/rgba() as well as hex. It used to return anything non-hex
- * untouched, which made it a silent no-op on every edge in the graph — those
- * are authored as rgba() strings.
- */
-export function withAlpha(color: string, alpha: number): string {
-  const c = parse(color);
-  if (!c) return color.trim();
-  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
-}
-
-/**
  * Fade a colour toward the graph background.
  *
  * Dimming by alpha does not survive the node programs: sigma composites with

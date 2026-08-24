@@ -7,7 +7,7 @@ import Graph from "graphology";
 import { circular } from "graphology-layout";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import { nodeFill, recolorGraph, severityRing } from "../programs/nodeWithSeverityRing";
-import { hopColor, withAlpha, dimToCanvas } from "../lib/palette";
+import { hopColor, dimToCanvas } from "../lib/palette";
 import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
