@@ -1448,13 +1448,11 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
 
     # Repo nodes
     repo_slugs: list[str] = []
-    repo_fmts: dict[str, str] = {}   # slug → format (used to limit upstream API calls)
     for r in repos:
         slug = r.get("slug", "")
         if not slug:
             continue
         repo_slugs.append(slug)
-        repo_fmts[slug] = r.get("repository_type_str", r.get("type_str", "")).lower()
         rid = f"repo:{slug}"
         if rid in seen:
             continue
@@ -1583,15 +1581,22 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                     edges.append({"source": sid, "target": tid, "type": "team_member", "label": "service"})
 
     # Fetch privileges, entitlements, and upstreams for each repo (parallel).
-    # Passing the repo's known format limits fetch_repo_upstreams to 1 API call
-    # instead of 18 (one per format), reducing total calls from ~20/repo to 3/repo.
+    #
+    # Every format is queried, which is the only way to find them: a Cloudsmith
+    # repo holds any mix of formats and exposes no field saying which. This used
+    # to pass repository_type_str as the format to limit it to one call per
+    # repo, but that field is the repo's *visibility* — every request went to
+    # /upstream/private/, returned 404, and was swallowed by the handler that
+    # skips formats a repo does not have. The org graph has therefore never
+    # shown an upstream. Measured on the measured workspace: 8 repos hold 19
+    # upstream configs across 5 formats, and the language repository alone spans four of
+    # them, so no single-format query could have found them all.
     MAX_WORKERS = 6
 
     def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict]]:
-        fmt = repo_fmts.get(repo_slug, "")
         privs = fetch_repo_privileges(session, owner, repo_slug)
         ents = fetch_repo_entitlements(session, owner, repo_slug)
-        ups = fetch_repo_upstreams(session, owner, repo_slug, fmt)
+        ups = fetch_repo_upstreams(session, owner, repo_slug)
         return (repo_slug, privs, ents, ups)
 
     # Track upstream URLs → which repos use them (for shared-upstream edges)

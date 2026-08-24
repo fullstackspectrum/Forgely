@@ -23,7 +23,7 @@ import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import { applyTheme, resolveTheme, storedTheme, watchSystemTheme, type Theme } from "./lib/theme";
 import { loadSettings, saveSetting, resetSettings, type Settings } from "./lib/settings";
-import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, OrgNodeFilter, WorkspaceOverviewResponse } from "./types";
+import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
 
@@ -89,7 +89,9 @@ export default function App() {
   const orgPanelRef = useRef<HTMLDivElement>(null);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
-  const [orgFilter, setOrgFilter] = useState<OrgNodeFilter>("all");
+  /* Empty means every type. Several types at once is a union — a node has
+     exactly one type, so there is nothing for an AND to match. */
+  const [orgFilters, setOrgFilters] = useState<Set<string>>(new Set());
   const [orgSearchResults, setOrgSearchResults] = useState<string[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [attackGraphOpen, setAttackGraphOpen] = useState(false);
@@ -321,8 +323,8 @@ export default function App() {
         <OrgLeftPanel
           orgData={orgData}
           hasKey={hasKey}
-          filter={orgFilter}
-          onFilterChange={setOrgFilter}
+          filters={orgFilters}
+          onFiltersChange={setOrgFilters}
           onTabChange={(t) => { setTab(t); setOrgSelectedNode(null); }}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenAttackPaths={() => setCiemAttackPathOpen(true)}
@@ -668,7 +670,7 @@ export default function App() {
               selectedNode={orgSelectedNode}
               layout={orgLayout}
               edgeStyle={orgEdgeStyle}
-              filter={orgFilter}
+              filters={orgFilters}
               searchResults={orgSearchResults}
               onNodeSelect={setOrgSelectedNode}
               onLayoutChange={handleOrgLayoutChange}

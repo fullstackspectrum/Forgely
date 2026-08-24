@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { OrgGraphResponse, OrgNodeFilter } from "../types";
+import type { OrgGraphResponse, OrgNodeType } from "../types";
 import { ORG_NODE_COLORS } from "../types";
 import ChangelogModal from "./ChangelogModal";
 
@@ -8,8 +8,9 @@ type TabType = "packages" | "organisation";
 interface Props {
   orgData: OrgGraphResponse | null;
   hasKey: boolean;
-  filter: OrgNodeFilter;
-  onFilterChange: (f: OrgNodeFilter) => void;
+  /** Types to show. Empty means every type. */
+  filters: Set<string>;
+  onFiltersChange: (f: Set<string>) => void;
   onTabChange: (t: TabType) => void;
   onOpenSettings: () => void;
   onOpenAttackPaths?: () => void;
@@ -27,8 +28,8 @@ const TYPE_LABELS: Record<string, string> = {
 export default function OrgLeftPanel({
   orgData,
   hasKey,
-  filter,
-  onFilterChange,
+  filters,
+  onFiltersChange,
   onTabChange,
   onOpenSettings,
   onOpenAttackPaths,
@@ -49,10 +50,15 @@ export default function OrgLeftPanel({
   const types = (Object.keys(ORG_NODE_COLORS) as Array<keyof typeof ORG_NODE_COLORS>)
     .filter((t) => t !== "org");
 
-  const handleClick = (t: OrgNodeFilter) => {
-    // Click active filter again to clear back to "all"
-    if (filter === t) onFilterChange("all");
-    else onFilterChange(t);
+  /* Types accumulate rather than replace: asking for repositories and
+     upstreams together is the normal question, not an edge case. Clicking a
+     selected type removes it, and removing the last one is the same as
+     asking for everything. */
+  const handleClick = (t: OrgNodeType) => {
+    const next = new Set(filters);
+    if (next.has(t)) next.delete(t);
+    else next.add(t);
+    onFiltersChange(next);
   };
 
   return (
@@ -74,11 +80,11 @@ export default function OrgLeftPanel({
       <div className="left-panel-section">
         <div className="org-filter-header">
           <span className="left-panel-section-title">Filter by type</span>
-          {filter !== "all" && (
+          {filters.size > 0 && (
             <button
               type="button"
               className="org-filter-clear"
-              onClick={() => onFilterChange("all")}
+              onClick={() => onFiltersChange(new Set())}
               title="Show all node types"
             >
               Clear
@@ -88,8 +94,8 @@ export default function OrgLeftPanel({
         <div className="org-filter-list">
           <button
             type="button"
-            className={`org-filter-row${filter === "all" ? " active" : ""}`}
-            onClick={() => onFilterChange("all")}
+            className={`org-filter-row${filters.size === 0 ? " active" : ""}`}
+            onClick={() => onFiltersChange(new Set())}
           >
             <span className="org-filter-dot org-filter-dot-all" />
             <span className="org-filter-label">All types</span>
@@ -97,14 +103,15 @@ export default function OrgLeftPanel({
           </button>
           {types.map((type) => {
             const count = counts[type] || 0;
-            const isActive = filter === type;
+            const isActive = filters.has(type);
             const isDisabled = !orgData || count === 0;
             return (
               <button
                 key={type}
                 type="button"
                 className={`org-filter-row${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}`}
-                onClick={() => !isDisabled && handleClick(type as OrgNodeFilter)}
+                aria-pressed={isActive}
+                onClick={() => !isDisabled && handleClick(type as OrgNodeType)}
                 disabled={isDisabled}
                 style={isActive ? { borderColor: ORG_NODE_COLORS[type] } : undefined}
               >
