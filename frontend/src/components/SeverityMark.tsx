@@ -12,6 +12,8 @@
  * carries an accessible name whether or not a visible label sits beside it.
  */
 
+import { SEVERITY_RING } from "../programs/nodeWithSeverityRing";
+
 const SHAPE: Record<string, string> = {
   Critical: "dot",                 // filled circle
   High: "dot-triangle",            // filled triangle
@@ -64,5 +66,32 @@ export default function SeverityMark({ severity, showLabel = false, className = 
       />
       {showLabel && <span className="sev-mark-label" style={{ color }}>{sev}</span>}
     </>
+  );
+}
+
+
+/**
+ * A severity shown the way the canvas shows it: a package node with a ring.
+ *
+ * For places that are describing the graph rather than listing findings — the
+ * legend and the severity filters. A dot, a triangle and two circles taught a
+ * second vocabulary for the same fact, and none of those shapes appears on the
+ * canvas, so the key did not match the thing it was keying.
+ *
+ * Square, because that is what a package is drawn as, and the ring width comes
+ * from the constant the renderer uses, so this cannot drift from the canvas.
+ */
+export function SeverityNodeMark({ severity, className = "" }: { severity: string; className?: string }) {
+  const width = SEVERITY_RING[severity] ?? 0;
+  return (
+    <i
+      className={`node-mark ${className}`.trim()}
+      style={{
+        borderWidth: `${width}px`,
+        borderColor: width ? `var(--g-sev-${severity.toLowerCase()})` : "transparent",
+      }}
+      role="img"
+      aria-label={`Severity: ${severity}`}
+    />
   );
 }
