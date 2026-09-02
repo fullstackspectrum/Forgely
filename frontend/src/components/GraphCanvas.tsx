@@ -139,6 +139,20 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
+/**
+ * A package is safe when a scan ran and found nothing — not merely when no
+ * findings are recorded against it.
+ *
+ * The backend distinguishes the two: "None" means scanned clean, while null
+ * (which the canvas reads as "Unknown") means the format cannot be scanned at
+ * all. Treating both as safe made the filter vacuous — on a container repo
+ * roughly three quarters of packages are unscannable, so "Safe" selected
+ * almost everything and looked like it did nothing.
+ */
+function isScannedClean(severity: string | null | undefined, vulnCount: number | undefined): boolean {
+  return severity != null && severity !== "Unknown" && (vulnCount ?? 0) === 0;
+}
+
 interface Props {
   /** Resolved theme. Only used to re-read colours; the DOM is themed by CSS. */
   theme?: "light" | "dark";
@@ -237,6 +251,26 @@ export default function GraphCanvas({
       if (groupableNames.has(name)) out.add(GROUP_PREFIX + name);
     return out;
   }, [expandedGroups, groupableNames]);
+
+  /* Hubs standing for at least one package that scanned clean.
+
+     Every other status flag already reads a hub as "any member matches":
+     vulnerable sums the counts, quarantined ORs them, shared-CVE and
+     has-dependencies go by the edges rewired onto the hub, and the severity
+     filter compares against the worst member. Only "safe" was an all-members
+     test, because a summed vuln_count is zero only when every version is
+     clean — so a clean package sharing a name with a vulnerable one could not
+     be reached while the group was collapsed. */
+  const safeMemberHubs = useMemo(() => {
+    const cleanIds = new Set<string>();
+    for (const n of data?.nodes ?? [])
+      if (n.type === "package" && isScannedClean(n.data.max_severity, n.data.vuln_count))
+        cleanIds.add(n.id);
+    const out = new Set<string>();
+    for (const [gid, ids] of Object.entries(grouped.groupMembers))
+      if (ids.some((id) => cleanIds.has(id))) out.add(gid);
+    return out;
+  }, [data, grouped.groupMembers]);
 
   /* Every version an open group put on screen. Opening a group is a question
      about one package name, so everything else recedes while it is open —
@@ -370,6 +404,8 @@ export default function GraphCanvas({
     quarantinedDeps: new Set<string>(),
     expandedMembers: new Set<string>(),
     openHubs: new Set<string>(),
+    safeMemberHubs: new Set<string>(),
+    groupMembers: {} as Record<string, string[]>,
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -512,9 +548,11 @@ export default function GraphCanvas({
       quarantinedDeps,
       expandedMembers,
       openHubs,
+      safeMemberHubs,
+      groupMembers: grouped.groupMembers,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs, safeMemberHubs, grouped.groupMembers]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -775,6 +813,27 @@ export default function GraphCanvas({
     stateRef.current.nodeData = nodeData;
 
     /* --- Sigma --- */
+    /* Does this node pass the severity filter and the status flags?
+       Shared so a group hub and a plain package are judged by one rule, and so
+       an open hub can ask the same question of the versions hanging off it. */
+    const passesFilters = (st: typeof stateRef.current, nid: string, a: Record<string, unknown>): boolean => {
+      const vc = (a.vulnCount as number) ?? 0;
+      const sev = (a.severity as string) ?? "None";
+      if (st.filter !== "all" && sev !== st.filter) return false;
+      if (st.filterFlags.size === 0) return true;
+      const results = Array.from(st.filterFlags).map((flag) => {
+        if (flag === "vulnerable") return vc > 0;
+        /* Scanned and clean — not merely "no findings recorded". A hub is safe
+           if any version it stands for is; see safeMemberHubs. */
+        if (flag === "safe") return isScannedClean(sev, vc) || st.safeMemberHubs.has(nid);
+        if (flag === "quarantined") return !!a.is_quarantined || st.quarantinedDeps.has(nid);
+        if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
+        if (flag === "has_deps") return st.hasDepNodes.has(nid) || a.nodeType === "dependency";
+        return false;
+      });
+      return st.filterFlagsMode === "and" ? results.every(Boolean) : results.some(Boolean);
+    };
+
     const sigma = new Sigma(graph, el, {
       allowInvalidContainer: true,
       renderEdgeLabels: false,
@@ -923,21 +982,7 @@ export default function GraphCanvas({
             if (anyParentVisible) return;
             const na = graph.getNodeAttributes(nid);
             if (na.nodeType !== "package") return;
-            const sev = (na.severity as string) ?? "None";
-            const vc = (na.vulnCount as number) ?? 0;
-            if (st.filter !== "all" && sev !== st.filter) return;
-            if (st.filterFlags.size === 0) { anyParentVisible = true; return; }
-            const results = Array.from(st.filterFlags).map((flag) => {
-              if (flag === "vulnerable") return vc > 0;
-              if (flag === "safe") return vc === 0;
-              if (flag === "quarantined") return !!na.is_quarantined || st.quarantinedDeps.has(nid);
-              if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
-              if (flag === "has_deps") return st.hasDepNodes.has(nid);
-              return false;
-            });
-            if (st.filterFlagsMode === "and" ? results.every(Boolean) : results.some(Boolean)) {
-              anyParentVisible = true;
-            }
+            if (passesFilters(st, nid, na)) anyParentVisible = true;
           });
           if (!anyParentVisible) {
             res.hidden = true;
@@ -953,29 +998,22 @@ export default function GraphCanvas({
 
         /* --- Filtering (severity AND status flags — packages only) --- */
         if (attrs.nodeType === "package") {
-          const vc = (attrs as any).vulnCount ?? 0;
-          const sev = (attrs as any).severity ?? "None";
+          let pass = passesFilters(st, node, attrs);
 
-          // Severity filter (single-select: Critical/High/Medium/Low or "all")
-          const severityPass = st.filter === "all" || sev === st.filter;
-
-          // Status flags (AND or OR logic depending on filterFlagsMode)
-          let flagsPass = st.filterFlags.size === 0;
-          if (!flagsPass) {
-            const flagResults = Array.from(st.filterFlags).map((flag) => {
-              if (flag === "vulnerable") return vc > 0;
-              if (flag === "safe") return vc === 0;
-              if (flag === "quarantined") return !!(attrs as any).is_quarantined || st.quarantinedDeps.has(node);
-              if (flag === "shared_cve") return st.sharedCveNodes.has(node);
-              if (flag === "has_deps") return st.hasDepNodes.has(node) || attrs.nodeType === "dependency";
-              return false;
-            });
-            flagsPass = st.filterFlagsMode === "and"
-              ? flagResults.every(Boolean)
-              : flagResults.some(Boolean);
+          /* An open hub is the anchor its versions hang off, not a result in
+             its own right: the repo edge was rewired onto it, so hiding it
+             strands every version it opened with no edge to draw. It survives
+             on its members' behalf whenever one of them is still showing. */
+          if (!pass && st.openHubs.has(node)) {
+            for (const mid of st.groupMembers[node] ?? []) {
+              if (graph.hasNode(mid) && passesFilters(st, mid, graph.getNodeAttributes(mid))) {
+                pass = true;
+                break;
+              }
+            }
           }
 
-          if (!severityPass || !flagsPass) {
+          if (!pass) {
             res.hidden = true;
             return res;
           }
