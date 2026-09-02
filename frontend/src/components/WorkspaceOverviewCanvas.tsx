@@ -231,8 +231,21 @@ export default function WorkspaceOverviewCanvas({
     /* Fit to view */
     sigma.getCamera().setState({ ratio: 1.6, x: 0.5, y: 0.5 });
 
+    /* Cursor feedback, matching the repo graph: over a node it is grabbable,
+       pressed it is grabbing, over the stage it is the default arrow. Set on
+       the mouse canvas, which is the layer sigma puts on top. */
+    const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
+    const setCursor = (c: string) => { if (mouseCanvas) mouseCanvas.style.cursor = c; };
+
+    sigma.on("enterNode", () => setCursor("grab"));
+    sigma.on("leaveNode", () => setCursor("default"));
+    sigma.on("downNode", () => setCursor("grabbing"));
+
     /* Click handlers */
     sigma.on("clickNode", ({ node }) => {
+      /* Back to grab on release, or the pointer stays pressed-looking while
+         it is still over the node that was clicked. */
+      setCursor("grab");
       removeContextMenu();
       if (node === wsId) {
         onWorkspaceSelect();
