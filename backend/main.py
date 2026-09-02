@@ -1059,6 +1059,43 @@ def get_package_detail(request: Request, owner: str, repo: str, slug: str):
     return _package_detail(pkg)
 
 
+@app.get("/api/package-group/{owner}/{repo}", response_model=list[PackageDetail])
+def get_package_group(request: Request, owner: str, repo: str, name: str):
+    """Every version published under one package name.
+
+    The name is a query parameter, not a path segment: Docker package names
+    carry a slash (library/node) and no amount of encoding survives path
+    normalisation on the way in.
+
+    Served from the cached package list, which already holds the complete
+    record for every package in the repo — so a group of fifty versions costs
+    no upstream call at all while that cache is warm. Fetching them one at a
+    time through /api/package would be fifty round trips for the same bytes.
+    """
+    api_key = _get_api_key(request)
+    session = create_session(api_key)
+    try:
+        packages = _fetch_packages_cached(session, owner, repo)
+    except Exception as exc:  # noqa: BLE001 - the panel must survive this
+        log.warning("Package group fetch failed for %s/%s/%s: %s", owner, repo, name, exc)
+        raise HTTPException(status_code=502, detail="Could not load package group") from exc
+
+    members = [p for p in packages if (p.get("name") or "") == name]
+    if not members:
+        raise HTTPException(status_code=404, detail="No packages found for that name")
+
+    # Worst first: a group is opened to find out which version to avoid, and
+    # the answer should not be somewhere in the middle of a list of fifty.
+    members.sort(
+        key=lambda p: (
+            -SEVERITY_RANK.get((p.get("vulnerability_counts") or {}).get("max_severity") or "", 0),
+            -((p.get("vulnerability_counts") or {}).get("total") or 0),
+            p.get("uploaded_at") or "",
+        ),
+    )
+    return [_package_detail(p) for p in members]
+
+
 @app.get("/api/search")
 def search_packages(owner: str, repo: str, query: str, request: Request):
     """Proxy the Cloudsmith query filter to search packages by name, version, format, etc."""
