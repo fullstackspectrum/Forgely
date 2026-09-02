@@ -1169,48 +1169,70 @@ body {
 
 /* ===== Side panel ===== */
 
-.panel-overlay {
-  position: fixed;
-  width: 376px;
-  max-height: calc(100vh - 106px);
-  z-index: 200;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: var(--fg-radius-lg);
-  /* §4 reserves shadows for modals and popovers, and this panel floats over
-     the canvas rather than sitting in the layout — the mockup shadows it for
-     that reason, and a border alone does not lift it off a busy graph. */
-  box-shadow: 0 8px 24px rgba(4, 10, 18, 0.5);
-  overflow-y: auto;
-  animation: floatIn 0.22s ease-out;
-  transition: width 0.3s ease, right 0.3s ease, left 0.3s ease, top 0.3s ease, bottom 0.3s ease, border-radius 0.3s ease, max-height 0.3s ease;
-  will-change: transform;
-}
-.panel-overlay-expanded {
-  top: 0 !important;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  width: auto;
-  max-height: 100vh;
-  border-radius: 0;
+/* Width of the docked details panel. Named so the graph and the top bar can
+   make room for exactly the same amount. */
+:root {
+  --details-w: clamp(340px, 26vw, 520px);
 }
 
-@keyframes floatIn {
-  from {
-    transform: translateY(12px) scale(0.97);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
+/* Docked to the right edge, full height — not a floating card.
+   It was a draggable 376px box that opened over the left of the canvas,
+   which covered the graph it was describing and had to be moved out of the
+   way to read either one. */
+.panel-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: var(--details-w);
+  z-index: 200;
+  background: var(--c-surface);
+  /* One edge against the canvas, matching how .left-panel divides itself from
+     it. §4 reserves shadows for things that float; this no longer does. */
+  border: none;
+  border-left: 1px solid var(--c-border);
+  border-radius: 0;
+  box-shadow: none;
+  animation: dockIn 0.22s ease-out;
+  transition: left 0.3s ease, width 0.3s ease;
 }
+
+.panel-overlay-expanded {
+  left: 0;
+  width: auto;
+}
+
+/* The canvas and the top bar give up the width the panel takes, so nothing is
+   hidden behind it. Same arrangement as the left panel, which .graph-wrapper
+   already indents for. Expanded is deliberately excluded: it covers the graph
+   on purpose, and reflowing to zero width would thrash the layout. */
+.app:has(.panel-overlay:not(.panel-overlay-expanded)) .graph-wrapper,
+.app:has(.panel-overlay:not(.panel-overlay-expanded)) .top-bar {
+  right: var(--details-w);
+}
+
+.graph-wrapper {
+  transition: left 0.3s ease, right 0.3s ease;
+}
+
+.top-bar {
+  transition: left 0.3s ease, right 0.3s ease;
+}
+
+@keyframes dockIn {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
 
 .panel-toolbar {
   position: sticky;
   top: 0;
   z-index: 2;
+  /* The panel is a flex column and this is its first child; without this it
+     shrinks as the scrolling body below it grows. */
+  flex: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1222,7 +1244,6 @@ body {
   border-radius: inherit;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  cursor: move;
   user-select: none;
 }
 .panel-toolbar button { cursor: pointer; }
@@ -4496,6 +4517,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Expanded panel: the SCA lists reflow into columns.
+   A full-screen panel is 3-4x the docked width, and a single column of cards
+   stretched across it leaves a line of text per card with most of the row
+   empty — the same reason .wo-cve-list below is gridded. */
+.panel-overlay-expanded .cve-list,
+.panel-overlay-expanded .dep-list,
+.panel-overlay-expanded .dep-pkg-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+/* Breathing room to match the extra width. */
+.panel-overlay-expanded .side-panel {
+  padding: 0 32px 32px;
+}
+
+.panel-overlay-expanded .panel-header {
+  margin: 0 -32px 20px;
+  padding: 20px 32px 18px;
 }
 
 /* Expanded panel: CVE cards become a responsive grid */
