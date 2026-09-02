@@ -73,7 +73,14 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
     let vulnCount = 0;
     let downloads = 0;
     let quarantined = false;
+    /* A scan that found nothing and a scan that never ran both rank 0, so
+       `worse` cannot tell them apart — and a group with no vulnerable member
+       would end up null, which the canvas reads as "Unknown" and
+       hide-unsupported then removes. A group holding even one scanned package
+       is not unscannable, so it floors at "None" instead. */
+    let scanned = false;
     for (const m of members) {
+      if (m.data.max_severity != null) scanned = true;
       severity = worse(severity, m.data.max_severity) ?? severity;
       vulnCount += m.data.vuln_count || 0;
       downloads += m.data.downloads || 0;
@@ -85,7 +92,7 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
       type: "package",
       data: {
         ...members[0].data,
-        max_severity: severity,
+        max_severity: severity ?? (scanned ? "None" : null),
         vuln_count: vulnCount,
         downloads,
         is_quarantined: quarantined,
