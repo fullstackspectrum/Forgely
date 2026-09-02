@@ -553,6 +553,18 @@ def fetch_all_packages(session: requests.Session, owner: str, repo: str, on_page
     return packages
 
 
+def fetch_package(session: requests.Session, owner: str, repo: str, slug: str) -> dict:
+    """One package's full record.
+
+    The list endpoint the graph build uses already returns every field, but it
+    is not kept: holding 7,500 complete records to serve the one the user
+    clicked would cost more memory than re-asking for it does latency.
+    """
+    url = f"{BASE_URL}/packages/{owner}/{repo}/{slug}/"
+    data = _api_get(session, url)
+    return data if isinstance(data, dict) else {}
+
+
 def fetch_dependencies(
     session: requests.Session, owner: str, repo: str, slug: str, fmt: str = ""
 ) -> list[dict]:

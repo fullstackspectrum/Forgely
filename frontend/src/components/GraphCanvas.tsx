@@ -1315,34 +1315,42 @@ export default function GraphCanvas({
     });
 
     /* Events */
+    /* Opening a group in the graph. Moved off the single click, which now
+       selects the group so its panel can list the versions with their tags and
+       architecture — a click on any other node already means "tell me about
+       this", and a group was the one exception. */
+    const toggleGroup = (node: string) => {
+      const name = node.slice(GROUP_PREFIX.length);
+      /* Safe to read directly: the build effect is keyed on `grouped`, so this
+         handler is rebuilt whenever expandedGroups changes. */
+      const opening = !expandedGroups.has(name);
+      changeGroups(
+        (prev) => {
+          const next = new Set(prev);
+          if (next.has(name)) next.delete(name);
+          else next.add(name);
+          return next;
+        },
+        /* Opening: frame the versions and the hub they came out of. Closing
+           leaves the camera alone — the user is stepping back out, and
+           yanking the view would undo the position they closed it from. */
+        opening ? [node, ...(versionsByName.get(name) ?? [])] : undefined,
+      );
+    };
+
     sigma.on("clickNode", ({ node }) => {
-      /* A collapsed group opens rather than selects: there is no single
-         package behind it to show. */
-      if (node.startsWith(GROUP_PREFIX)) {
-        const name = node.slice(GROUP_PREFIX.length);
-        /* Safe to read directly: the build effect is keyed on `grouped`, so
-           this handler is rebuilt whenever expandedGroups changes. */
-        const opening = !expandedGroups.has(name);
-        changeGroups(
-          (prev) => {
-            const next = new Set(prev);
-            /* The hub stays on screen once open, so the same click closes it —
-               otherwise the only way back is double-clicking the background. */
-            if (next.has(name)) next.delete(name);
-            else next.add(name);
-            return next;
-          },
-          /* Opening: frame the versions and the hub they came out of. Closing
-             leaves the camera alone — the user is stepping back out, and
-             yanking the view would undo the position they closed it from. */
-          opening ? [node, ...(versionsByName.get(name) ?? [])] : undefined,
-        );
-        return;
-      }
       if (graph.getNodeAttribute(node, "nodeType") === "echo") return;
       onNodeSelect(node);
       focusAround(sigma, graph, node);
       setContextMenu(null);
+    });
+
+    /* Double click opens or closes a group in the graph. Single click selects
+       it, so this is the gesture left for changing what is drawn. */
+    sigma.on("doubleClickNode", (e) => {
+      if (!e.node.startsWith(GROUP_PREFIX)) return;
+      e.preventSigmaDefault();
+      toggleGroup(e.node);
     });
     const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
     const setCursor = (c: string) => { if (mouseCanvas) mouseCanvas.style.cursor = c; };
