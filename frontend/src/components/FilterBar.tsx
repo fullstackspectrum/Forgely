@@ -1,19 +1,19 @@
 import React, { useState } from "react";
 import { SeverityNodeMark } from "./SeverityMark";
-import type { FilterType } from "../types";
+import type { Severity } from "../types";
 import ChangelogModal from "./ChangelogModal";
 
 type TabType = "packages" | "organisation";
 
 interface Props {
-  filter: FilterType;
+  severities: Set<Severity>;
   filterFlags: Set<string>;
   filterFlagsMode: "and" | "or";
   hasKey: boolean;
   tab: TabType;
   disabled?: boolean;
   onTabChange: (t: TabType) => void;
-  onFilterChange: (f: FilterType) => void;
+  onSeveritiesChange: (s: Set<Severity>) => void;
   onFilterFlagsChange: (flags: Set<string>) => void;
   onFilterFlagsModeChange: (m: "and" | "or") => void;
   onOpenSettings: () => void;
@@ -27,7 +27,7 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
   { key: "has_deps",    label: "Has dependencies" },
 ];
 
-const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
+const SEVERITY_FILTERS: { key: Severity; label: string; color: string }[] = [
   { key: "Critical", label: "Critical", color: "var(--s-critical)" },
   { key: "High",     label: "High",     color: "var(--s-high)" },
   { key: "Medium",   label: "Medium",   color: "var(--s-medium)" },
@@ -35,20 +35,20 @@ const SEVERITY_FILTERS: { key: FilterType; label: string; color: string }[] = [
 ];
 
 export default function FilterBar({
-  filter,
+  severities,
   filterFlags,
   filterFlagsMode,
   hasKey,
   tab,
   disabled = false,
   onTabChange,
-  onFilterChange,
+  onSeveritiesChange,
   onFilterFlagsChange,
   onFilterFlagsModeChange,
   onOpenSettings,
 }: Props) {
   const [changelogOpen, setChangelogOpen] = useState(false);
-  const hasAnyFilter = filter !== "all" || filterFlags.size > 0;
+  const hasAnyFilter = severities.size > 0 || filterFlags.size > 0;
 
   const toggleFlag = (key: string) => {
     const next = new Set(filterFlags);
@@ -56,12 +56,16 @@ export default function FilterBar({
     onFilterFlagsChange(next);
   };
 
-  const toggleSeverity = (key: FilterType) => {
-    onFilterChange(filter === key ? "all" : key);
+  /* Additive: selecting Critical and High shows both, rather than the second
+     click replacing the first. Clicking a selected level clears just it. */
+  const toggleSeverity = (key: Severity) => {
+    const next = new Set(severities);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onSeveritiesChange(next);
   };
 
   const clearAll = () => {
-    onFilterChange("all");
+    onSeveritiesChange(new Set());
     onFilterFlagsChange(new Set());
   };
 
@@ -120,10 +124,10 @@ export default function FilterBar({
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Max severity" defaultOpen={true}>
+        <CollapsibleSection title="Severity" defaultOpen={true}>
           <div className="left-panel-btn-group">
             {SEVERITY_FILTERS.map((f) => {
-              const active = filter === f.key;
+              const active = severities.has(f.key);
               return (
                 <button
                   key={f.key}
