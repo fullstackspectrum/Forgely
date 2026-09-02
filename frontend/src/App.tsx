@@ -34,9 +34,7 @@ export default function App() {
   const [owner, setOwner] = useState("");
   const [repo, setRepo] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
   const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
@@ -85,8 +83,6 @@ export default function App() {
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
   const [orgPanelExpanded, setOrgPanelExpanded] = useState(false);
-  const [orgPanelPos, setOrgPanelPos] = useState<{ x: number; y: number } | null>(null);
-  const orgPanelRef = useRef<HTMLDivElement>(null);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
   /* Empty means every type. Several types at once is a union — a node has
@@ -108,8 +104,6 @@ export default function App() {
   const [workspaceRepoInitialQuery, setWorkspaceRepoInitialQuery] = useState<string>("");
   const [workspaceFormatFilter, setWorkspaceFormatFilter] = useState<Set<string>>(new Set());
   const [workspaceNodeSelected, setWorkspaceNodeSelected] = useState(false);
-  const woPanelRef = useRef<HTMLDivElement>(null);
-  const [woPanelPos, setWoPanelPos] = useState<{ x: number; y: number } | null>(null);
   const [woPanelExpanded, setWoPanelExpanded] = useState(false);
 
   /* Apply a setting and remember it. Everything routed through here survives
@@ -484,47 +478,13 @@ export default function App() {
           )}
 
           {selectedNode && data && !attackGraphOpen && (() => {
-            const defaultTop = 84;
-            const defaultLeft = panelCollapsed ? 48 : 280;
-            const panelStyle = panelExpanded
-              ? undefined
-              : panelPos
-                ? { top: panelPos.y, left: panelPos.x, right: "auto" as const }
-                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
-
-            const onToolbarMouseDown = (e: React.MouseEvent) => {
-              if (panelExpanded || (e.target as HTMLElement).closest("button")) return;
-              const panel = panelRef.current;
-              if (!panel) return;
-              const rect = panel.getBoundingClientRect();
-              const startX = e.clientX, startY = e.clientY;
-              const startLeft = rect.left, startTop = rect.top;
-              let dx = 0, dy = 0;
-              const onMove = (me: MouseEvent) => {
-                dx = me.clientX - startX;
-                dy = me.clientY - startY;
-                panel.style.transform = `translate(${dx}px,${dy}px)`;
-              };
-              const onUp = () => {
-                document.removeEventListener("mousemove", onMove);
-                document.removeEventListener("mouseup", onUp);
-                panel.style.transform = "";
-                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
-                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
-                setPanelPos({ x: finalX, y: finalY });
-              };
-              document.addEventListener("mousemove", onMove);
-              document.addEventListener("mouseup", onUp);
-              e.preventDefault();
-            };
-
             return (
-              <div ref={panelRef} className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
-                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+              <div className={`panel-overlay${panelExpanded ? " panel-overlay-expanded" : ""}`}>
+                <div className="panel-toolbar">
                   <button className="panel-expand-btn" onClick={() => setPanelExpanded(e => !e)} title={panelExpanded ? "Collapse panel" : "Expand panel"}>
                     {panelExpanded ? "⇥" : "⇤"}
                   </button>
-                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); setPanelPos(null); }}>×</button>
+                  <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
                 </div>
                 <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
               </div>
@@ -546,39 +506,11 @@ export default function App() {
 
           {/* Workspace node panel (whole-workspace summary) */}
           {viewMode === "workspace" && workspaceOverviewData && workspaceNodeSelected && (() => {
-            const defaultTop = 84;
-            const defaultLeft = panelCollapsed ? 48 : 280;
-            const panelStyle = woPanelExpanded
-              ? undefined
-              : woPanelPos
-                ? { top: woPanelPos.y, left: woPanelPos.x, right: "auto" as const }
-                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
-
-            const onToolbarMouseDown = (e: React.MouseEvent) => {
-              if (woPanelExpanded || (e.target as HTMLElement).closest("button")) return;
-              const panel = woPanelRef.current;
-              if (!panel) return;
-              const rect = panel.getBoundingClientRect();
-              const startX = e.clientX, startY = e.clientY;
-              const startLeft = rect.left, startTop = rect.top;
-              let dx = 0, dy = 0;
-              const onMove = (me: MouseEvent) => { dx = me.clientX - startX; dy = me.clientY - startY; panel.style.transform = `translate(${dx}px,${dy}px)`; };
-              const onUp = () => {
-                document.removeEventListener("mousemove", onMove);
-                document.removeEventListener("mouseup", onUp);
-                panel.style.transform = "";
-                setWoPanelPos({ x: Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width)), y: Math.max(0, Math.min(startTop + dy, window.innerHeight - 60)) });
-              };
-              document.addEventListener("mousemove", onMove);
-              document.addEventListener("mouseup", onUp);
-              e.preventDefault();
-            };
-
             return (
-              <div ref={woPanelRef} className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
-                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+              <div className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`}>
+                <div className="panel-toolbar">
                   <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>{woPanelExpanded ? "⇥" : "⇤"}</button>
-                  <button className="panel-close" onClick={() => { setWorkspaceNodeSelected(false); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                  <button className="panel-close" onClick={() => { setWorkspaceNodeSelected(false); setWoPanelExpanded(false); }}>×</button>
                 </div>
                 <WorkspaceOverviewPanel
                   data={workspaceOverviewData}
@@ -594,47 +526,13 @@ export default function App() {
           {viewMode === "workspace" && workspaceOverviewData && selectedWorkspaceRepo && (() => {
             const repoData = workspaceOverviewData.repos.find((r) => r.slug === selectedWorkspaceRepo);
             if (!repoData) return null;
-            const defaultTop = 84;
-            const defaultLeft = panelCollapsed ? 48 : 280;
-            const panelStyle = woPanelExpanded
-              ? undefined
-              : woPanelPos
-                ? { top: woPanelPos.y, left: woPanelPos.x, right: "auto" as const }
-                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
-
-            const onToolbarMouseDown = (e: React.MouseEvent) => {
-              if (woPanelExpanded || (e.target as HTMLElement).closest("button")) return;
-              const panel = woPanelRef.current;
-              if (!panel) return;
-              const rect = panel.getBoundingClientRect();
-              const startX = e.clientX, startY = e.clientY;
-              const startLeft = rect.left, startTop = rect.top;
-              let dx = 0, dy = 0;
-              const onMove = (me: MouseEvent) => {
-                dx = me.clientX - startX;
-                dy = me.clientY - startY;
-                panel.style.transform = `translate(${dx}px,${dy}px)`;
-              };
-              const onUp = () => {
-                document.removeEventListener("mousemove", onMove);
-                document.removeEventListener("mouseup", onUp);
-                panel.style.transform = "";
-                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
-                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
-                setWoPanelPos({ x: finalX, y: finalY });
-              };
-              document.addEventListener("mousemove", onMove);
-              document.addEventListener("mouseup", onUp);
-              e.preventDefault();
-            };
-
             return (
-              <div ref={woPanelRef} className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
-                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+              <div className={`panel-overlay${woPanelExpanded ? " panel-overlay-expanded" : ""}`}>
+                <div className="panel-toolbar">
                   <button className="panel-expand-btn" onClick={() => setWoPanelExpanded(e => !e)} title={woPanelExpanded ? "Collapse panel" : "Expand panel"}>
                     {woPanelExpanded ? "⇥" : "⇤"}
                   </button>
-                  <button className="panel-close" onClick={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); setWoPanelExpanded(false); setWoPanelPos(null); }}>×</button>
+                  <button className="panel-close" onClick={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); setWoPanelExpanded(false); }}>×</button>
                 </div>
                 <WorkspaceRepoPanel
                   data={repoData}
@@ -687,47 +585,13 @@ export default function App() {
           )}
 
           {orgSelectedNode && orgData && (() => {
-            const defaultTop = 84;
-            const defaultLeft = panelCollapsed ? 48 : 280;
-            const panelStyle = orgPanelExpanded
-              ? undefined
-              : orgPanelPos
-                ? { top: orgPanelPos.y, left: orgPanelPos.x, right: "auto" as const }
-                : { top: defaultTop, left: defaultLeft, right: "auto" as const };
-
-            const onToolbarMouseDown = (e: React.MouseEvent) => {
-              if (orgPanelExpanded || (e.target as HTMLElement).closest("button")) return;
-              const panel = orgPanelRef.current;
-              if (!panel) return;
-              const rect = panel.getBoundingClientRect();
-              const startX = e.clientX, startY = e.clientY;
-              const startLeft = rect.left, startTop = rect.top;
-              let dx = 0, dy = 0;
-              const onMove = (me: MouseEvent) => {
-                dx = me.clientX - startX;
-                dy = me.clientY - startY;
-                panel.style.transform = `translate(${dx}px,${dy}px)`;
-              };
-              const onUp = () => {
-                document.removeEventListener("mousemove", onMove);
-                document.removeEventListener("mouseup", onUp);
-                panel.style.transform = "";
-                const finalX = Math.max(0, Math.min(startLeft + dx, window.innerWidth - rect.width));
-                const finalY = Math.max(0, Math.min(startTop + dy, window.innerHeight - 60));
-                setOrgPanelPos({ x: finalX, y: finalY });
-              };
-              document.addEventListener("mousemove", onMove);
-              document.addEventListener("mouseup", onUp);
-              e.preventDefault();
-            };
-
             return (
-              <div ref={orgPanelRef} className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`} style={panelStyle}>
-                <div className="panel-toolbar" onMouseDown={onToolbarMouseDown}>
+              <div className={`panel-overlay${orgPanelExpanded ? " panel-overlay-expanded" : ""}`}>
+                <div className="panel-toolbar">
                   <button className="panel-expand-btn" onClick={() => setOrgPanelExpanded(e => !e)} title={orgPanelExpanded ? "Collapse panel" : "Expand panel"}>
                     {orgPanelExpanded ? "⇥" : "⇤"}
                   </button>
-                  <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); setOrgPanelPos(null); }}>×</button>
+                  <button className="panel-close" onClick={() => { setOrgSelectedNode(null); setOrgPanelExpanded(false); }}>×</button>
                 </div>
                 <OrgSidePanel data={orgData} nodeId={orgSelectedNode} onNodeSelect={setOrgSelectedNode} expanded={orgPanelExpanded}
                   onOpenAttackPaths={() => setCiemAttackPathOpen(true)} />
