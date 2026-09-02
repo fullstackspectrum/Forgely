@@ -3,7 +3,8 @@ import Sigma from "sigma";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import { circular } from "graphology-layout";
-import { NodeImageWithRingProgram, severityRing } from "../programs/nodeWithSeverityRing";
+import { NodeImageWithRingProgram, severityRing, nodeFill } from "../programs/nodeWithSeverityRing";
+import { NodeTiltedSquareProgram } from "../programs/roundedSquare";
 import { EdgeCurvedArrowProgram } from "@sigma/edge-curve";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
@@ -140,17 +141,19 @@ export default function WorkspaceOverviewCanvas({
     const graph = new Graph({ multi: false });
     graphRef.current = graph;
 
-    /* Workspace centre node — styled like the repo node in GraphCanvas */
+    /* Workspace centre node — the same mark GraphCanvas gives the repository
+       it centres on: the ember square, tilted. It was the product icon, which
+       made the centre of this graph read as branding rather than as the thing
+       every edge points at. §1 allows one ember per view and this is it. */
     const wsId = `ws:${data.owner}`;
     graph.addNode(wsId, {
       x: 0,
       y: 0,
       size: 48,
       label: "",
-      color: token("--c-bg"),
+      color: nodeFill("repo"),
       nodeType: "workspace",
-      type: "image",
-      image: "/forgely-icon.svg",
+      type: "tilted",
     });
 
     /* Repo nodes arranged in a circle */
@@ -181,6 +184,11 @@ export default function WorkspaceOverviewCanvas({
            no border support — so it now goes through the compound program. */
         color: token("--fg-blue-400"),
         ...severityRing(sev),
+        /* Named explicitly. With no type and no defaultNodeType these fell
+           through to sigma's plain circle program, which has no border — so
+           the ring above was still being discarded, which is exactly what the
+           comment above says was fixed. The compound program draws it. */
+        type: "image",
         nodeType: "repo",
         slug: repo.slug,
         max_severity: sev,
@@ -204,7 +212,7 @@ export default function WorkspaceOverviewCanvas({
       minCameraRatio: 0.05,
       maxCameraRatio: 8,
       defaultEdgeType: "curvedArrow",
-      nodeProgramClasses: { image: NodeImageWithRingProgram },
+      nodeProgramClasses: { image: NodeImageWithRingProgram, tilted: NodeTiltedSquareProgram },
       edgeProgramClasses: { curvedArrow: EdgeCurvedArrowProgram },
       nodeReducer: (node, attrs) => {
         const isSelected = node === selectedRepo || (attrs.nodeType === "workspace" && workspaceSelected);
@@ -223,8 +231,21 @@ export default function WorkspaceOverviewCanvas({
     /* Fit to view */
     sigma.getCamera().setState({ ratio: 1.6, x: 0.5, y: 0.5 });
 
+    /* Cursor feedback, matching the repo graph: over a node it is grabbable,
+       pressed it is grabbing, over the stage it is the default arrow. Set on
+       the mouse canvas, which is the layer sigma puts on top. */
+    const mouseCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).mouse;
+    const setCursor = (c: string) => { if (mouseCanvas) mouseCanvas.style.cursor = c; };
+
+    sigma.on("enterNode", () => setCursor("grab"));
+    sigma.on("leaveNode", () => setCursor("default"));
+    sigma.on("downNode", () => setCursor("grabbing"));
+
     /* Click handlers */
     sigma.on("clickNode", ({ node }) => {
+      /* Back to grab on release, or the pointer stays pressed-looking while
+         it is still over the node that was clicked. */
+      setCursor("grab");
       removeContextMenu();
       if (node === wsId) {
         onWorkspaceSelect();
