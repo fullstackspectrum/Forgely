@@ -5282,6 +5282,122 @@ td, th,
   font-weight: 600;
 }
 
+/* ===== Package detail: summary, flags, tags, digests ===== */
+
+.panel-summary-text {
+  margin: 0 0 14px;
+  font-size: var(--fg-text-sm);
+  line-height: 1.5;
+  color: var(--t-secondary);
+}
+
+.pkg-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.pkg-flag {
+  font-size: var(--fg-text-xs);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--fg-radius-sm);
+  border: 1px solid transparent;
+}
+
+/* Tinted, never a solid severity fill behind white text — §2.4 contrast. */
+.pkg-flag-danger {
+  color: var(--s-critical);
+  background: var(--fg-sev-critical-bg);
+  border-color: var(--s-critical);
+}
+
+.pkg-flag-warn {
+  color: var(--s-medium);
+  background: var(--fg-sev-medium-bg);
+  border-color: var(--s-medium);
+}
+
+.pkg-tag-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pkg-tag-category {
+  flex: none;
+  min-width: 74px;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.pkg-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pkg-tag {
+  font-size: var(--fg-text-xs);
+  padding: 2px 8px;
+  border-radius: var(--fg-radius-pill, 999px);
+  background: var(--c-tint-subtle);
+  border: 1px solid var(--c-tint);
+  color: var(--t-secondary);
+  /* A Docker version tag can be a 64-character digest; it wraps rather than
+     widening the panel or being clipped to something unreadable. */
+  overflow-wrap: anywhere;
+}
+
+.pkg-digests {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pkg-digest {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--fg-radius-sm);
+  border: 1px solid var(--c-border);
+  background: var(--c-bg-subtle);
+  color: var(--t-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.pkg-digest:hover {
+  border-color: var(--c-action);
+  color: var(--t-primary);
+}
+
+.pkg-digest.copied {
+  border-color: var(--s-none);
+}
+
+.pkg-digest-label {
+  flex: none;
+  min-width: 58px;
+  font-size: var(--fg-text-xs);
+  font-weight: 600;
+  color: var(--t-muted);
+}
+
+.pkg-digest-value {
+  font-family: var(--fg-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  /* Hex has no spaces, so it will not wrap without being told to. */
+  overflow-wrap: anywhere;
+}
+
 /* Badges carry the severity as text on a tinted background — never white text
    on a solid severity fill, which fails contrast for High, Medium and Low.
    Critical is the documented exception (6.54:1) and may be solid when one

@@ -206,3 +206,53 @@ export const ORG_NODE_SHAPE: Record<string, string> = {
   service: "triangle",
   upstream: "hexagon",
 };
+
+/* Metadata for one package, fetched on selection rather than carried by the
+   graph — see usePackageDetail. Most of it varies by format, which is why
+   `identifiers` and `tags` are open-ended maps rather than named fields. */
+export interface PackageDetail {
+  slug: string;
+  name: string;
+  version: string;
+  format: string;
+  filename: string;
+  extension: string;
+  description: string;
+  summary: string;
+
+  uploader: string;
+  uploaded_at: string;
+  repository: string;
+  namespace: string;
+
+  size: number;
+  num_files: number;
+  downloads: number;
+  license: string;
+  spdx_license: string;
+
+  checksum_md5: string;
+  checksum_sha1: string;
+  checksum_sha256: string;
+  checksum_sha512: string;
+
+  identifiers: Record<string, string>;
+  tags: Record<string, string[]>;
+  architectures: string[];
+  distro: string;
+  subtype: string;
+  type_display: string;
+  epoch: string;
+  release: string;
+
+  status: string;
+  stage: string;
+  scan_status: string;
+  is_quarantined: boolean;
+  is_malware_detected: boolean;
+  policy_violated: boolean;
+
+  web_url: string;
+  cdn_url: string;
+  signature_url: string;
+}
