@@ -23,7 +23,7 @@ import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
 import { applyTheme, resolveTheme, storedTheme, watchSystemTheme, type Theme } from "./lib/theme";
 import { loadSettings, saveSetting, resetSettings, type Settings } from "./lib/settings";
-import type { FilterType, LayoutType, EdgeStyle, OrgGraphResponse, WorkspaceOverviewResponse } from "./types";
+import type { Severity, LayoutType, EdgeStyle, OrgGraphResponse, WorkspaceOverviewResponse } from "./types";
 
 type TabType = "packages" | "organisation";
 
@@ -36,7 +36,7 @@ export default function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterType>("all");
+  const [severities, setSeverities] = useState<Set<Severity>>(new Set());
   const [filterFlags, setFilterFlags] = useState<Set<string>>(new Set());
   const [filterFlagsMode, setFilterFlagsMode] = useState<"and" | "or">("and");
   const [formatFilter, setFormatFilter] = useState<string | null>(null);
@@ -300,14 +300,14 @@ export default function App() {
       {/* Left control panel */}
       {tab === "packages" && (
         <FilterBar
-          filter={filter}
+          severities={severities}
           filterFlags={filterFlags}
           filterFlagsMode={filterFlagsMode}
           hasKey={hasKey}
           tab={tab}
           disabled={viewMode === "workspace"}
           onTabChange={(t) => { setTab(t); if (t === "organisation") setSelectedNode(null); }}
-          onFilterChange={setFilter}
+          onSeveritiesChange={setSeverities}
           onFilterFlagsChange={setFilterFlags}
           onFilterFlagsModeChange={setFilterFlagsMode}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -447,7 +447,7 @@ export default function App() {
               data={data}
               selectedNode={selectedNode}
               hoveredNode={hoveredNode}
-              filter={filter}
+              severities={severities}
               filterFlags={filterFlags}
               filterFlagsMode={filterFlagsMode}
               formatFilter={formatFilter}
@@ -486,7 +486,7 @@ export default function App() {
                   </button>
                   <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
                 </div>
-                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} filter={filter} formatFilter={formatFilter} onFilterChange={setFilter} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
+                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} severities={severities} formatFilter={formatFilter} onSeveritiesChange={setSeverities} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
               </div>
             );
           })()}

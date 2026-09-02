@@ -16,7 +16,7 @@ import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRen
 import { placeRadially, refineForceLayout, clusterAround, groupSpacing, assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 import { focusNodes } from "../lib/focus";
 import type { Point } from "../lib/layout";
-import type { GraphResponse, FilterType, LayoutType, EdgeStyle, NodeData } from "../types";
+import type { GraphResponse, Severity, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import { token } from "../lib/palette";
@@ -211,7 +211,7 @@ interface Props {
   data: GraphResponse;
   selectedNode: string | null;
   hoveredNode: string | null;
-  filter: FilterType;
+  severities: Set<Severity>;
   filterFlags?: Set<string>;
   filterFlagsMode?: "and" | "or";
   formatFilter?: string | null;
@@ -235,7 +235,7 @@ export default function GraphCanvas({
   data,
   selectedNode,
   hoveredNode,
-  filter,
+  severities,
   filterFlags = new Set<string>(),
   filterFlagsMode = "and",
   formatFilter = null,
@@ -438,7 +438,7 @@ export default function GraphCanvas({
   const stateRef = useRef({
     selectedNode,
     hoveredNode,
-    filter,
+    severities,
     filterFlags,
     filterFlagsMode,
     formatFilter,
@@ -582,7 +582,7 @@ export default function GraphCanvas({
       ...stateRef.current,
       selectedNode,
       hoveredNode,
-      filter,
+      severities,
       filterFlags,
       filterFlagsMode,
       formatFilter,
@@ -604,7 +604,7 @@ export default function GraphCanvas({
       groupMembers: grouped.groupMembers,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs, safeMemberHubs, grouped.groupMembers]);
+  }, [selectedNode, hoveredNode, severities, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs, safeMemberHubs, grouped.groupMembers]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -877,7 +877,9 @@ export default function GraphCanvas({
     const passesFilters = (st: typeof stateRef.current, nid: string, a: Record<string, unknown>): boolean => {
       const vc = (a.vulnCount as number) ?? 0;
       const sev = (a.severity as string) ?? "None";
-      if (st.filter !== "all" && sev !== st.filter) return false;
+      /* An empty set means every severity; otherwise any listed level
+         matches, so Critical + High shows both. */
+      if (st.severities.size > 0 && !st.severities.has(sev as Severity)) return false;
       if (st.filterFlags.size === 0) return true;
       const results = Array.from(st.filterFlags).map((flag) => {
         if (flag === "vulnerable") return vc > 0;
@@ -952,8 +954,8 @@ export default function GraphCanvas({
             res.hidden = true;
             return res;
           }
-          // Hide ring when severity filter excludes Critical nodes
-          if (st.filter !== "all" && st.filter !== "Critical") {
+          // Hide ring when the severity filter excludes Critical nodes
+          if (st.severities.size > 0 && !st.severities.has("Critical")) {
             res.hidden = true;
             return res;
           }
@@ -1037,7 +1039,7 @@ export default function GraphCanvas({
         }
 
         /* --- Hide dependency nodes whose parent packages are all filtered out --- */
-        if (attrs.nodeType === "dependency" && (st.filter !== "all" || st.filterFlags.size > 0)) {
+        if (attrs.nodeType === "dependency" && (st.severities.size > 0 || st.filterFlags.size > 0)) {
           let anyParentVisible = false;
           graph.forEachNeighbor(node, (nid) => {
             if (anyParentVisible) return;
