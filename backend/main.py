@@ -29,6 +29,7 @@ from cloudsmith import (
     fetch_all_packages,
     fetch_dependencies,
     fetch_namespaces,
+    fetch_package,
     fetch_org_members,
     fetch_org_services,
     fetch_org_teams,
@@ -49,6 +50,7 @@ from models import (
     GraphResponse,
     GraphStats,
     NodeData,
+    PackageDetail,
     WorkspaceCveSummary,
     WorkspaceOverviewResponse,
     WorkspaceRepoSummary,
@@ -958,6 +960,103 @@ def get_package_cve_details(request: Request, owner: str, repo: str, slug: str):
         log.warning("CVE detail fetch failed for %s/%s/%s: %s", owner, repo, slug, exc)
         raise HTTPException(status_code=502, detail="Could not load vulnerability details") from exc
     return _cve_records(vulns)
+
+
+def _stringify(value) -> str:
+    """A scalar the panel can print, or "" when there is nothing to print.
+
+    Cloudsmith returns several of these fields as nested objects — distro is
+    {slug, name, ...}, architectures is a list of {name, description} — and the
+    panel wants a name, not a shape.
+    """
+    if value is None or value == "":
+        return ""
+    if isinstance(value, dict):
+        return str(value.get("name") or value.get("slug") or "")
+    return str(value)
+
+
+def _package_detail(pkg: dict) -> PackageDetail:
+    """Normalise one Cloudsmith package record for the details panel."""
+    distro = _stringify(pkg.get("distro"))
+    distro_version = _stringify(pkg.get("distro_version"))
+
+    # Passed through rather than mapped: every format names its own keys, and a
+    # fixed mapping would silently drop the ones this build has not seen.
+    identifiers = {
+        k: _stringify(v)
+        for k, v in (pkg.get("identifiers") or {}).items()
+        if _stringify(v) and _stringify(v) != "None"
+    }
+
+    tags: dict[str, list[str]] = {}
+    for category, values in (pkg.get("tags") or {}).items():
+        if isinstance(values, list) and values:
+            tags[str(category)] = [str(v) for v in values]
+
+    return PackageDetail(
+        slug=pkg.get("slug_perm") or pkg.get("identifier_perm") or "",
+        name=pkg.get("name") or "",
+        version=pkg.get("version") or "",
+        format=pkg.get("format") or "",
+        filename=pkg.get("filename") or "",
+        extension=pkg.get("extension") or "",
+        description=pkg.get("description") or "",
+        summary=pkg.get("summary") or "",
+        uploader=pkg.get("uploader") or "",
+        uploaded_at=pkg.get("uploaded_at") or "",
+        repository=pkg.get("repository") or "",
+        namespace=pkg.get("namespace") or "",
+        size=pkg.get("size") or 0,
+        num_files=pkg.get("num_files") or 0,
+        downloads=pkg.get("downloads") or 0,
+        license=pkg.get("license") or "",
+        spdx_license=pkg.get("spdx_license") or "",
+        checksum_md5=pkg.get("checksum_md5") or "",
+        checksum_sha1=pkg.get("checksum_sha1") or "",
+        checksum_sha256=pkg.get("checksum_sha256") or "",
+        checksum_sha512=pkg.get("checksum_sha512") or "",
+        identifiers=identifiers,
+        tags=tags,
+        architectures=[
+            n for n in (_stringify(a) for a in (pkg.get("architectures") or [])) if n
+        ],
+        distro=f"{distro} {distro_version}".strip(),
+        subtype=pkg.get("subtype") or "",
+        type_display=pkg.get("type_display") or "",
+        epoch=_stringify(pkg.get("epoch")),
+        release=_stringify(pkg.get("release")),
+        status=pkg.get("status_str") or "",
+        stage=pkg.get("stage_str") or "",
+        scan_status=pkg.get("security_scan_status") or "",
+        is_quarantined=bool(pkg.get("is_quarantined")),
+        is_malware_detected=bool(pkg.get("is_malware_detected")),
+        policy_violated=bool(pkg.get("policy_violated")),
+        web_url=pkg.get("self_webapp_url") or "",
+        cdn_url=pkg.get("cdn_url") or "",
+        signature_url=pkg.get("signature_url") or "",
+    )
+
+
+@app.get("/api/package/{owner}/{repo}/{slug}", response_model=PackageDetail)
+def get_package_detail(request: Request, owner: str, repo: str, slug: str):
+    """Full metadata for one package.
+
+    Served on selection, like /api/cve, so the graph payload stays the size it
+    is. Unlike CVE records this cannot come from the warm cache — the build
+    keeps only the handful of fields the graph draws — so it is one upstream
+    call per package the user opens.
+    """
+    api_key = _get_api_key(request)
+    session = create_session(api_key)
+    try:
+        pkg = fetch_package(session, owner, repo, slug)
+    except Exception as exc:  # noqa: BLE001 - the panel must survive a missing record
+        log.warning("Package detail fetch failed for %s/%s/%s: %s", owner, repo, slug, exc)
+        raise HTTPException(status_code=502, detail="Could not load package details") from exc
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Package not found")
+    return _package_detail(pkg)
 
 
 @app.get("/api/search")

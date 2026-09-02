@@ -46,6 +46,7 @@ function packageMatchesFilter(p: GraphNode, severities: Set<Severity>): boolean 
    fresh `new Set()` would change identity and re-fire every memo keyed on it. */
 const EMPTY_SEVERITIES: Set<Severity> = new Set();
 
+import { usePackageDetail } from "../hooks/usePackageDetail";
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
 
@@ -165,6 +166,15 @@ export default function SidePanel({
   const sev = d.max_severity || "None";
   const sevColor = SEVERITY_COLORS[sev] || SEVERITY_COLORS.None;
 
+  /* Everything below the graph's own fields. Absent until it arrives and on
+     failure, so every section that uses it is written to disappear rather
+     than to render empty. */
+  const { detail } = usePackageDetail(
+    owner,
+    repo,
+    node.type === "package" ? d.slug : "",
+  );
+
   const sizeStr =
     d.size > 1048576
       ? `${(d.size / 1048576).toFixed(1)} MB`
@@ -188,9 +198,13 @@ export default function SidePanel({
     }
   }
 
-  const cloudsmithUrl = node.type === "package" && d.slug
-    ? `https://app.cloudsmith.com/${owner}/r/${repo}/package-group/${d.format}/${encodeURIComponent(node.label)}/${d.slug}`
-    : null;
+  /* The API's own link when we have it: the hand-built one guesses at a URL
+     shape, and guesses wrong for formats whose name is not the group name. */
+  const cloudsmithUrl = detail?.web_url
+    ? detail.web_url
+    : node.type === "package" && d.slug
+      ? `https://app.cloudsmith.com/${owner}/r/${repo}/package-group/${d.format}/${encodeURIComponent(node.label)}/${d.slug}`
+      : null;
 
   const canGenerateReport =
     node.type === "package" &&
@@ -355,15 +369,100 @@ export default function SidePanel({
           onClick={d.format ? () => toggleFormat(d.format.toLowerCase()) : undefined}
           active={!!d.format && formatFilter === d.format.toLowerCase()}
         />
-        <MetaRow label="License" value={d.license} />
+        <MetaRow label="License" value={detail?.spdx_license || d.license} />
         <MetaRow label="Size" value={sizeStr} />
         <MetaRow label="Downloads" value={String(d.downloads ?? "—")} />
         <MetaRow label="Scan status" value={d.scan_status} />
         <MetaRow label="Uploaded" value={uploadDate} />
+        {/* Rows below need the fetched detail, so each is omitted rather than
+            shown as an em dash while it loads or if it never arrives. */}
+        {detail?.uploader && <MetaRow label="Uploaded by" value={detail.uploader} />}
+        {detail?.type_display && <MetaRow label="Type" value={detail.type_display} />}
+        {detail?.distro && <MetaRow label="Distribution" value={detail.distro} />}
+        {detail?.architectures?.length ? (
+          <MetaRow label="Architecture" value={detail.architectures.join(", ")} />
+        ) : null}
+        {detail?.epoch && <MetaRow label="Epoch" value={detail.epoch} />}
+        {detail?.release && <MetaRow label="Release" value={detail.release} />}
+        {detail?.filename && <MetaRow label="Filename" value={detail.filename} />}
+        {detail && detail.num_files > 0 && (
+          <MetaRow label="Files" value={String(detail.num_files)} />
+        )}
+        {detail?.status && <MetaRow label="Status" value={detail.status} />}
       </div>
+
+      {/* A one-line summary is worth more than any row above it, but only some
+          formats carry one. */}
+      {detail?.summary && <p className="panel-summary-text">{detail.summary}</p>}
+
+      {/* Flags worth interrupting for. Quarantine already has its own badge in
+          the header, so only the two the graph does not draw appear here. */}
+      {(detail?.is_malware_detected || detail?.policy_violated) && (
+        <div className="pkg-flags">
+          {detail.is_malware_detected && (
+            <span className="pkg-flag pkg-flag-danger">Malware detected</span>
+          )}
+          {detail.policy_violated && (
+            <span className="pkg-flag pkg-flag-warn">Policy violated</span>
+          )}
+        </div>
+      )}
       </div>
 
       <div className="panel-details">
+
+      {/* Identifiers — the fields that actually name this artefact in its own
+          ecosystem. Every format uses different keys (a Docker image has a
+          platform, a Conda package a build string, an Alpine package a distro
+          version), so they are listed as returned rather than mapped onto a
+          fixed set that would drop whatever we had not anticipated. */}
+      {detail && Object.keys(detail.identifiers).length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Identifiers</h3>
+          <div className="panel-meta">
+            {Object.entries(detail.identifiers).map(([key, value]) => (
+              <MetaRow key={key} label={humanise(key)} value={value} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tags, grouped by the category the registry files them under. */}
+      {detail && Object.keys(detail.tags).length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Tags</h3>
+          {Object.entries(detail.tags).map(([category, values]) => (
+            <div key={category} className="pkg-tag-group">
+              <span className="pkg-tag-category">{humanise(category)}</span>
+              <div className="pkg-tag-list">
+                {values.map((v) => (
+                  <span key={v} className="pkg-tag" title={v}>{v}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Digests, strongest first — the weaker ones are still shown because
+          they are what an older toolchain will be comparing against. */}
+      {detail && (detail.checksum_sha512 || detail.checksum_sha256 || detail.checksum_sha1 || detail.checksum_md5) && (
+        <div className="panel-section">
+          <h3 className="section-title">Digests</h3>
+          <div className="pkg-digests">
+            {([
+              ["SHA-512", detail.checksum_sha512],
+              ["SHA-256", detail.checksum_sha256],
+              ["SHA-1", detail.checksum_sha1],
+              ["MD5", detail.checksum_md5],
+            ] as const)
+              .filter(([, value]) => !!value)
+              .map(([label, value]) => (
+                <Digest key={label} label={label} value={value} />
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Dependencies */}
       {dependencies.length > 0 && (
@@ -583,6 +682,45 @@ export default function SidePanel({
       })()}
       </div>
     </div>
+  );
+}
+
+/** "docker_platform_os" -> "Docker platform os". Identifier keys come straight
+ *  from the registry and are snake_case machine names. */
+function humanise(key: string): string {
+  const spaced = key.replace(/[_-]+/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * One digest, click to copy.
+ *
+ * A SHA-512 is 128 characters — far too wide for the panel and useless
+ * truncated, since the reason to look at a digest is to compare it. It wraps,
+ * and the whole row is a copy button so nobody has to select it by hand.
+ */
+function Digest({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`pkg-digest${copied ? " copied" : ""}`}
+      onClick={() => {
+        navigator.clipboard?.writeText(value).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          },
+          /* Clipboard access can be refused; the digest is still on screen to
+             be copied by hand, so this is not worth an error state. */
+          () => {},
+        );
+      }}
+      title={copied ? "Copied" : `Copy ${label}`}
+    >
+      <span className="pkg-digest-label">{copied ? "Copied" : label}</span>
+      <code className="pkg-digest-value">{value}</code>
+    </button>
   );
 }
 
