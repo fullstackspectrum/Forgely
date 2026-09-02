@@ -63,17 +63,11 @@ export interface GraphResponse {
   stats: GraphStats;
 }
 
-export type FilterType =
-  | "all"
-  | "vulnerable"
-  | "safe"
-  | "quarantined"
-  | "shared_cve"
-  | "has_deps"
-  | "Critical"
-  | "High"
-  | "Medium"
-  | "Low";
+/* The four levels the severity filter offers. A *set* of these is held rather
+   than one value: filtering to "Critical or High" is the common question, and
+   a single-select forced it to be asked twice. An empty set means every
+   severity, which is why there is no "all" member. */
+export type Severity = "Critical" | "High" | "Medium" | "Low";
 
 export type LayoutType = "force" | "circular" | "radial" | "tree" | "horizontal";
 
