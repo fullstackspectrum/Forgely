@@ -149,6 +149,15 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
  * roughly three quarters of packages are unscannable, so "Safe" selected
  * almost everything and looked like it did nothing.
  */
+/** Container width / height, guarded so a zero-height container cannot make
+ *  the scatter degenerate. */
+function containerAspect(el: HTMLElement | null | undefined): number {
+  const w = el?.offsetWidth ?? 0;
+  const h = el?.offsetHeight ?? 0;
+  if (!w || !h) return 1;
+  return w / h;
+}
+
 function isScannedClean(severity: string | null | undefined, vulnCount: number | undefined): boolean {
   return severity != null && severity !== "Unknown" && (vulnCount ?? 0) === 0;
 }
@@ -564,7 +573,7 @@ export default function GraphCanvas({
       /* Scatter now so the switch is instant, then settle across frames.
          The camera refit waits for the layout to stop — refitting mid-run
          chases nodes that are still moving. */
-      const repoNode = placeRadially(graph);
+      const repoNode = placeRadially(graph, undefined, containerAspect(sigma.getContainer()));
       sigma.refresh();
       sigma.getCamera().animatedReset({ duration: 400 });
       layoutRef.current?.();
@@ -781,7 +790,7 @@ export default function GraphCanvas({
         members.forEach((id, i) => seed!.set(id, spots[i]));
       }
     }
-    const repoNode = placeRadially(graph, seed);
+    const repoNode = placeRadially(graph, seed, containerAspect(containerRef.current));
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
