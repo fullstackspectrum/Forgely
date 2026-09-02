@@ -139,6 +139,20 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
   assignPositions(root, 0, 0);
 }
 
+/**
+ * A package is safe when a scan ran and found nothing — not merely when no
+ * findings are recorded against it.
+ *
+ * The backend distinguishes the two: "None" means scanned clean, while null
+ * (which the canvas reads as "Unknown") means the format cannot be scanned at
+ * all. Treating both as safe made the filter vacuous — on a container repo
+ * roughly three quarters of packages are unscannable, so "Safe" selected
+ * almost everything and looked like it did nothing.
+ */
+function isScannedClean(severity: string | null | undefined, vulnCount: number | undefined): boolean {
+  return severity != null && severity !== "Unknown" && (vulnCount ?? 0) === 0;
+}
+
 interface Props {
   /** Resolved theme. Only used to re-read colours; the DOM is themed by CSS. */
   theme?: "light" | "dark";
@@ -239,7 +253,7 @@ export default function GraphCanvas({
   }, [expandedGroups, groupableNames]);
 
   /* Hubs standing for at least one package that scanned clean.
-     
+
      Every other status flag already reads a hub as "any member matches":
      vulnerable sums the counts, quarantined ORs them, shared-CVE and
      has-dependencies go by the edges rewired onto the hub, and the severity
@@ -248,12 +262,13 @@ export default function GraphCanvas({
      clean — so a clean package sharing a name with a vulnerable one could not
      be reached while the group was collapsed. */
   const safeMemberHubs = useMemo(() => {
-    const countOf = new Map<string, number>();
+    const cleanIds = new Set<string>();
     for (const n of data?.nodes ?? [])
-      if (n.type === "package") countOf.set(n.id, n.data.vuln_count || 0);
+      if (n.type === "package" && isScannedClean(n.data.max_severity, n.data.vuln_count))
+        cleanIds.add(n.id);
     const out = new Set<string>();
     for (const [gid, ids] of Object.entries(grouped.groupMembers))
-      if (ids.some((id) => (countOf.get(id) ?? 0) === 0)) out.add(gid);
+      if (ids.some((id) => cleanIds.has(id))) out.add(gid);
     return out;
   }, [data, grouped.groupMembers]);
 
@@ -808,8 +823,9 @@ export default function GraphCanvas({
       if (st.filterFlags.size === 0) return true;
       const results = Array.from(st.filterFlags).map((flag) => {
         if (flag === "vulnerable") return vc > 0;
-        /* A hub is safe if any version it stands for is — see safeMemberHubs. */
-        if (flag === "safe") return vc === 0 || st.safeMemberHubs.has(nid);
+        /* Scanned and clean — not merely "no findings recorded". A hub is safe
+           if any version it stands for is; see safeMemberHubs. */
+        if (flag === "safe") return isScannedClean(sev, vc) || st.safeMemberHubs.has(nid);
         if (flag === "quarantined") return !!a.is_quarantined || st.quarantinedDeps.has(nid);
         if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
         if (flag === "has_deps") return st.hasDepNodes.has(nid) || a.nodeType === "dependency";
