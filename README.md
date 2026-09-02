@@ -91,7 +91,7 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
                          │ /api/*
 ┌────────────────────────▼────────────────────────────────┐
 │  FastAPI  (localhost:8000)                              │
-│  In-memory cache · ThreadPoolExecutor (20 workers)      │
+│  In-memory + SQLite scan cache · ThreadPoolExecutor      │
 └────────────────────────┬────────────────────────────────┘
                          │ HTTPS
 ┌────────────────────────▼────────────────────────────────┐
@@ -117,18 +117,24 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 - **Pulsing critical nodes** — animated ring effect on Critical packages to draw immediate attention (toggleable)
 - **Hover effects** — node glow + size boost; un-hovered edges dim out; connected nodes stay highlighted
 - **Quarantine indicators** — quarantined packages rendered with a distinct ring node program
-- **Floating details panel** — click any node to open a draggable, repositionable panel; expand to full screen for deep inspection
+- **Docked details panel** — click any node to open a full-height panel on the right; the graph and top bar make room for it rather than being covered. Expand to full screen for deep inspection, where the CVE and dependency lists reflow into columns
 - **CVE detail cards** — per-CVE severity badge, affected/fixed versions, NVD and GitHub Advisory links; paginated with search and severity filter
 - **Format cards** — repo overview panel shows package formats with total counts; format cards dim when a severity filter is active
 - **Most vulnerable** — top-5 most vulnerable packages listed in the repo panel, clickable to navigate directly to that node
 - **Dependency graph** — expandable dependencies list within the package panel; click to refocus on a dependency node
 - **Attack path panel** — visualises the full attack chain: Client Tools → Internet → Registry → Repository → Package → CVE, with format-specific client tool examples
+- **Version grouping** — packages sharing a name collapse to one node carrying the group's worst severity (292 nodes to 15 on a container repo). Click a group to inspect it, double-click to open it in the graph, or expand/collapse every group at once from the graph controls
+- **Group details panel** — a group's panel lists every version worst-first with its severity, type, architecture and tags, searchable by tag — which matters for Docker, where the version is a digest and the tag is the only readable part
+- **Package metadata** — digests (click to copy), format-specific identifiers, tags, uploader, filename, architecture and distribution, fetched on selection so the graph payload stays small
 - **CVE search** — search by CVE ID or package name; matching nodes are highlighted in the graph
-- **Severity filters** — All / Vulnerable / Safe / Critical / High / Medium / Low / Quarantined / Shared CVEs / Has Dependencies
+- **Severity filter** — Critical / High / Medium / Low, multi-select: pick Critical *and* High to see both. No selection means every severity
+- **Status filters** — Vulnerable / Safe / Quarantined / Shared CVEs / Has dependencies, combined with AND or OR. "Safe" means *scanned and clean*, not merely "no findings recorded", so packages whose format cannot be scanned are excluded
 - **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation
 - **Format filter** — click a format card in the repo panel to isolate packages of that format in the graph
 - **Workspace overview** — cross-repository SCA view: all repos in an organisation rendered as a single graph, with aggregate vulnerability stats, package format heatmap, severity breakdown, and cross-repo CVE search
 - **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree, Horizontal; edge style auto-switches to match layout
+- **Viewport-filling layout** — the initial scatter is stretched to the container's aspect ratio and spread by golden angle, so a wide window is used rather than letterboxed and no run of related packages lands in one arc
+- **Density scaling** — on a large repository, node sizes are scaled down against the space available, which is what browser zoom-out was being used for
 - **Refresh** — force re-fetch bypasses the cache and pulls fresh data from Cloudsmith
 
 ### CIEM — Cloud Infrastructure Entitlement Management
@@ -218,12 +224,22 @@ npm run dev
 | `/api/namespaces` | GET | List Cloudsmith workspaces the key has access to |
 | `/api/repos/{owner}` | GET | List repositories for a workspace |
 | `/api/graph` | GET | SCA artifact graph for `?owner=&repo=` (5 min cache) |
+| `/api/graph/stream` | GET | Same graph as server-sent events, with build progress |
 | `/api/graph/refresh` | POST | Force re-fetch, bypassing cache |
+| `/api/cve/{owner}/{repo}/{slug}` | GET | Full CVE records for one package, descriptions included |
+| `/api/package/{owner}/{repo}/{slug}` | GET | Full metadata for one package: digests, tags, identifiers |
+| `/api/package-group/{owner}/{repo}` | GET | Every version published under `?name=` |
 | `/api/search` | GET | Search packages by name/version/format |
+| `/api/changelog` | GET | CHANGELOG.md, rendered in the version modal |
 | `/api/workspace-overview` | GET | Cross-repo SCA overview for `?owner=` (10 min cache) |
 | `/api/org-graph` | GET | CIEM identity graph for `?owner=` |
 | `/api/auth/validate` | POST | Validate a Cloudsmith API key |
 | `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate HTML vulnerability report via [vulnly](https://pypi.org/project/vulnly/) |
+| `/api/vulnly-repo-report/{owner}/{repo}` | GET | Same report across a whole repository |
+
+The three per-package endpoints are fetched on selection rather than inlined in
+the graph. CVE descriptions alone were 21.5 MB of a 29.2 MB payload, and none of
+it is visible until a node is clicked.
 
 ---
 
@@ -234,9 +250,10 @@ around one displaced ember cell.
 
 | Node | Meaning |
 |------|---------|
-| Ember square, tilted | The repository — the centre everything is arranged around |
+| Ember square, tilted | The repository — the centre everything is arranged around. The workspace overview uses the same mark for the workspace |
 | Blue square | A package. The shade is its distance from whatever you have selected |
-| Blue square, tilted | The package you are currently investigating |
+| Blue square, tilted | The package you are currently investigating, or the one under the pointer |
+| Blue square, labelled `name (n)` | A group: every version published under one name, sized by how many |
 | Hexagon | A dependency |
 
 **Fill encodes distance, not severity.** Selecting a package shades the graph by
@@ -245,17 +262,26 @@ Containment edges are not traversed: reaching another package *through* the
 repository is not blast radius. Nodes it cannot reach fade back rather than
 changing colour, so the distance encoding survives the dimming.
 
-**Severity is a ring, and never colour alone.** Each level also has a distinct
-width and shape so it survives a greyscale screenshot — the ramp itself does
-not: desaturated, Critical and Low land three levels apart out of 255.
+**Severity is a ring around the node, in one width for every level.** The ring
+used to widen with severity — 6/4/2.5/1.5px — to survive a greyscale screenshot,
+which the ramp alone does not: desaturated, Critical and Low land three levels
+apart out of 255. But at 6px a Critical ring read as a *different kind of node*
+rather than a worse one, so the width is now uniform and the greyscale criterion
+is met away from the canvas, where severity is also a distinct shape.
 
-| Level | Mark | Ring | Light | Dark |
-|-------|------|------|-------|------|
-| Critical | ● filled circle | 6px | `#D62B20` | `#FF3B30` |
-| High | ▲ filled triangle | 4px | `#C25E00` | `#FF8A1F` |
-| Medium | ■ filled square | 2.5px | `#8A6410` | `#F2CE3F` |
-| Low | ○ hollow circle | 1.5px | `#4E657D` | `#7FA8C9` |
-| None | □ hollow square | none | — | — |
+| Level | Ring | Panel mark | Light | Dark |
+|-------|------|------------|-------|------|
+| Critical | 4px | ● filled circle | `#D62B20` | `#FF3B30` |
+| High | 4px | ▲ filled triangle | `#C25E00` | `#FF8A1F` |
+| Medium | 4px | ■ filled square | `#8A6410` | `#F2CE3F` |
+| Low | 4px | ○ hollow circle | `#4E657D` | `#7FA8C9` |
+| None | none | □ hollow square | — | — |
+
+The **panel mark** is what dense lists use, where shape carries the level
+without relying on colour. The legend and the severity filters instead show a
+package node with its ring, so the key matches the thing it is keying — ring
+width and colour there are read from the same constants the renderer uses, so
+they cannot drift from the canvas.
 
 Graph rings are more saturated than the severity colours used in text and
 badges: a ring is a non-text element, so it is held to 3:1 rather than 4.5:1
@@ -270,7 +296,7 @@ follows the system setting.
 
 | Layout | Description |
 |--------|-------------|
-| 💥 Force | ForceAtlas2 — organic clustering by connection gravity |
+| 💥 Force | ForceAtlas2 — organic clustering by connection gravity. On a repository whose edges nearly all hang off the repo node, the graph is already at equilibrium and the settling step stops early rather than spending the budget moving nothing |
 | ◎ Circular | All nodes arranged in a circle |
 | 🎯 Radial | Repository / workspace pinned to centre, nodes orbit outward |
 | 🌳 Tree | Hierarchical top-down |
@@ -286,6 +312,9 @@ Forgely/
 │   ├── main.py               # FastAPI app, graph construction, caching
 │   ├── cloudsmith.py         # Cloudsmith API client (packages, vulns, deps, org)
 │   ├── models.py             # Pydantic response models
+│   ├── cache.py              # Persistent scan cache (SQLite), keyed on scan time
+│   ├── compression.py        # Streaming gzip for the graph responses
+│   ├── perfstats.py          # Per-build request timing and cache instrumentation
 │   └── requirements.txt      # Python dependencies
 ├── frontend/
 │   ├── public/               # Brand SVGs and self-hosted fonts
@@ -298,7 +327,8 @@ Forgely/
 │       │   ├── OrgSidePanel.tsx             # CIEM node detail panel
 │       │   ├── WorkspaceOverviewPanel.tsx   # Workspace-level SCA summary panel
 │       │   ├── WorkspaceRepoPanel.tsx       # Per-repo SCA detail panel (overview mode)
-│       │   ├── AttackGraphPanel.tsx         # Attack path visualisation
+│       │   ├── AttackGraphPanel.tsx         # SCA attack path visualisation
+│       │   ├── CiemAttackPathPanel.tsx      # CIEM attack path visualisation
 │       │   ├── FilterBar.tsx                # Left control panel (SCA tab)
 │       │   ├── OrgLeftPanel.tsx             # Left control panel (CIEM tab)
 │       │   ├── LayoutPopout.tsx             # Shared layout/edge style control
@@ -309,23 +339,35 @@ Forgely/
 │       │   ├── Legend.tsx                   # SCA graph legend
 │       │   ├── OrgLegend.tsx                # CIEM graph legend
 │       │   ├── ConnectModal.tsx             # API key connect/disconnect modal
-│       │   ├── SeverityMark.tsx             # Severity as shape + colour, never colour alone
+│       │   ├── SettingsDialog.tsx           # Theme and graph visibility settings
+│       │   ├── ChangelogModal.tsx           # CHANGELOG viewer, opened from the version
+│       │   ├── SeverityMark.tsx             # Severity as a shape in lists, as a node in keys
 │       │   ├── ThemeToggle.tsx              # Light / Auto / Dark
 │       │   └── LoadingIndicator.tsx         # Branded loader with real build progress
 │       ├── hooks/
 │       │   ├── useGraphData.ts        # Streams the SCA graph, with progress
-│       │   └── useCveDescriptions.ts  # CVE descriptions, fetched on expand
+│       │   ├── useCveDescriptions.ts  # CVE descriptions, fetched on expand
+│       │   ├── usePackageDetail.ts    # One package's metadata, fetched on selection
+│       │   └── usePackageGroup.ts     # Every version under one name, in one request
 │       ├── lib/
 │       │   ├── auth.ts                # API key storage and fetch wrapper
 │       │   ├── palette.ts             # Design tokens for canvas/WebGL code
 │       │   ├── theme.ts               # Light / Auto / Dark selection
-│       │   ├── layout.ts              # ForceAtlas2 placement and settling
+│       │   ├── layout.ts              # Scatter, ForceAtlas2 settling, overlap separation
+│       │   ├── groupPackages.ts       # Collapses same-named packages into one node
+│       │   ├── focus.ts               # Camera framing for a set of nodes
+│       │   ├── settings.ts            # Persisted UI preferences
+│       │   ├── ciemAttackPaths.ts     # Identity → repository path scoring
 │       │   ├── hoverRenderer.ts       # Canvas hover card and node labels
 │       │   └── formatIcons.ts         # Package format → icon, used by panels
 │       ├── programs/
-│       │   ├── roundedSquare.ts       # Node shapes from the mark, with severity rings
-│       │   ├── NodeHexagonProgram.ts  # Dependency nodes
-│       │   └── NodeRingProgram.ts     # Pulse rings on Critical packages
+│       │   ├── roundedSquare.ts        # Node shapes from the mark (square, tilted)
+│       │   ├── nodeWithSeverityRing.ts # Node fill + severity ring, shared by both graphs
+│       │   ├── NodeHexagonProgram.ts   # Dependency nodes
+│       │   ├── NodeTriangleProgram.ts  # CIEM node shape
+│       │   ├── NodeRingProgram.ts      # Pulse rings on Critical packages
+│       │   ├── EdgeDottedProgram.ts    # Dashed access edges
+│       │   └── EdgeCurvedDottedProgram.ts # Dashed curved access edges
 │       ├── styles/
 │       │   ├── tokens.css             # Design tokens (light + dark)
 │       │   └── fonts.css              # Self-hosted Inter / Space Grotesk / JetBrains Mono
@@ -336,6 +378,8 @@ Forgely/
 │       └── index.css                  # Global styles
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/
+│   └── performance-design.md         # Measured performance work and its results
 ├── .claude/
 │   └── commands/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
@@ -346,6 +390,7 @@ Forgely/
 │   ├── img/
 │   └── readme/                       # README screenshots and brand lockups
 ├── CHANGELOG.md
+├── USAGE.md
 ├── LICENSE
 └── README.md
 ```
