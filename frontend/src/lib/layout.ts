@@ -134,17 +134,43 @@ export function layoutSpan(positions: Iterable<Point>): number {
  * re-settled — the picture the user was reading jumps, and the versions that
  * appeared have no visible connection to the node they came from.
  */
-export function placeRadially(graph: Graph, seed?: Map<string, Point>): string | null {
+/* Innermost radius of the scatter, as a fraction of the outermost.
+ *
+ * Clearance for the repository node, which sits at the origin at size 48 and
+ * carries a label. It was 0.4/1.3 — a hole across the inner 31% of the radius,
+ * which on a 7,000-node graph is a large empty disc in the middle of the one
+ * place the eye starts. */
+const SCATTER_INNER_FRACTION = 0.15;
+
+/* ~137.5 degrees. Successive multiples never repeat a direction, which is why
+ * it is the angle sunflowers pack seeds at. */
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
+export function placeRadially(
+  graph: Graph,
+  seed?: Map<string, Point>,
+  /** Container width / height. The scatter is stretched to match so a wide
+   *  viewport is filled rather than letterboxed — see below. */
+  aspect = 1,
+): string | null {
   let repoNode: string | null = null;
   graph.forEachNode((id, attrs) => {
     if (attrs.nodeType === "repo") repoNode = id;
   });
 
-  // Radial scatter: repo at origin, everything else placed in a ring with
-  // random angle + distance variation so FA2 starts from a circular cloud
-  // rather than a square one (which it struggles to escape).
   const total = graph.order;
-  const baseRadius = Math.max(250, total * 10);
+  const outer = Math.max(250, total * 10) * 1.3;
+  const inner = outer * SCATTER_INNER_FRACTION;
+
+  /* Stretched to the viewport's aspect ratio.
+   *
+   * A circular scatter is fitted by sigma to whichever side is shorter, so on
+   * a 1468x708 container a 7,000-node graph was drawn into 628x628 — 43% of
+   * the width, with 840px of empty margin. Widening the scatter to the same
+   * proportions spends that space on the nodes instead. */
+  const xScale = aspect >= 1 ? Math.sqrt(aspect) : 1;
+  const yScale = aspect >= 1 ? 1 / Math.sqrt(aspect) : 1;
+
   let idx = 0;
   graph.forEachNode((id) => {
     const known = seed?.get(id);
@@ -158,12 +184,29 @@ export function placeRadially(graph: Graph, seed?: Map<string, Point>): string |
       graph.setNodeAttribute(id, "y", 0);
       return;
     }
-    // Spread evenly around the circle with a random offset so no two nodes
-    // start at the same angle, plus a random radial distance band.
-    const angle = (idx / Math.max(1, total - 1)) * 2 * Math.PI + (Math.random() - 0.5) * 1.5;
-    const r = baseRadius * (0.4 + Math.random() * 0.9);
-    graph.setNodeAttribute(id, "x", Math.cos(angle) * r);
-    graph.setNodeAttribute(id, "y", Math.sin(angle) * r);
+    /* Golden angle, not a sweep proportional to position in the list.
+       
+       `idx / count * 2PI` made screen angle a direct function of list order,
+       and both ends of that list map to the same place — angle 0 and angle
+       2PI are both due right. The API returns its nodes grouped, so every
+       kind that clusters at either end of the list piled up on the right: all
+       53 dependencies, 96% of the npm packages, 82% of the quarantined ones.
+       The 5,651 unscanned packages in the middle of the list spread evenly,
+       which is why the node *count* stayed symmetric while everything the eye
+       actually picks out did not.
+       
+       Consecutive indices now land ~137.5 degrees apart, so a run of related
+       nodes is scattered around the whole disc instead of forming an arc.
+       This also removes any dependence on how many nodes are being placed,
+       so a regroup that seeds most of them still spreads the rest fully. */
+    const angle = idx * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.4;
+    /* Uniform by area, not by radius. Interpolating the radius linearly packs
+       the inner rings and thins the outer ones, because a ring's area grows
+       with r; taking the square root spreads the same nodes at even density
+       across the whole disc. */
+    const r = Math.sqrt(inner * inner + Math.random() * (outer * outer - inner * inner));
+    graph.setNodeAttribute(id, "x", Math.cos(angle) * r * xScale);
+    graph.setNodeAttribute(id, "y", Math.sin(angle) * r * yScale);
     idx++;
   });
 

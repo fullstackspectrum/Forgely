@@ -149,6 +149,58 @@ function assignTreeLayout(graph: Graph, horizontal: boolean) {
  * roughly three quarters of packages are unscannable, so "Safe" selected
  * almost everything and looked like it did nothing.
  */
+/** A node's drawn radius in pixels, before the render scale below. */
+function rawNodeSize(type: string, groupSize: number, downloads: number): number {
+  if (type === "repo") return 48;
+  if (type === "dependency") return 6;
+  /* Sized by how many versions it stands for, so a fifty-version group reads
+     as a cluster rather than as one package. */
+  if (groupSize) return Math.max(18, Math.min(44, 16 + Math.sqrt(groupSize) * 4));
+  return Math.max(16, Math.min(40, 16 + downloads / 200));
+}
+
+/* Share of the container the nodes may cover before they are scaled down.
+ *
+ * Sigma draws nodes at a fixed pixel size, so zooming the *graph* out never
+ * makes them smaller — it only crowds them. Zooming the *browser* out does
+ * help, because the container gains CSS pixels while the nodes keep theirs.
+ * This reproduces that effect without touching the rest of the UI.
+ *
+ * Measured on a 10,400-package language repository at 1468x708: 7,004 nodes at
+ * their drawn sizes cover 791% of the container, which is why the graph reads
+ * as one solid mass. */
+const NODE_COVERAGE_TARGET = 0.5;
+
+/* Nodes stop being nodes below a few pixels. At this floor the median package
+ * on the language repository draws at ~4.8px and the repository at ~14px, which is
+ * still a legible landmark; going further would trade the graph for a fog. */
+const MIN_RENDER_SCALE = 0.3;
+
+/** Uniform scale that keeps the drawn nodes within NODE_COVERAGE_TARGET. */
+function renderScale(sizes: number[], el: HTMLElement | null | undefined): number {
+  const w = el?.offsetWidth ?? 0;
+  const h = el?.offsetHeight ?? 0;
+  if (!w || !h || sizes.length === 0) return 1;
+  /* Half the gap, because the gap sits between two nodes. */
+  const area = sizes.reduce((t, r) => t + Math.PI * (r + NODE_GAP / 2) ** 2, 0);
+  if (area <= 0) return 1;
+  const scale = Math.sqrt((w * h * NODE_COVERAGE_TARGET) / area);
+  return Math.max(MIN_RENDER_SCALE, Math.min(1, scale));
+}
+
+/* Breathing room each node is given when the coverage above is computed.
+ * Matches NODE_GAP_PX in layout.ts, which the separation pass uses. */
+const NODE_GAP = 6;
+
+/** Container width / height, guarded so a zero-height container cannot make
+ *  the scatter degenerate. */
+function containerAspect(el: HTMLElement | null | undefined): number {
+  const w = el?.offsetWidth ?? 0;
+  const h = el?.offsetHeight ?? 0;
+  if (!w || !h) return 1;
+  return w / h;
+}
+
 function isScannedClean(severity: string | null | undefined, vulnCount: number | undefined): boolean {
   return severity != null && severity !== "Unknown" && (vulnCount ?? 0) === 0;
 }
@@ -564,7 +616,7 @@ export default function GraphCanvas({
       /* Scatter now so the switch is instant, then settle across frames.
          The camera refit waits for the layout to stop — refitting mid-run
          chases nodes that are still moving. */
-      const repoNode = placeRadially(graph);
+      const repoNode = placeRadially(graph, undefined, containerAspect(sigma.getContainer()));
       sigma.refresh();
       sigma.getCamera().animatedReset({ duration: 400 });
       layoutRef.current?.();
@@ -660,22 +712,28 @@ export default function GraphCanvas({
     const graph = new Graph({ multi: true, type: "directed" });
     const nodeData: Record<string, NodeData> = {};
 
+    /* --- Node sizes ---
+       Sized in one pass up front so the scale can be derived from the whole
+       set: it depends on the total area the nodes would cover, which is not
+       known until every one of them has been measured. */
+    const rawSizes = new Map<string, number>();
+    for (const node of grouped.nodes) {
+      if (rawSizes.has(node.id)) continue;
+      rawSizes.set(node.id, rawNodeSize(
+        node.type,
+        grouped.groupMembers[node.id]?.length ?? 0,
+        node.data.downloads || 0,
+      ));
+    }
+    const scale = renderScale([...rawSizes.values()], container);
+
     /* --- Add nodes --- */
     for (const node of grouped.nodes) {
       if (graph.hasNode(node.id)) continue;  // skip duplicates
       const sev = node.data.max_severity ?? "Unknown";
 
       const groupSize = grouped.groupMembers[node.id]?.length ?? 0;
-      const size =
-        node.type === "repo"
-          ? 48
-          : node.type === "dependency"
-            ? 6
-            : groupSize
-              /* Sized by how many versions it stands for, so a fifty-version
-                 group reads as a cluster rather than as one package. */
-              ? Math.max(18, Math.min(44, 16 + Math.sqrt(groupSize) * 4))
-              : Math.max(16, Math.min(40, 16 + (node.data.downloads || 0) / 200));
+      const size = (rawSizes.get(node.id) ?? 16) * scale;
 
       /* Resolve icon for this node */
       /* Fill encodes what the node *is*; the ring encodes severity (§6). When
@@ -781,7 +839,7 @@ export default function GraphCanvas({
         members.forEach((id, i) => seed!.set(id, spots[i]));
       }
     }
-    const repoNode = placeRadially(graph, seed);
+    const repoNode = placeRadially(graph, seed, containerAspect(containerRef.current));
 
     /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
     const RING_COUNT = 2;
@@ -858,7 +916,10 @@ export default function GraphCanvas({
       nodeProgramClasses: { tilted: NodeTiltedSquareProgram, square: NodeSquareProgram, hexagon: NodeHexagonProgram, ring: NodeRingProgram },
       labelDensity: 0.12,
       labelGridCellSize: 80,
-      labelRenderedSizeThreshold: 5,
+      /* Scaled with the nodes. Left at a fixed 5px it would silently drop
+         every label on a large graph, where the scale above puts the median
+         node below that threshold. */
+      labelRenderedSizeThreshold: 5 * scale,
       // Resolved, not var(): sigma passes this straight to canvas ctx.font.
       labelFont: token("--fg-font-body"),
       labelColor: { color: token("--t-secondary") },
