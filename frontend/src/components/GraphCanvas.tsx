@@ -207,11 +207,49 @@ export default function GraphCanvas({
     return m;
   }, [data]);
 
+  /* Names holding more than one version — the only ones grouping applies to,
+     and so the set the expand-all control opens. A name with one version never
+     gained a group node, so asking to open it would be a no-op that still
+     counted against "everything is open". */
+  const groupableNames = useMemo(() => {
+    const out = new Set<string>();
+    for (const [name, ids] of versionsByName) if (ids.length > 1) out.add(name);
+    return out;
+  }, [versionsByName]);
+
+  /* Memoised, and without spreading the set: this component re-renders on
+     every hover, and a language repo carries several thousand groupable names.
+     Comparing sizes first makes the common case — some groups open, not all —
+     a single integer check rather than a walk. */
+  const allExpanded = useMemo(() => {
+    if (groupableNames.size === 0) return false;
+    let open = 0;
+    for (const name of expandedGroups) if (groupableNames.has(name)) open++;
+    return open === groupableNames.size;
+  }, [groupableNames, expandedGroups]);
+
+  /* The hubs standing open, whether one group or all of them. Kept apart from
+     expandedMembers because the hub treatment applies either way, while the
+     recede-everything-else treatment does not. */
+  const openHubs = useMemo(() => {
+    const out = new Set<string>();
+    for (const name of expandedGroups)
+      if (groupableNames.has(name)) out.add(GROUP_PREFIX + name);
+    return out;
+  }, [expandedGroups, groupableNames]);
+
   /* Every version an open group put on screen. Opening a group is a question
      about one package name, so everything else recedes while it is open —
      otherwise the versions that just appeared have to be picked out of the
      whole graph by eye, which is the problem grouping was meant to solve. */
   const expandedMembers = useMemo(() => {
+    /* Opening every group asks no question about any one name, so nothing is
+       singled out and nothing recedes. Left empty rather than filled: every
+       branch that dims is keyed on this set being non-empty, so emptying it
+       turns the whole focus treatment off in one place. Filling it would dim
+       the graph against itself — the repo and the dependencies would fade
+       while the versions that replaced them stayed lit. */
+    if (allExpanded) return new Set<string>();
     const out = new Set<string>();
     for (const name of expandedGroups) {
       const ids = versionsByName.get(name);
@@ -220,7 +258,7 @@ export default function GraphCanvas({
       for (const id of ids) out.add(id);
     }
     return out;
-  }, [expandedGroups, versionsByName]);
+  }, [expandedGroups, versionsByName, allExpanded]);
 
   /* Opening or closing a group rebuilds the graph, and a rebuild would
      normally re-scatter and re-settle every node. Capturing where everything
@@ -253,6 +291,17 @@ export default function GraphCanvas({
     onNodeHover(null);
     setExpandedGroups(next);
   }, [onNodeHover]);
+
+  /* Open or close every group at once. Neither passes a focus set: framing is
+     for a click on one hub, and there is no "the versions" to frame here — the
+     answer is the whole graph, so the camera stays where the user left it. */
+  const expandAllGroups = useCallback(() => {
+    changeGroups(() => new Set(groupableNames));
+  }, [changeGroups, groupableNames]);
+
+  const collapseAllGroups = useCallback(() => {
+    changeGroups(() => new Set());
+  }, [changeGroups]);
 
   /* Frame a node and whatever it connects to, so a click lands on something
      with its context rather than on a node alone in the middle of the view.
@@ -320,6 +369,7 @@ export default function GraphCanvas({
     hasDepNodes: new Set<string>(),
     quarantinedDeps: new Set<string>(),
     expandedMembers: new Set<string>(),
+    openHubs: new Set<string>(),
     nodeData: {} as Record<string, NodeData>,
     pulsePhase: 0,
   });
@@ -461,9 +511,10 @@ export default function GraphCanvas({
       hasDepNodes,
       quarantinedDeps,
       expandedMembers,
+      openHubs,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers]);
+  }, [selectedNode, hoveredNode, filter, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -1026,7 +1077,7 @@ export default function GraphCanvas({
             res.label = "";
             res.zIndex = -1;
           }
-        } else if (st.expandedMembers.has(node) && node.startsWith(GROUP_PREFIX)) {
+        } else if (st.openHubs.has(node)) {
           /* The open hub. It is no longer the answer to anything — it is the
              thing the versions came out of, and it still carries the whole
              group's worst severity, so at full strength it competes with the
@@ -1363,6 +1414,34 @@ export default function GraphCanvas({
       )}
 
       <div className="graph-controls">
+        {/* Before the layout popout in the DOM so its menu, which opens upward
+            over this row, paints on top rather than behind. */}
+        {groupableNames.size > 0 && (
+          <div className="graph-group-cluster">
+            <button
+              className="graph-nav-btn"
+              onClick={expandAllGroups}
+              disabled={allExpanded}
+              title={`Expand all ${groupableNames.size} groups`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+            </button>
+            <button
+              className="graph-nav-btn"
+              onClick={collapseAllGroups}
+              disabled={expandedGroups.size === 0}
+              title="Collapse all groups"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+                <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+            </button>
+          </div>
+        )}
         {onLayoutChange && onEdgeStyleChange && (
           <LayoutPopout
             layout={layout}

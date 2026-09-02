@@ -242,6 +242,36 @@ body {
   transform: scale(0.92);
 }
 
+/* Expand/collapse every package group. Sits directly above the layout pill and
+   aligned to it — both control how the graph is drawn rather than where the
+   camera is, which is what the clusters on the far right do. */
+.graph-group-cluster {
+  position: absolute;
+  bottom: 64px;
+  right: 112px;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+  z-index: 99;
+}
+
+.graph-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Every hover rule here is a :hover on the base class, which still fires on a
+   disabled button in some engines. Held to the resting look instead. */
+.graph-nav-btn:disabled:hover {
+  background: var(--c-overlay);
+  border-color: var(--c-hairline);
+  color: var(--text-secondary);
+}
+
+.graph-nav-btn:disabled:active {
+  transform: none;
+}
+
 /* ===== Layout Popout ===== */
 
 .layout-popout {
