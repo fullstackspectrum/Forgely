@@ -40,7 +40,10 @@ function packageMatchesFilter(p: GraphNode, f: FilterType): boolean {
   if (f === "all") return true;
   if (SEV_FILTERS.has(f)) return p.data.cves.some((c) => c.severity === f);
   if (f === "vulnerable") return p.data.vuln_count > 0;
-  if (f === "safe") return p.data.vuln_count === 0;
+  /* Scanned and clean. A package whose format cannot be scanned carries no
+     findings either, but it is Unknown rather than safe — and the graph
+     filter draws the same line, so the list and the canvas agree. */
+  if (f === "safe") return p.data.max_severity != null && p.data.vuln_count === 0;
   if (f === "quarantined") return p.data.is_quarantined === true;
   return true;
 }
