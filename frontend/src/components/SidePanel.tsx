@@ -1,11 +1,11 @@
 import { useMemo, useState, useCallback } from "react";
 import { currentTheme } from "../lib/theme";
 import SeverityMark from "./SeverityMark";
-import type { GraphResponse, GraphNode, CVERecord, FilterType } from "../types";
+import type { GraphResponse, GraphNode, CVERecord, Severity } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { useCveDescriptions } from "../hooks/useCveDescriptions";
 
-const SEV_FILTERS = new Set<FilterType>(["Critical", "High", "Medium", "Low"]);
+
 
 function VersionString({ version, mono = false }: { version: string; mono?: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -36,17 +36,16 @@ function VersionString({ version, mono = false }: { version: string; mono?: bool
   );
 }
 
-function packageMatchesFilter(p: GraphNode, f: FilterType): boolean {
-  if (f === "all") return true;
-  if (SEV_FILTERS.has(f)) return p.data.cves.some((c) => c.severity === f);
-  if (f === "vulnerable") return p.data.vuln_count > 0;
-  /* Scanned and clean. A package whose format cannot be scanned carries no
-     findings either, but it is Unknown rather than safe — and the graph
-     filter draws the same line, so the list and the canvas agree. */
-  if (f === "safe") return p.data.max_severity != null && p.data.vuln_count === 0;
-  if (f === "quarantined") return p.data.is_quarantined === true;
-  return true;
+/* An empty set is no filter at all; otherwise a package matches when it
+   carries a finding at any of the selected levels. */
+function packageMatchesFilter(p: GraphNode, severities: Set<Severity>): boolean {
+  if (severities.size === 0) return true;
+  return p.data.cves.some((c) => severities.has(c.severity as Severity));
 }
+/* Module-level so the default prop is the same object on every render; a
+   fresh `new Set()` would change identity and re-fire every memo keyed on it. */
+const EMPTY_SEVERITIES: Set<Severity> = new Set();
+
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
 
@@ -56,9 +55,9 @@ interface Props {
   owner: string;
   repo: string;
   expanded?: boolean;
-  filter?: FilterType;
+  severities?: Set<Severity>;
   formatFilter?: string | null;
-  onFilterChange?: (f: FilterType) => void;
+  onSeveritiesChange?: (s: Set<Severity>) => void;
   onFormatFilterChange?: (f: string | null) => void;
   onNodeSelect?: (id: string) => void;
   onOpenAttackGraph?: () => void;
@@ -70,9 +69,9 @@ export default function SidePanel({
   owner,
   repo,
   expanded = false,
-  filter = "all",
+  severities = EMPTY_SEVERITIES,
   formatFilter = null,
-  onFilterChange,
+  onSeveritiesChange,
   onFormatFilterChange,
   onNodeSelect,
   onOpenAttackGraph,
@@ -128,9 +127,9 @@ export default function SidePanel({
         owner={owner}
         repo={repo}
         expanded={expanded}
-        filter={filter}
+        severities={severities}
         formatFilter={formatFilter}
-        onFilterChange={onFilterChange}
+        onSeveritiesChange={onSeveritiesChange}
         onFormatFilterChange={onFormatFilterChange}
         onNodeSelect={onNodeSelect}
       />
@@ -144,16 +143,18 @@ export default function SidePanel({
         data={data}
         node={node}
         expanded={expanded}
-        filter={filter}
-        onFilterChange={onFilterChange}
+        severities={severities}
+        onSeveritiesChange={onSeveritiesChange}
         onNodeSelect={onNodeSelect}
       />
     );
   }
 
-  const toggleSeverity = (s: FilterType) => {
-    if (!onFilterChange) return;
-    onFilterChange(filter === s ? "all" : s);
+  const toggleSeverity = (s: Severity) => {
+    if (!onSeveritiesChange) return;
+    const next = new Set(severities);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    onSeveritiesChange(next);
   };
   const toggleFormat = (f: string) => {
     if (!onFormatFilterChange) return;
@@ -240,11 +241,11 @@ export default function SidePanel({
         <div className="panel-status-badges">
           <button
             type="button"
-            className={`severity-badge severity-badge-clickable${filter === sev ? " active" : ""}`}
+            className={`severity-badge severity-badge-clickable${severities.has(sev as Severity) ? " active" : ""}`}
             data-severity={sev}
-            onClick={() => toggleSeverity(sev as FilterType)}
-            title={filter === sev ? `Clear ${sev} filter — showing all` : `Filter graph by ${sev}`}
-            disabled={!onFilterChange || sev === "None" || sev === "Unknown"}
+            onClick={() => toggleSeverity(sev as Severity)}
+            title={severities.has(sev as Severity) ? `Clear ${sev} filter` : `Add ${sev} to the filter`}
+            disabled={!onSeveritiesChange || sev === "None" || sev === "Unknown"}
           >
             {sev}
           </button>
@@ -684,18 +685,25 @@ function DependencyDetail({
   data,
   node,
   expanded = false,
-  filter,
-  onFilterChange,
+  severities = EMPTY_SEVERITIES,
+  onSeveritiesChange,
   onNodeSelect,
 }: {
   data: GraphResponse;
   node: GraphNode;
   expanded?: boolean;
-  filter?: FilterType;
-  onFilterChange?: (f: FilterType) => void;
+  severities?: Set<Severity>;
+  onSeveritiesChange?: (s: Set<Severity>) => void;
   onNodeSelect?: (id: string) => void;
 }) {
   const [pkgQuery, setPkgQuery] = useState("");
+
+  const toggleSeverity = (s: Severity) => {
+    if (!onSeveritiesChange) return;
+    const next = new Set(severities);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    onSeveritiesChange(next);
+  };
 
   const linkedPackages = useMemo(() => {
     const nodeMap = new Map(data.nodes.map((n) => [n.id, n]));
@@ -754,7 +762,7 @@ function DependencyDetail({
               {filtered.map(({ pkg, versionExpr }) => {
                 const sev = pkg.data.max_severity || "None";
                 const sevColor = SEVERITY_COLORS[sev] || SEVERITY_COLORS.None;
-                const isActive = filter === sev;
+                const isActive = severities.has(sev as Severity);
                 return (
                   <li key={pkg.id} className="dep-pkg-row">
                     <button
@@ -772,8 +780,8 @@ function DependencyDetail({
                         type="button"
                         className={`severity-badge severity-badge-clickable${isActive ? " active" : ""}`}
                         data-severity={sev}
-                        onClick={() => onFilterChange?.(isActive ? "all" : sev as FilterType)}
-                        title={isActive ? `Clear ${sev} filter` : `Filter graph by ${sev}`}
+                        onClick={() => toggleSeverity(sev as Severity)}
+                        title={isActive ? `Clear ${sev} filter` : `Add ${sev} to the filter`}
                       >
                         {sev}
                       </button>
@@ -799,9 +807,9 @@ function RepoDetail({
   owner,
   repo,
   expanded = false,
-  filter = "all",
+  severities = EMPTY_SEVERITIES,
   formatFilter = null,
-  onFilterChange,
+  onSeveritiesChange,
   onFormatFilterChange,
   onNodeSelect,
 }: {
@@ -810,9 +818,9 @@ function RepoDetail({
   owner: string;
   repo: string;
   expanded?: boolean;
-  filter?: FilterType;
+  severities?: Set<Severity>;
   formatFilter?: string | null;
-  onFilterChange?: (f: FilterType) => void;
+  onSeveritiesChange?: (s: Set<Severity>) => void;
   onFormatFilterChange?: (f: string | null) => void;
   onNodeSelect?: (id: string) => void;
 }) {
@@ -860,7 +868,7 @@ function RepoDetail({
     for (const p of packages) {
       const f = p.data.format || "unknown";
       formatCounts[f] = (formatCounts[f] || 0) + 1;
-      if (packageMatchesFilter(p, filter)) {
+      if (packageMatchesFilter(p, severities)) {
         filteredFormatCounts[f] = (filteredFormatCounts[f] || 0) + 1;
       }
     }
@@ -888,13 +896,15 @@ function RepoDetail({
       .slice(0, 5);
 
     return { packages, deps, formats, filteredFormatCounts, totalVulns, sevCounts, uniqueCves: allCves.size, topVuln };
-  }, [data, filter]);
+  }, [data, severities]);
 
   const repoUrl = `https://app.cloudsmith.com/${owner}/r/${repo}/`;
 
-  const toggleSeverity = (s: FilterType) => {
-    if (!onFilterChange) return;
-    onFilterChange(filter === s ? "all" : s);
+  const toggleSeverity = (s: Severity) => {
+    if (!onSeveritiesChange) return;
+    const next = new Set(severities);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    onSeveritiesChange(next);
   };
   const toggleFormat = (f: string) => {
     if (!onFormatFilterChange) return;
@@ -981,7 +991,7 @@ function RepoDetail({
             const fmtKey = fmt.toLowerCase();
             const active = formatFilter === fmtKey;
             const filteredCount = stats.filteredFormatCounts[fmt] ?? 0;
-            const dimmed = filter !== "all" && filteredCount === 0;
+            const dimmed = severities.size > 0 && filteredCount === 0;
             const clickable = !!onFormatFilterChange && fmt !== "unknown" && !dimmed;
             return (
               <button
@@ -990,9 +1000,9 @@ function RepoDetail({
                 className={`repo-format-card${clickable ? " repo-format-card-clickable" : ""}${active ? " active" : ""}${dimmed ? " repo-format-card-dimmed" : ""}`}
                 onClick={clickable ? () => toggleFormat(fmtKey) : undefined}
                 disabled={!clickable}
-                title={dimmed ? `No ${filter} packages in ${fmt}` : active ? "Clear format filter" : `Filter graph by ${fmt}`}
+                title={dimmed ? `No matching packages in ${fmt}` : active ? "Clear format filter" : `Filter graph by ${fmt}`}
               >
-                {filter !== "all" && filteredCount > 0 && (
+                {severities.size > 0 && filteredCount > 0 && (
                   <span className="repo-format-card-filter-badge">{filteredCount}</span>
                 )}
                 <div className="repo-format-card-icon">
@@ -1022,8 +1032,8 @@ function RepoDetail({
               .map((s) => {
                 const count = stats.sevCounts[s];
                 const max = Math.max(...Object.values(stats.sevCounts), 1);
-                const active = filter === s;
-                const clickable = !!onFilterChange && count > 0;
+                const active = severities.has(s);
+                const clickable = !!onSeveritiesChange && count > 0;
                 return (
                   <button
                     key={s}
@@ -1060,7 +1070,7 @@ function RepoDetail({
                   key={p.id}
                   type="button"
                   className={`repo-vuln-row${onNodeSelect ? " repo-vuln-row-clickable" : ""}`}
-                  onClick={onNodeSelect ? () => { onFilterChange?.("all"); onNodeSelect(p.id); } : undefined}
+                  onClick={onNodeSelect ? () => { onSeveritiesChange?.(new Set()); onNodeSelect(p.id); } : undefined}
                   disabled={!onNodeSelect}
                   title={onNodeSelect ? `Select ${p.label}` : undefined}
                 >
