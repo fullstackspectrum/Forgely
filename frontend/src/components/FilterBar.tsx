@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import SeverityMark from "./SeverityMark";
+import { SeverityNodeMark } from "./SeverityMark";
 import type { FilterType } from "../types";
 import ChangelogModal from "./ChangelogModal";
 
@@ -130,7 +130,7 @@ export default function FilterBar({
                   className={`btn btn-block btn-sev ${active ? "btn-active" : "btn-muted"}`}
                   onClick={() => toggleSeverity(f.key)}
                 >
-                  <SeverityMark severity={f.key} />
+                  <SeverityNodeMark severity={f.key} />
                   {f.label}
                 </button>
               );
