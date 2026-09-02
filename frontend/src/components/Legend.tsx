@@ -1,5 +1,4 @@
-import { SEVERITY_RING } from "../programs/nodeWithSeverityRing";
-import SeverityMark from "./SeverityMark";
+import { SeverityNodeMark } from "./SeverityMark";
 
 /* State lives in App so it can be persisted and reset, and so both keys
    agree — one open and one closed across tabs reads as a bug. */
@@ -24,19 +23,9 @@ export default function Legend({ collapsed, onToggle }: Props) {
           <div className="legend-items">
             {(["Critical", "High", "Medium", "Low", "None"] as const).map((sev) => (
               <span key={sev}>
-                {/* Mirrors the canvas: blue node body, severity as a ring of
-                    one width in the level's colour. Width is read from the
-                    same constant the canvas uses, so the key cannot drift from
-                    what it is describing. */}
-                <i
-                  className="legend-node-ring"
-                  style={{
-                    borderWidth: `${SEVERITY_RING[sev] || 0}px`,
-                    borderColor: SEVERITY_RING[sev]
-                      ? `var(--g-sev-${sev.toLowerCase()})`
-                      : "transparent",
-                  }}
-                />
+                {/* The same mark the severity filters use, so the key, the
+                    filter and the canvas all show a package the same way. */}
+                <SeverityNodeMark severity={sev} />
                 {sev === "None" ? "No findings" : sev}
               </span>
             ))}

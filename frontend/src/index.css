@@ -5332,14 +5332,18 @@ td, th,
 }
 
 /* Legend swatch matching a graph node: blue body, severity ring outside it. */
-.legend-node-ring {
+/* A package node at key size: square body, severity as a ring. Shared by the
+   legend and the severity filters so neither can drift from the other or from
+   the canvas, which draws packages square rather than round. */
+.node-mark {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--fg-radius-sm);
   background: var(--fg-blue-400);
   border-style: solid;
   box-sizing: content-box;
+  flex-shrink: 0;
   vertical-align: middle;
 }
 
@@ -5482,9 +5486,17 @@ td, th,
 }
 
 /* Severity rows show the mark rather than a colour-filled button — the level
-   stays readable without the fill doing the work (§2.4). */
-.btn.btn-sev .sev-mark {
-  margin-left: 2px;
+   stays readable without the fill doing the work (§2.4).
+
+   Laid out as a flex row: the mark and the label were adjacent inline boxes
+   with only a 2px nudge between them, so a 4px ring sat hard against the
+   first letter. The ring is drawn outside the 10px body (content-box), which
+   is why the gap has to clear more than the body width suggests. */
+.btn.btn-sev {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
 }
 
 /* ============================================================
