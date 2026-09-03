@@ -40,6 +40,10 @@ export function drawDarkNodeHover(
   const severity       = data.severity      as string | undefined;
   const nodeType       = data.nodeType      as string | undefined;
   const isQuarantined  = !!data.is_quarantined;
+  /* Lowercased on the node, and left that way: package formats are written
+     lowercase everywhere they appear — npm, docker, maven — and title-casing
+     them here would disagree with the panel and the filter chips. */
+  const format         = (data.format as string | undefined) || "";
 
   // Skip empty hover for repo nodes
   if (!label) return;
@@ -67,10 +71,15 @@ export function drawDarkNodeHover(
     contentW = Math.max(contentW, context.measureText("Quarantined").width + 22);
     context.font = `${weight} ${fontSize}px ${font}`;
   }
+  if (format) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    contentW = Math.max(contentW, context.measureText(format).width + 14);
+    context.font = `${weight} ${fontSize}px ${font}`;
+  }
 
   const accentW   = severityColor(severity ?? "") ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
-  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
+  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0) + (format ? 1 : 0);
   const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
 
   const x = data.x + data.size + 8;
@@ -112,8 +121,28 @@ export function drawDarkNodeHover(
     context.fillText(label, textX, y + PAD_Y);
   }
 
-  // ── Layer 6: severity badge ───────────────────────────────────────────────
+  // ── Layer 6: format badge ────────────────────────────────────────────────
   let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
+  if (format) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    const fW     = context.measureText(format).width + 14;
+    const badgeH = Math.round(fontSize - 1);
+
+    /* Neutral, like the quarantine badge and for the same reason: a format is
+       a classification, not a severity, and every tinted chip that is not a
+       severity makes the severity chips mean less. It leads the badge rows
+       because it says what the thing *is*, before what is wrong with it. */
+    context.fillStyle = "rgba(139, 156, 175, 0.18)";
+    roundedRect(context, textX, nextRowY, fW, badgeH, 3);
+    context.fill();
+
+    context.fillStyle    = token("--fg-n-300");
+    context.textBaseline = "top";
+    context.fillText(format, textX + 7, nextRowY + 1);
+    nextRowY += fontSize + INNER_GAP;
+  }
+
+  // ── Layer 7: severity badge ───────────────────────────────────────────────
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const badgeFg = severityColor(severity) ?? token("--t-muted");
@@ -131,7 +160,7 @@ export function drawDarkNodeHover(
     nextRowY += fontSize + INNER_GAP;
   }
 
-  // ── Layer 7: quarantine badge row ────────────────────────────────────────
+  // ── Layer 8: quarantine badge row ────────────────────────────────────────
   if (isQuarantined) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const qText  = "Quarantined";
@@ -161,7 +190,7 @@ export function drawDarkNodeHover(
     context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
   }
 
-  // ── Layer 8: corner lock badge on the node itself ────────────────────────
+  // ── Layer 9: corner lock badge on the node itself ────────────────────────
   if (isQuarantined) {
     const br = Math.max(5, (data.size ?? 1) * 0.58);
     drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, br);
