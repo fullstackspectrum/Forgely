@@ -73,6 +73,7 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
     let vulnCount = 0;
     let downloads = 0;
     let quarantined = false;
+    let malware = false;
     /* A scan that found nothing and a scan that never ran both rank 0, so
        `worse` cannot tell them apart — and a group with no vulnerable member
        would end up null, which the canvas reads as "Unknown" and
@@ -85,6 +86,12 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
       vulnCount += m.data.vuln_count || 0;
       downloads += m.data.downloads || 0;
       quarantined = quarantined || !!m.data.is_quarantined;
+      /* Any member is enough. Without this the hub fell through to the
+         spread of members[0] below and reported whichever version happened
+         to be first, so a group containing malware showed no badge and no
+         pulse — the group node is the only thing on screen while it is
+         collapsed, which is exactly when it needs to say so. */
+      malware = malware || !!m.data.is_malware_detected;
     }
     return {
       id: GROUP_PREFIX + name,
@@ -96,6 +103,7 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
         vuln_count: vulnCount,
         downloads,
         is_quarantined: quarantined,
+        is_malware_detected: malware,
         version: `${members.length} versions`,
       },
     };
