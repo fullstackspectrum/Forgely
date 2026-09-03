@@ -616,6 +616,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
                 slug=slug,
                 pkg_type=pkg.get("type_display") or pkg.get("package_type") or pkg.get("format", "N/A"),
                 is_quarantined=bool(pkg.get("is_quarantined", False)),
+                is_malware_detected=bool(pkg.get("is_malware_detected", False)),
             ),
         ))
         edges.append(GraphEdge(source=repo_id, target=node_id, type="repo_package"))

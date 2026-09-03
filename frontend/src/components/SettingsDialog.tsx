@@ -24,10 +24,12 @@ interface Props {
   hideDependencies: boolean;
   hideUnsupported: boolean;
   hideCriticalAnimation: boolean;
+  hideMalwareAnimation: boolean;
   onHideSharedCveEdgesChange: (v: boolean) => void;
   onHideDependenciesChange: (v: boolean) => void;
   onHideUnsupportedChange: (v: boolean) => void;
   onHideCriticalAnimationChange: (v: boolean) => void;
+  onHideMalwareAnimationChange: (v: boolean) => void;
 
   edgeStyle: EdgeStyle;
   onEdgeStyleChange: (v: EdgeStyle) => void;
@@ -152,6 +154,12 @@ export default function SettingsDialog(p: Props) {
               hint="Pulsing rings around Critical packages"
               checked={!p.hideCriticalAnimation}
               onChange={(v) => p.onHideCriticalAnimationChange(!v)}
+            />
+            <Switch
+              label="Malware animation"
+              hint="Pulsing rings around packages flagged as malware"
+              checked={!p.hideMalwareAnimation}
+              onChange={(v) => p.onHideMalwareAnimationChange(!v)}
             />
           </section>
 
