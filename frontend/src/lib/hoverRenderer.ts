@@ -275,13 +275,14 @@ export { drawLockBadge };
 function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.save();
 
-  // Dark border ring for contrast against any node colour
+  /* A light ring, not a dark one. The disc below is now dark, so the halo that
+     separates the badge from the node underneath has to be the opposite: a
+     dark ring on a dark disc merged the two into one blob. */
   ctx.beginPath();
-  ctx.arc(cx, cy, r + r * 0.18, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(10, 22, 34,0.55)";
+  ctx.arc(cx, cy, r + r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = token("--c-bg");
   ctx.fill();
 
-  // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   /* Not a severity colour. This was --s-medium (gold), which meant every
@@ -290,16 +291,24 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
      amber discs competing with the single ember origin. §1: "there is exactly
      one of it on screen. If your UI has three amber things in it, the
      metaphor is dead and so is the colour's meaning." */
-  ctx.fillStyle = token("--fg-n-400");
+  /* Was --fg-n-400, a mid grey, carrying a near-white glyph: about 3:1, which
+     is not enough for a shape this small, and in the light theme --t-primary
+     is dark so the lock nearly vanished into the disc. A dark disc with a
+     white glyph is high contrast in both themes and stays neutral — a
+     quarantine is a state, not a severity, and must not borrow the ramp. */
+  ctx.fillStyle = token("--fg-n-800");
   ctx.fill();
 
   // White lock — shackle (open-bottom arch)
   const shackleR   = r * 0.36;
   const shackleY   = cy - r * 0.12;
-  const shackleW   = r * 0.22;
+  const shackleW   = r * 0.26;
   ctx.beginPath();
   ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
-  ctx.strokeStyle = token("--t-primary");
+  /* Fixed light, not --t-primary: the disc is dark in both themes, so the
+     glyph has to be too — a theme-following colour turned the lock dark-on-dark
+     in the light theme. */
+  ctx.strokeStyle = token("--fg-n-0");
   ctx.lineWidth   = shackleW;
   ctx.lineCap     = "round";
   ctx.stroke();
@@ -321,7 +330,8 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   ctx.lineTo(bX, bY + br);
   ctx.arcTo(bX, bY, bX + br, bY, br);
   ctx.closePath();
-  ctx.fillStyle = token("--t-primary");
+  // Matches the shackle above, for the same reason.
+  ctx.fillStyle = token("--fg-n-0");
   ctx.fill();
 
   ctx.restore();

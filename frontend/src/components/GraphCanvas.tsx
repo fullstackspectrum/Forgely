@@ -1285,11 +1285,31 @@ export default function GraphCanvas({
     });
 
     /* Always render quarantine badges on top of all nodes */
+    /* Quarantine badges get their own canvas, above sigma's own layers.
+       
+       They used to be drawn onto the `labels` canvas, but sigma's layer order
+       is edges → nodes → labels → hovers → hoverNodes, and a selected node is
+       `highlighted`, which promotes it to hoverNodes — two layers above the
+       badge. Selecting a quarantined package therefore hid its own badge
+       behind it. Nothing else paints here, so this layer is ours to clear and
+       redraw each frame. */
+    /* Cast: the published options type unions beforeLayer and afterLayer in a
+       way TypeScript will not narrow from a literal. */
+    (sigma as unknown as {
+      createCanvasContext: (id: string, options?: Record<string, unknown>) => unknown;
+    }).createCanvasContext("badges", { afterLayer: "hoverNodes" });
+    /* Sizes and pixel-ratio-scales every registered context, including the one
+       just added. Forced, because resize() returns early when the container's
+       dimensions have not changed — which they have not, so the unforced call
+       left the new canvas at zero and clipped every badge outside its corner. */
+    sigma.resize(true);
+
     sigma.on("afterRender", () => {
-      const labelsCanvas = (sigma.getCanvases() as Record<string, HTMLCanvasElement>).labels;
-      if (!labelsCanvas) return;
-      const ctx = labelsCanvas.getContext("2d");
+      const ctx = (sigma as unknown as {
+        canvasContexts: Record<string, CanvasRenderingContext2D | undefined>;
+      }).canvasContexts.badges;
       if (!ctx) return;
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       const st = stateRef.current;
       graph.forEachNode((nodeId, attrs) => {
         if (!attrs.is_quarantined) return;
