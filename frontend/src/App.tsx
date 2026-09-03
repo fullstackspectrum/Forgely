@@ -51,6 +51,7 @@ export default function App() {
   const [hideDependencies, setHideDependencies] = useState(settings.hideDependencies);
   const [hideUnsupported, setHideUnsupported] = useState(settings.hideUnsupported);
   const [hideCriticalAnimation, setHideCriticalAnimation] = useState(settings.hideCriticalAnimation);
+  const [hideMalwareAnimation, setHideMalwareAnimation] = useState(settings.hideMalwareAnimation);
   const [connectOpen, setConnectOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(settings.legendCollapsed);
@@ -389,10 +390,12 @@ export default function App() {
         hideDependencies={hideDependencies}
         hideUnsupported={hideUnsupported}
         hideCriticalAnimation={hideCriticalAnimation}
+        hideMalwareAnimation={hideMalwareAnimation}
         onHideSharedCveEdgesChange={persist("hideSharedCveEdges", setHideSharedCveEdges)}
         onHideDependenciesChange={persist("hideDependencies", setHideDependencies)}
         onHideUnsupportedChange={persist("hideUnsupported", setHideUnsupported)}
         onHideCriticalAnimationChange={persist("hideCriticalAnimation", setHideCriticalAnimation)}
+        onHideMalwareAnimationChange={persist("hideMalwareAnimation", setHideMalwareAnimation)}
         edgeStyle={edgeStyle}
         onEdgeStyleChange={changeEdgeStyle}
         hasKey={hasKey}
@@ -404,6 +407,7 @@ export default function App() {
           setHideDependencies(d.hideDependencies);
           setHideUnsupported(d.hideUnsupported);
           setHideCriticalAnimation(d.hideCriticalAnimation);
+          setHideMalwareAnimation(d.hideMalwareAnimation);
           setEdgeStyle(d.edgeStyle);
           setLayout(d.layout);
           setLegendCollapsed(d.legendCollapsed);
@@ -458,6 +462,7 @@ export default function App() {
               hideDependencies={hideDependencies}
               hideUnsupported={hideUnsupported}
               hideCriticalAnimation={hideCriticalAnimation}
+              hideMalwareAnimation={hideMalwareAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
 

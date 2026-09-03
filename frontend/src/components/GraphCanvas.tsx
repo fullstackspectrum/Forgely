@@ -12,7 +12,7 @@ import { NodeSquareProgram, NodeTiltedSquareProgram } from "../programs/roundedS
 import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
-import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel, drawLockBadge, drawMalwareBadge } from "../lib/hoverRenderer";
 import { placeRadially, refineForceLayout, clusterAround, groupSpacing, assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 import { fitAround, focusNodes } from "../lib/focus";
 import type { Point } from "../lib/layout";
@@ -222,6 +222,7 @@ interface Props {
   hideDependencies?: boolean;
   hideUnsupported?: boolean;
   hideCriticalAnimation?: boolean;
+  hideMalwareAnimation?: boolean;
   onNodeSelect: (id: string | null) => void;
   onNodeHover: (id: string | null) => void;
   onRefresh?: () => void;
@@ -246,6 +247,7 @@ export default function GraphCanvas({
   hideDependencies = false,
   hideUnsupported = false,
   hideCriticalAnimation = false,
+  hideMalwareAnimation = false,
   onNodeSelect,
   onNodeHover,
   onRefresh,
@@ -447,6 +449,7 @@ export default function GraphCanvas({
     hideDependencies,
     hideUnsupported,
     hideCriticalAnimation,
+    hideMalwareAnimation,
     neighbors: new Set<string>(),
     hops: new Map<string, number>(),
     hoverNeighbors: new Set<string>(),
@@ -591,6 +594,7 @@ export default function GraphCanvas({
       hideDependencies,
       hideUnsupported,
       hideCriticalAnimation,
+      hideMalwareAnimation,
       neighbors,
       hops,
       hoverNeighbors,
@@ -604,7 +608,7 @@ export default function GraphCanvas({
       groupMembers: grouped.groupMembers,
     };
     sigmaRef.current?.refresh();
-  }, [selectedNode, hoveredNode, severities, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, expandedMembers, openHubs, safeMemberHubs, grouped.groupMembers]);
+  }, [selectedNode, hoveredNode, severities, filterFlags, filterFlagsMode, formatFilter, searchResults, hideSharedCveEdges, hideDependencies, hideUnsupported, hideCriticalAnimation, hideMalwareAnimation, expandedMembers, openHubs, safeMemberHubs, grouped.groupMembers]);
 
   /* Apply layout algorithm */
   useEffect(() => {
@@ -765,6 +769,7 @@ export default function GraphCanvas({
         vulnCount: node.data.vuln_count,
         format: (node.data.format || "").toLowerCase(),
         is_quarantined: node.data.is_quarantined ?? false,
+        is_malware_detected: node.data.is_malware_detected ?? false,
         /* Squares from the mark. The repository is its centre cell, which is
            the displaced one — so it carries the tilt permanently rather than
            only while selected. Dependencies keep the hexagon: they are a
@@ -841,15 +846,20 @@ export default function GraphCanvas({
     }
     const repoNode = placeRadially(graph, seed, containerAspect(containerRef.current));
 
-    /* --- Add echo ring nodes for Critical packages (2 staggered rings each) --- */
+    /* --- Echo rings: 2 staggered rings each, on Critical and on malware ---
+       Malware gets the same treatment for the same reason Critical does — it
+       is the thing you need to find in a graph of thousands — but it is a
+       separate kind, so it pulses in its own colour and answers to its own
+       setting. A package that is both pulses as malware: the worse fact wins,
+       and two overlapping pulses on one node read as neither. */
     const RING_COUNT = 2;
-    const criticalNodes: Array<{ id: string; size: number }> = [];
+    const pulsing: Array<{ id: string; size: number; kind: "critical" | "malware" }> = [];
     graph.forEachNode((nid, attrs) => {
-      if (attrs.nodeType === "package" && attrs.severity === "Critical") {
-        criticalNodes.push({ id: nid, size: attrs.size });
-      }
+      if (attrs.nodeType !== "package") return;
+      if (attrs.is_malware_detected) pulsing.push({ id: nid, size: attrs.size, kind: "malware" });
+      else if (attrs.severity === "Critical") pulsing.push({ id: nid, size: attrs.size, kind: "critical" });
     });
-    for (const cn of criticalNodes) {
+    for (const cn of pulsing) {
       const x = graph.getNodeAttribute(cn.id, "x");
       const y = graph.getNodeAttribute(cn.id, "y");
       for (let i = 0; i < RING_COUNT; i++) {
@@ -860,6 +870,7 @@ export default function GraphCanvas({
           phaseOffset: i / RING_COUNT,
           color: "rgba(232, 117, 107,0)",
           nodeType: "echo",
+          echoKind: cn.kind,
           type: "ring",
           parentId: cn.id,
           label: "",
@@ -887,6 +898,7 @@ export default function GraphCanvas({
            if any version it stands for is; see safeMemberHubs. */
         if (flag === "safe") return isScannedClean(sev, vc) || st.safeMemberHubs.has(nid);
         if (flag === "quarantined") return !!a.is_quarantined || st.quarantinedDeps.has(nid);
+        if (flag === "malware") return !!a.is_malware_detected;
         if (flag === "shared_cve") return st.sharedCveNodes.has(nid);
         if (flag === "has_deps") return st.hasDepNodes.has(nid) || a.nodeType === "dependency";
         return false;
@@ -943,9 +955,13 @@ export default function GraphCanvas({
           res.color = d === undefined ? token("--g-hop-far") : hopColor(d);
         }
 
-        /* --- Echo ring around Critical nodes --- */
+        /* --- Echo ring around Critical and malware nodes --- */
         if (attrs.nodeType === "echo") {
-          if (st.hideCriticalAnimation) {
+          const echoKind = ((attrs as any).echoKind as string) ?? "critical";
+          /* Each kind answers to its own setting: someone who has turned the
+             Critical pulse off on a repo where most things are Critical still
+             wants to be told about malware. */
+          if (echoKind === "malware" ? st.hideMalwareAnimation : st.hideCriticalAnimation) {
             res.hidden = true;
             return res;
           }
@@ -966,6 +982,7 @@ export default function GraphCanvas({
             const flagResults = Array.from(st.filterFlags).map((flag) => {
               if (flag === "vulnerable") return pvc > 0;
               if (flag === "safe") return pvc === 0;
+              if (flag === "malware") return !!pa.is_malware_detected;
               if (flag === "quarantined") return !!pa.is_quarantined || st.quarantinedDeps.has(parentId);
               if (flag === "shared_cve") return st.sharedCveNodes.has(parentId);
               if (flag === "has_deps") return st.hasDepNodes.has(parentId);
@@ -1014,12 +1031,21 @@ export default function GraphCanvas({
           const fadeIn = Math.min(1, phase / 0.08);
           const fadeOut = Math.pow(1 - Math.min(1, Math.max(0, (phase - 0.08) / 0.92)), 1.6);
           const alpha = Math.max(0, 0.85 * fadeIn * fadeOut);
-          // Shift colour from a deep red at the centre to a lighter, washed-out
-          // red as the ring expands outward.
+          // Shift colour from a deep tone at the centre to a lighter, washed-out
+          // one as the ring expands outward. Critical pulses red; malware
+          // pulses violet, which is the one hue on the canvas that no severity
+          // uses — so it cannot be mistaken for a worse CVE.
           const t = Math.min(1, Math.max(0, phase));
-          const r = Math.round(180 + (255 - 180) * t);   // 180 → 255
-          const g = Math.round(20 + (160 - 20) * t);     //  20 → 160
-          const b = Math.round(20 + (160 - 20) * t);     //  20 → 160
+          const malware = echoKind === "malware";
+          const r = malware
+            ? Math.round(150 + (230 - 150) * t)          // 150 → 230
+            : Math.round(180 + (255 - 180) * t);         // 180 → 255
+          const g = malware
+            ? Math.round(40 + (170 - 40) * t)            //  40 → 170
+            : Math.round(20 + (160 - 20) * t);           //  20 → 160
+          const b = malware
+            ? Math.round(190 + (245 - 190) * t)         // 190 → 245, the violet
+            : Math.round(20 + (160 - 20) * t);          //  20 → 160
           res.color = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
           res.type = "ring";
           res.label = "";
@@ -1312,7 +1338,7 @@ export default function GraphCanvas({
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
       const st = stateRef.current;
       graph.forEachNode((nodeId, attrs) => {
-        if (!attrs.is_quarantined) return;
+        if (!attrs.is_quarantined && !attrs.is_malware_detected) return;
         const d = sigma.getNodeDisplayData(nodeId);
         if (!d || d.hidden) return;
         const { x, y } = (sigma as any).framedGraphToViewport(d);
@@ -1329,7 +1355,17 @@ export default function GraphCanvas({
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        drawLockBadge(ctx, x + size * 0.72, y - size * 0.72, Math.max(5, size * 0.58));
+        const r = Math.max(5, size * 0.58);
+        /* Malware takes the top-right corner, the one the eye reaches first;
+           quarantine moves to the top-left when both are present so neither
+           covers the other. */
+        if (attrs.is_malware_detected) {
+          drawMalwareBadge(ctx, x + size * 0.72, y - size * 0.72, r);
+        }
+        if (attrs.is_quarantined) {
+          const lx = attrs.is_malware_detected ? x - size * 0.72 : x + size * 0.72;
+          drawLockBadge(ctx, lx, y - size * 0.72, r);
+        }
         ctx.restore();
       });
     });

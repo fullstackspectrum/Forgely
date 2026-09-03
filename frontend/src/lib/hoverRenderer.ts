@@ -269,7 +269,7 @@ export function drawNodeLabel(
   context.fillText(label, textX, data.y);
 }
 
-export { drawLockBadge };
+export { drawLockBadge, drawMalwareBadge };
 
 /** Draws a small amber lock badge centred at (cx, cy) with radius r. */
 function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
@@ -349,4 +349,53 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+
+/**
+ * Malware badge: the same disc as the lock, carrying a warning glyph.
+ *
+ * Shares the lock's construction deliberately — both are states of a package
+ * rather than severities, and a reader who has learned to spot one small disc
+ * in the corner of a node should not have to learn a second visual language
+ * for the other. Only the glyph and the disc colour differ.
+ *
+ * The disc is the one place a severity-adjacent colour is warranted: malware
+ * is not a CVE score, but it is the most serious thing a package can carry,
+ * and a neutral grey would file it alongside "quarantined".
+ */
+function drawMalwareBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+
+  // Light halo, so the badge separates from the node underneath.
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = token("--c-bg");
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = token("--g-sev-critical");
+  ctx.fill();
+
+  /* An exclamation mark, not a skull or a biohazard: at this size anything
+     with internal detail turns to mush, and a bar with a dot below it stays
+     legible down to a handful of pixels. */
+  const barW = Math.max(1.5, r * 0.24);
+  const barTop = cy - r * 0.46;
+  const barBot = cy + r * 0.12;
+  ctx.strokeStyle = token("--fg-n-0");
+  ctx.lineWidth = barW;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx, barTop);
+  ctx.lineTo(cx, barBot);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy + r * 0.46, barW * 0.62, 0, Math.PI * 2);
+  ctx.fillStyle = token("--fg-n-0");
+  ctx.fill();
+
+  ctx.restore();
 }
