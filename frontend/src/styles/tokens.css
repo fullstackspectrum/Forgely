@@ -47,6 +47,12 @@
   --fg-sev-low:      #4E657D;
   --fg-sev-none:     #8B9CAF;
 
+  /* Connected/healthy. The severity ramp has no green on purpose — nothing on
+     the canvas is ever "good", only less bad — but a connection genuinely is a
+     binary healthy state, and green is the one convention users arrive with.
+     Confined to the connection indicator; it is not a severity. */
+  --fg-ok: #1E8E5A;
+
   --fg-sev-critical-bg: #FBEAE8;
   /* Lightened from #FCEEE7. High (#C4451F) as label text on the old tint
      measured 4.39:1 — under AA. §2.4 quotes 4.98:1 for High, but that is
@@ -179,6 +185,8 @@
   --g-sev-high:     #C25E00;
   --g-sev-medium:   #8A6410;
   --g-sev-low:      #4E657D;
+
+  --c-ok: var(--fg-ok);
 }
 
 [data-theme="dark"] {
@@ -233,6 +241,9 @@
   --g-sev-high:     #FF8A1F;
   --g-sev-medium:   #F2CE3F;
   --g-sev-low:      #7FA8C9;
+
+  /* Lifted for the dark canvas, same as the severity ramp is. */
+  --c-ok: #3FC98A;
 
   --c-tint-subtle:  rgba(245, 248, 251, 0.04);
   --c-tint:         rgba(245, 248, 251, 0.07);
