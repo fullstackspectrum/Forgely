@@ -27,6 +27,7 @@ export interface NodeData {
   pkg_type: string;
   is_quarantined: boolean;
   is_malware_detected: boolean;
+  architecture: string;
 }
 
 export interface GraphNode {

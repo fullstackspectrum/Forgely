@@ -388,6 +388,24 @@ def _cve_records(vulns: list[dict]) -> list[CVERecord]:
     return records
 
 
+def _architecture(pkg: dict) -> str:
+    """A package's architectures, as one short string for the node tooltip.
+
+    "noarch" is dropped: it is the *absence* of an architecture, so printing it
+    in a tooltip costs a line and tells the reader nothing. Everything else is
+    kept, including the multi-architecture Docker manifests that carry two.
+
+    Deliberately narrow — the full record, with distro and every identifier,
+    is on /api/package. This is only what the hover card needs, because it is
+    the one thing the graph cannot fetch lazily: a tooltip has no time to wait
+    for a round trip.
+    """
+    names = {(a.get("name") or "").strip() for a in (pkg.get("architectures") or [])}
+    names.discard("")
+    names.discard("noarch")
+    return ", ".join(sorted(names))
+
+
 def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
                  on_progress=None) -> GraphResponse:
     """Fetch Cloudsmith data and build the graph response.
@@ -617,6 +635,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
                 pkg_type=pkg.get("type_display") or pkg.get("package_type") or pkg.get("format", "N/A"),
                 is_quarantined=bool(pkg.get("is_quarantined", False)),
                 is_malware_detected=bool(pkg.get("is_malware_detected", False)),
+                architecture=_architecture(pkg),
             ),
         ))
         edges.append(GraphEdge(source=repo_id, target=node_id, type="repo_package"))

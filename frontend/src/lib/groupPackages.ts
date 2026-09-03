@@ -74,6 +74,7 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
     let downloads = 0;
     let quarantined = false;
     let malware = false;
+    const architectures = new Set<string>();
     /* A scan that found nothing and a scan that never ran both rank 0, so
        `worse` cannot tell them apart — and a group with no vulnerable member
        would end up null, which the canvas reads as "Unknown" and
@@ -92,6 +93,12 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
          pulse — the group node is the only thing on screen while it is
          collapsed, which is exactly when it needs to say so. */
       malware = malware || !!m.data.is_malware_detected;
+      /* Union, not the first version's: a Docker group commonly holds an
+         amd64 and an arm64 build, and the hub stands for both. */
+      for (const a of (m.data.architecture || "").split(",")) {
+        const t = a.trim();
+        if (t) architectures.add(t);
+      }
     }
     return {
       id: GROUP_PREFIX + name,
@@ -104,6 +111,7 @@ export function groupPackages(data: GraphResponse, expanded: Set<string>): Group
         downloads,
         is_quarantined: quarantined,
         is_malware_detected: malware,
+        architecture: [...architectures].sort().join(", "),
         version: `${members.length} versions`,
       },
     };
