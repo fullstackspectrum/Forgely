@@ -68,6 +68,7 @@ function Switch({
 }
 
 export default function SettingsDialog(p: Props) {
+  const [tab, setTab] = useState<"general" | "connection">("general");
   const dialogRef = useRef<HTMLDivElement>(null);
 
   /* Escape closes, and focus moves into the dialog so a keyboard user is not
@@ -98,7 +99,28 @@ export default function SettingsDialog(p: Props) {
           <button className="modal-close" onClick={p.onClose} aria-label="Close settings">×</button>
         </div>
 
+        {/* Tabs, so a tall Connection panel and a tall General list do not
+            have to share one scroll. */}
+        <div className="settings-tabs" role="tablist">
+          {(["general", "connection"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              className={`settings-tab${tab === t ? " active" : ""}`}
+              onClick={() => setTab(t)}
+            >
+              {t === "general" ? "General" : "Connection"}
+              {t === "connection" && (
+                /* The state is worth seeing without opening the tab. */
+                <span className={`settings-btn-dot${p.hasKey ? " connected" : ""}`} />
+              )}
+            </button>
+          ))}
+        </div>
         <div className="modal-body settings-body">
+          {tab === "general" && (<>
           <section className="settings-section">
             <h4 className="settings-section-title">Appearance</h4>
             <div className="settings-row">
@@ -165,7 +187,9 @@ export default function SettingsDialog(p: Props) {
               onChange={(v) => p.onHideMalwareAnimationChange(!v)}
             />
           </section>
+          </>)}
 
+          {tab === "connection" && (
           <section className="settings-section">
             <h4 className="settings-section-title">Connection</h4>
             <ConnectionPanel
@@ -174,7 +198,11 @@ export default function SettingsDialog(p: Props) {
               onDisconnect={p.onDisconnect}
             />
           </section>
+          )}
 
+          {/* Reset belongs to the preferences, not the credentials — showing it
+              on the Connection tab would suggest it signs you out. */}
+          {tab === "general" && (
           <div className="settings-footer">
             {/* Severity and status filters are not listed above and are not
                 reset here: they are a question about the open repo, not a
@@ -182,6 +210,7 @@ export default function SettingsDialog(p: Props) {
             <span className="settings-footer-note">Settings are saved in this browser.</span>
             <button className="btn btn-muted" onClick={p.onReset}>Reset to defaults</button>
           </div>
+          )}
         </div>
       </div>
     </div>,

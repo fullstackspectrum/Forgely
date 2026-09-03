@@ -6268,13 +6268,64 @@ td, th,
 .settings-modal {
   width: min(520px, calc(100vw - 32px));
   max-height: min(80vh, 720px);
+  /* max-height alone does nothing here: .modal-content is not a flex column,
+     so the body had no bounded height and its overflow-y never engaged —
+     content simply ran out of the bottom of the modal. */
+  display: flex;
+  flex-direction: column;
+  /* So the rounded corners clip the scrolling body. */
+  overflow: hidden;
 }
 
 .settings-body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* min-height: 0 is what actually lets a flex child scroll — without it the
+     body grows to its content instead of to its share of the modal. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* ===== Settings tabs ===== */
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.settings-tab {
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  color: var(--t-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--t-primary);
+}
+
+.settings-tab.active {
+  color: var(--t-primary);
+  border-bottom-color: var(--c-action);
+}
+
+/* The connection state, legible from the tab without opening it. */
+.settings-tab .settings-btn-dot {
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .settings-section {
@@ -6375,6 +6426,7 @@ td, th,
   padding-top: 12px;
   margin-top: 4px;
   border-top: 1px solid var(--c-hairline);
+  flex: none;
 }
 
 .settings-footer-note {
