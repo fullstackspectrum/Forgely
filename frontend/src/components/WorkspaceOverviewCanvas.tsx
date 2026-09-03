@@ -10,6 +10,7 @@ import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types";
 import { token } from "../lib/palette";
+import { drawNodeLabel } from "../lib/hoverRenderer";
 
 interface Props {
   data: WorkspaceOverviewResponse;
@@ -238,6 +239,7 @@ export default function WorkspaceOverviewCanvas({
       labelSize: 12,
       labelWeight: "500",
       labelColor: { color: token("--t-secondary") },
+      defaultDrawNodeLabel: drawNodeLabel,
       renderEdgeLabels: false,
       minCameraRatio: 0.05,
       maxCameraRatio: 8,

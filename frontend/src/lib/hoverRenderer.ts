@@ -4,7 +4,6 @@
  * because it tracks a WebGL node position.
  * Also exports a custom label drawer that renders a lock badge for quarantined nodes.
  */
-import { drawDiscNodeLabel } from "sigma/rendering";
 import type { Settings } from "sigma/settings";
 import { token } from "./palette";
 
@@ -169,12 +168,76 @@ export function drawDarkNodeHover(
   }
 }
 
+/* How much of the graph shows through a label plate. Opaque would read as a
+ * row of chips laid over the canvas; this reads as the label having been cut
+ * out of it, which is what a label is. */
+const PLATE_ALPHA = 0.8;
+
+/** A length token as a number of pixels. Tokens are strings like "4px". */
+function tokenPx(name: string, fallback: number): number {
+  const parsed = parseFloat(token(name, `${fallback}px`));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Node label with a backing plate.
+ *
+ * Sigma's default draws bare text beside the node. On a graph this dense that
+ * puts a light string over whatever happens to be behind it — other nodes,
+ * their rings, a bundle of edges — and in dark mode the result is white text
+ * on a blue square. A plate in the canvas colour cuts the label out of the
+ * background so it reads whatever it lands on.
+ *
+ * The plate is the *canvas* colour rather than a surface colour: it is not a
+ * card sitting above the graph, it is a hole punched in it. Held at 78% so the
+ * graph stays visible through it and the labels do not read as a second layer
+ * of objects.
+ */
 export function drawNodeLabel(
   context: CanvasRenderingContext2D,
   data: any,
   settings: Settings,
 ): void {
-  drawDiscNodeLabel(context, data, settings);
+  const label = (data.label as string | null | undefined) ?? "";
+  if (!label) return;
+
+  const fontSize = settings.labelSize ?? 13;
+  const font     = settings.labelFont ?? token("--fg-font-body");
+  const weight   = settings.labelWeight ?? "500";
+  context.font = `${weight} ${fontSize}px ${font}`;
+
+  const PAD_X = 6;
+  const PAD_Y = 3;
+  /* Measured from the node's edge, not its centre: `size` here is the rendered
+     radius, so this clears nodes of every size by the same visual gap. */
+  const GAP = 6;
+
+  const textW = context.measureText(label).width;
+  const textX = data.x + data.size + GAP;
+  const boxH  = fontSize + PAD_Y * 2;
+  const boxX  = textX - PAD_X;
+  const boxY  = data.y - boxH / 2;
+  const boxW  = textW + PAD_X * 2;
+
+  context.save();
+  context.globalAlpha = PLATE_ALPHA;
+  context.fillStyle = token("--c-bg");
+  /* The mark is rounded squares, so the plate is one too — at the small radius
+     rather than a pill, which would read as a chip sitting on the graph. */
+  roundedRect(context, boxX, boxY, boxW, boxH, tokenPx("--fg-radius-sm", 4));
+  context.fill();
+  context.restore();
+
+  /* A hairline rather than a shadow: elevation here is a border and a
+     background step, which is what the rest of the surface language does. */
+  context.strokeStyle = token("--c-hairline");
+  context.lineWidth = 1;
+  roundedRect(context, boxX, boxY, boxW, boxH, tokenPx("--fg-radius-sm", 4));
+  context.stroke();
+
+  context.fillStyle = (settings.labelColor as { color?: string })?.color ?? token("--t-secondary");
+  context.textBaseline = "middle";
+  context.fillText(label, textX, data.y);
 }
 
 export { drawLockBadge };
