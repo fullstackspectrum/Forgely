@@ -117,7 +117,7 @@ export interface OrgGraphNode {
 export interface OrgGraphEdge {
   source: string;
   target: string;
-  type: "org_repo" | "member_org" | "service_org" | "team_org" | "team_member" | "access" | "entitlement_repo" | "repo_upstream" | "shared_upstream";
+  type: "org_repo" | "member_org" | "service_org" | "team_org" | "team_member" | "access" | "entitlement_repo" | "repo_upstream" | "shared_upstream" | "repo_connected";
   label: string;
 }
 
@@ -128,6 +128,7 @@ export interface OrgGraphStats {
   total_teams: number;
   total_upstreams: number;
   shared_upstreams: number;
+  connected_repos: number;
   total_nodes: number;
   total_edges: number;
 }
@@ -163,9 +164,22 @@ export interface WorkspaceRepoSummary {
   formats: Record<string, number>;
 }
 
+/* One repository resolving packages from another in the same workspace —
+   Cloudsmith's "connected repositories". Directional: `source` reaches into
+   `target`. */
+export interface RepoConnection {
+  source: string;
+  target: string;
+  formats: string[];
+  is_active: boolean;
+  priority: number;
+  target_package_count: number;
+}
+
 export interface WorkspaceOverviewResponse {
   owner: string;
   repos: WorkspaceRepoSummary[];
+  connections?: RepoConnection[];
 }
 
 /* Node kinds in the org graph. These are categories, not severities, so they

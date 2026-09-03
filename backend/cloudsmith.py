@@ -326,6 +326,32 @@ def fetch_repo_privileges(session: requests.Session, owner: str, repo: str) -> l
         raise
 
 
+def fetch_repo_connected(session: requests.Session, owner: str, repo: str) -> list[dict]:
+    """Repositories this one is connected to.
+
+    A connection lets a repo resolve packages from another repo in the same
+    workspace — an upstream that happens to be internal. It is directional:
+    this repo is the one doing the reaching.
+
+    Tolerates 404 and 403 the same way entitlements do. The endpoint is not
+    available for every repository, and a workspace where it is not is not an
+    error — it simply has no connections to draw.
+    """
+    url = f"{BASE_URL}/repos/{owner}/{repo}/connected/"
+    try:
+        data = _api_get(session, url)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in (400, 403, 404):
+            return []
+        raise
+    # Documented as {"results": [...]}, but read defensively: every other
+    # paginated collection in this API answers with a bare list.
+    if isinstance(data, dict):
+        results = data.get("results")
+        return results if isinstance(results, list) else []
+    return data if isinstance(data, list) else []
+
+
 UPSTREAM_FORMATS = [
     "alpine", "cargo", "composer", "conda", "cran", "dart", "deb",
     "docker", "go", "helm", "hex", "maven", "npm", "nuget",

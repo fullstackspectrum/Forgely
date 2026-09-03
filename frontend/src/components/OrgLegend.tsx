@@ -41,6 +41,19 @@ export default function OrgLegend({ collapsed, onToggle }: Props) {
           })}
         </div>
       )}
+      {!collapsed && (
+        /* Only the edges that are not self-evident from the node shapes. A
+           connection is the one that is easy to mistake for an upstream, so it
+           is named here. */
+        <div className="legend-edges">
+          <span>
+            <i className="legend-edge legend-edge-connected" /> Connected repository
+          </span>
+          <span>
+            <i className="legend-edge legend-edge-upstream" /> Upstream
+          </span>
+        </div>
+      )}
     </div>
   );
 }
