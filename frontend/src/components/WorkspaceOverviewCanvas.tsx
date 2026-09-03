@@ -201,6 +201,36 @@ export default function WorkspaceOverviewCanvas({
       });
     });
 
+    /* Connected repositories: this repo resolves packages from that one. Drawn
+       between the repo nodes themselves rather than through the workspace,
+       because that is the shape of the relationship — the workspace is not on
+       the path. Bowed further than the spokes so it reads as a chord across
+       the ring rather than another radius. */
+    for (const c of data.connections ?? []) {
+      /* A throw here would blank the whole canvas, and the graph is not multi:
+         a self-connection or a pair already joined would do it. */
+      if (!graph.hasNode(c.source) || !graph.hasNode(c.target)) continue;
+      if (c.source === c.target || graph.hasEdge(c.source, c.target)) continue;
+      graph.addEdgeWithKey(`conn:${c.source}->${c.target}`, c.source, c.target, {
+        /* Deliberately unlike the spokes, which are thin, mid-blue and barely
+           bowed. This is heavier, paler, opaque and bowed far enough to read
+           as a chord across the ring rather than another radius — four
+           channels apart, because one was not enough to tell them apart at a
+           glance. The arrow is kept: a connection is directional, and which
+           repo reaches into which is the whole point. */
+        size: 4,
+        /* Mist rather than Signal — the token the palette already uses for a
+           transitive path, which is exactly what this is. Dimmed when
+           inactive: configured but nothing travelling it is worth seeing and
+           worth distinguishing. */
+        color: c.is_active ? token("--g-edge-transitive") : "rgba(133, 183, 235,0.22)",
+        type: "curvedArrow",
+        curvature: 0.55,
+        edgeKind: "repo_connected",
+        label: c.formats.length ? c.formats.join(", ") : "connected",
+      });
+    }
+
     const sigma = new Sigma(graph, container, {
       defaultNodeColor: token("--c-action"),
       defaultEdgeColor: "rgba(139, 156, 175,0.25)",

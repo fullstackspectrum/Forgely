@@ -539,6 +539,9 @@ export default function App() {
                   owner={owner}
                   expanded={woPanelExpanded}
                   initialQuery={workspaceRepoInitialQuery}
+                  connections={workspaceOverviewData.connections ?? []}
+                  repoInfo={Object.fromEntries(workspaceOverviewData.repos.map((r) => [r.slug, { name: r.name, packages: r.package_count }]))}
+                  onSelectRepo={setSelectedWorkspaceRepo}
                   onLoadFullGraph={() => handleRepoSelect(owner, selectedWorkspaceRepo)}
                   onClose={() => { setSelectedWorkspaceRepo(null); setWorkspaceRepoInitialQuery(""); }}
                 />
