@@ -1052,10 +1052,19 @@ export default function GraphCanvas({
           return res;
         }
 
-        /* --- Pulse Critical-severity package nodes --- */
-        if (!st.hideCriticalAnimation && attrs.nodeType === "package" && (attrs as any).severity === "Critical") {
-          const pulse = 1 + 0.18 * Math.sin(st.pulsePhase);
-          res.size = (attrs.size ?? 1) * pulse;
+        /* --- Pulse Critical and malware package nodes ---
+           Malware first, and only malware: a package that is both throbs once,
+           under the malware setting. Two reasons to pulse do not mean two
+           pulses, and the ring around it is already drawn on the same rule. */
+        if (attrs.nodeType === "package") {
+          const isMalware = !!(attrs as any).is_malware_detected;
+          const pulses = isMalware
+            ? !st.hideMalwareAnimation
+            : (attrs as any).severity === "Critical" && !st.hideCriticalAnimation;
+          if (pulses) {
+            const pulse = 1 + 0.18 * Math.sin(st.pulsePhase);
+            res.size = (attrs.size ?? 1) * pulse;
+          }
         }
 
         /* --- Hide dependency nodes --- */
