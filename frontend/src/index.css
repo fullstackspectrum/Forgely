@@ -5282,6 +5282,129 @@ td, th,
   font-weight: 600;
 }
 
+/* Edge marks in the CIEM legend. Colours track EDGE_COLORS in
+   OrgGraphCanvas — a key that disagrees with the canvas is worse than none. */
+.legend-edge {
+  display: inline-block;
+  width: 16px;
+  height: 0;
+  border-top-width: 2.5px;
+  border-top-style: solid;
+  vertical-align: middle;
+}
+
+.legend-edge-connected { border-top-color: rgba(133, 183, 235, 0.9); }
+.legend-edge-upstream  { border-top-color: rgba(133, 183, 235, 0.5); border-top-style: dashed; }
+
+/* ===== Connected repositories, in the workspace repo panel ===== */
+
+.wo-conn {
+  margin-bottom: 16px;
+}
+
+.wo-conn .section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wo-conn-count {
+  font-size: var(--fg-text-xs);
+  font-weight: 600;
+  color: var(--t-muted);
+  padding: 0 6px;
+  border-radius: var(--fg-radius-pill, 999px);
+  background: var(--c-tint-subtle);
+}
+
+.wo-conn-hint {
+  margin: 0 0 8px;
+  font-size: var(--fg-text-xs);
+  line-height: 1.45;
+  color: var(--t-muted);
+}
+
+.wo-conn-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wo-conn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--c-border);
+  /* Same pale blue the connection edges are drawn in, so the row and the line
+     on the canvas are recognisably the same thing. */
+  border-left: 3px solid var(--g-edge-transitive);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+  font: inherit;
+  color: var(--t-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wo-conn-row:hover:not(:disabled) {
+  border-color: var(--c-action);
+  background: var(--c-surface-raised);
+}
+
+.wo-conn-row:disabled {
+  cursor: default;
+}
+
+/* Configured but carrying nothing — muted to match how the edge is drawn. */
+.wo-conn-row.inactive {
+  border-left-color: var(--t-muted);
+  opacity: 0.65;
+}
+
+.wo-conn-name {
+  min-width: 0;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wo-conn-flag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--t-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.wo-conn-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.wo-conn-meta:empty {
+  display: none;
+}
+
+.wo-conn-format {
+  padding: 1px 6px;
+  border-radius: var(--fg-radius-sm);
+  background: var(--c-tint-subtle);
+}
+
 /* ===== Group detail: one name, every version of it ===== */
 
 .group-search {
