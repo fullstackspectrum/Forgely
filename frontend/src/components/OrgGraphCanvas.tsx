@@ -8,7 +8,7 @@ import { NodeHexagonProgram } from "../programs/NodeHexagonProgram";
 import { NodeTriangleProgram } from "../programs/NodeTriangleProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
-import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
 import { token } from "../lib/palette";
@@ -324,6 +324,7 @@ export default function OrgGraphCanvas({
           // Resolved, not var(): sigma passes this straight to canvas ctx.font.
           labelFont: token("--fg-font-body"),
           labelColor: { color: token("--t-secondary") },
+          defaultDrawNodeLabel: drawNodeLabel,
           labelSize: 13,
           stagePadding: 40,
           zIndex: true,

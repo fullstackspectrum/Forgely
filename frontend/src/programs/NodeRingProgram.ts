@@ -7,7 +7,7 @@
 import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
-import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
 
@@ -90,7 +90,11 @@ void main(void) {
 const UNIFORMS = ["u_sizeRatio", "u_correctionRatio", "u_matrix"] as const;
 
 export class NodeRingProgram extends NodeProgram<typeof UNIFORMS[number]> {
-  drawLabel = drawDiscNodeLabel;
+  /* Sigma prefers a program's own drawLabel over
+     settings.defaultDrawNodeLabel, so this has to be the shared renderer:
+     leaving it on sigma's default silently ignored the setting the
+     canvases were passing. */
+  drawLabel = drawNodeLabel;
   drawHover = drawDarkNodeHover;
 
   getDefinition() {
