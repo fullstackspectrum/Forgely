@@ -88,9 +88,26 @@ class WorkspaceRepoSummary(BaseModel):
     formats: dict[str, int] = {}
 
 
+class RepoConnection(BaseModel):
+    """One repository resolving packages from another in the same workspace.
+
+    Directional: *source* is the repo doing the reaching. Held as edges beside
+    the repo list rather than as a field on each repo, because that is the
+    shape both graphs draw them in.
+    """
+
+    source: str
+    target: str
+    formats: list[str] = []
+    is_active: bool = True
+    priority: int = 0
+    target_package_count: int = 0
+
+
 class WorkspaceOverviewResponse(BaseModel):
     owner: str
     repos: list[WorkspaceRepoSummary]
+    connections: list[RepoConnection] = []
 
 
 class PackageDetail(BaseModel):

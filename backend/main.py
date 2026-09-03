@@ -34,6 +34,7 @@ from cloudsmith import (
     fetch_org_services,
     fetch_org_teams,
     fetch_repo_entitlements,
+    fetch_repo_connected,
     fetch_repo_privileges,
     fetch_repo_upstreams,
     fetch_repos,
@@ -51,6 +52,7 @@ from models import (
     GraphStats,
     NodeData,
     PackageDetail,
+    RepoConnection,
     WorkspaceCveSummary,
     WorkspaceOverviewResponse,
     WorkspaceRepoSummary,
@@ -1540,7 +1542,37 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
                 log.warning("Failed to process repo for workspace overview: %s", exc)
 
     summaries.sort(key=lambda s: (SEVERITY_RANK.get(s.max_severity or "", 0), s.name.lower()), reverse=True)
-    result = WorkspaceOverviewResponse(owner=owner, repos=summaries)
+
+    # Connections between repos in this workspace. Cheap next to the vulnerability
+    # work above — one call per repo, and most workspaces answer instantly or 404.
+    known = {s.slug for s in summaries}
+    connections: list[RepoConnection] = []
+
+    def _connections_for(slug: str) -> list[tuple[str, dict]]:
+        return [(slug, c) for c in fetch_repo_connected(session, owner, slug)]
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for found in pool.map(_connections_for, [s.slug for s in summaries]):
+            for source, conn in found:
+                target = conn.get("target_repository") or ""
+                # A connection can point at a repo the caller cannot see; an
+                # edge to a node that is not on the graph draws nothing.
+                if not target or target not in known:
+                    continue
+                summary = conn.get("target_repository_summary") or {}
+                connections.append(RepoConnection(
+                    source=source,
+                    target=target,
+                    formats=sorted({
+                        (u.get("type") or "") for u in (conn.get("configured_upstreams") or [])
+                    } - {""}),
+                    is_active=bool(conn.get("is_active", True)),
+                    priority=conn.get("priority", 0) or 0,
+                    target_package_count=summary.get("package_count", 0) or 0,
+                ))
+    connections.sort(key=lambda c: (c.source, c.target))
+
+    result = WorkspaceOverviewResponse(owner=owner, repos=summaries, connections=connections)
     _cache_put(overview_key, result)
 
     timer.stop()
@@ -1551,6 +1583,7 @@ def workspace_overview(owner: str, request: Request, refresh: bool = False):
         timer,
         {
             "repos": len(summaries),
+            "connections": len(connections),
             "packages": sum(s.package_count for s in summaries),
             "cves": sum(s.vuln_count for s in summaries),
             "bytes": len(result.model_dump_json()) if payload_bytes_enabled() else None,
@@ -1729,19 +1762,26 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
     # them, so no single-format query could have found them all.
     MAX_WORKERS = 6
 
-    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict]]:
+    def _fetch_priv(repo_slug: str) -> tuple[str, dict, list[dict], list[dict], list[dict]]:
         privs = fetch_repo_privileges(session, owner, repo_slug)
         ents = fetch_repo_entitlements(session, owner, repo_slug)
         ups = fetch_repo_upstreams(session, owner, repo_slug)
-        return (repo_slug, privs, ents, ups)
+        conns = fetch_repo_connected(session, owner, repo_slug)
+        return (repo_slug, privs, ents, ups, conns)
 
     # Track upstream URLs → which repos use them (for shared-upstream edges)
     upstream_url_repos: dict[str, list[str]] = {}
+    # Connections are collected and emitted after the loop: the target repo may
+    # not have been processed yet, and an edge to a node that does not exist
+    # would be dropped by the renderer.
+    connections: list[tuple[str, dict]] = []
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = [pool.submit(_fetch_priv, rs) for rs in repo_slugs]
         for fut in as_completed(futures):
-            repo_slug, privs, ents, ups = fut.result()
+            repo_slug, privs, ents, ups, conns = fut.result()
+            for conn in conns:
+                connections.append((repo_slug, conn))
             rid = f"repo:{repo_slug}"
 
             # Normalise privileges into a flat list of entries.
@@ -1873,6 +1913,35 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
                 # Track for shared-upstream detection
                 upstream_url_repos.setdefault(up_url, []).append(repo_slug)
 
+    # Connected repositories: this repo resolves packages from that one. A
+    # private upstream inside the workspace, and worth drawing for the same
+    # reason an external upstream is — it is a path packages arrive by.
+    connected_count = 0
+    for source_slug, conn in connections:
+        target_slug = conn.get("target_repository") or ""
+        sid, tid = f"repo:{source_slug}", f"repo:{target_slug}"
+        if not target_slug or sid not in seen or tid not in seen:
+            continue
+        formats = sorted({
+            (u.get("type") or "") for u in (conn.get("configured_upstreams") or [])
+        } - {""})
+        summary = conn.get("target_repository_summary") or {}
+        connected_count += 1
+        edges.append({
+            "source": sid,
+            "target": tid,
+            "type": "repo_connected",
+            "label": ", ".join(formats) if formats else "connected",
+            "data": {
+                "is_active": bool(conn.get("is_active", True)),
+                "priority": conn.get("priority", 0),
+                "formats": formats,
+                "target_package_count": summary.get("package_count", 0),
+                "disable_reason": conn.get("disable_reason_text") or "",
+                "created_at": conn.get("created_at", ""),
+            },
+        })
+
     # Add shared-upstream edges between repos that share the same upstream URL
     for up_url, repo_list in upstream_url_repos.items():
         if len(repo_list) < 2:
@@ -1898,6 +1967,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
         "total_teams": len(teams),
         "total_upstreams": total_upstreams,
         "shared_upstreams": shared_upstream_count,
+        "connected_repos": connected_count,
         "total_nodes": len(nodes),
         "total_edges": len(edges),
     }
@@ -1915,6 +1985,7 @@ def _build_org_graph(api_key: str, owner: str) -> dict:
             "nodes": len(nodes),
             "edges": len(edges),
             "shared_upstream_edges": sum(1 for e in edges if e["type"] == "shared_upstream"),
+            "connected_repo_edges": connected_count,
             "bytes": len(json.dumps(result)) if payload_bytes_enabled() else None,
         },
     )

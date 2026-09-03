@@ -37,6 +37,10 @@ const EDGE_COLORS: Record<string, string> = {
   entitlement_repo: "rgba(217, 182, 92,0.4)",
   repo_upstream:    "rgba(133, 183, 235,0.5)",
   shared_upstream:  "rgba(240, 138, 90,0.7)",
+  /* Connected repositories are an upstream that happens to be internal, so
+     they take the upstream blue — brighter and heavier, because unlike a
+     shared upstream this is a path packages actually travel. */
+  repo_connected:   "rgba(133, 183, 235,0.75)",
 };
 
 const EDGE_COLORS_BRIGHT: Record<string, string> = {
@@ -49,6 +53,7 @@ const EDGE_COLORS_BRIGHT: Record<string, string> = {
   entitlement_repo: "rgba(217, 182, 92,0.90)",
   repo_upstream:    "rgba(133, 183, 235,0.90)",
   shared_upstream:  "rgba(240, 138, 90,0.90)",
+  repo_connected:   "rgba(133, 183, 235,0.95)",
 };
 
 function assignOrgTreeLayout(graph: Graph, horizontal: boolean) {
@@ -278,11 +283,16 @@ export default function OrgGraphCanvas({
           if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
           const isShared = edge.type === "shared_upstream";
           const isAccess = edge.type === "access";
+          /* Drawn with an arrow and a wider curve: a connection is directional
+             — this repo reaches into that one — and it runs between two repo
+             nodes that already have an org_repo edge each, so it needs to bow
+             clear of them to be seen at all. */
+          const isConnected = edge.type === "repo_connected";
           graph.addEdgeWithKey(`e-${idx++}`, edge.source, edge.target, {
-            size: isShared ? 3 : isAccess ? 1.5 : 1.5,
+            size: isShared ? 3 : isConnected ? 2.5 : 1.5,
             color: EDGE_COLORS[edge.type] ?? "rgba(139, 156, 175,0.4)",
             type: isAccess ? "curvedDotted" : "curvedArrow",
-            curvature: isShared ? 0.3 : 0.15,
+            curvature: isShared ? 0.3 : isConnected ? 0.35 : 0.15,
             edgeKind: edge.type,
             label: edge.label,
           });

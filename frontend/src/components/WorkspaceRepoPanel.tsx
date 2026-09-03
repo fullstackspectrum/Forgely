@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { currentTheme } from "../lib/theme";
 import { SEVERITY_COLORS } from "../types";
-import type { WorkspaceRepoSummary, WorkspaceCveSummary } from "../types";
+import type { WorkspaceRepoSummary, WorkspaceCveSummary, RepoConnection } from "../types";
 import { apiFetch } from "../lib/auth";
 
 interface Props {
@@ -9,7 +9,16 @@ interface Props {
   owner: string;
   expanded: boolean;
   initialQuery?: string;
+  /* Every connection in the workspace, not just this repo's — the panel shows
+     both directions, and the incoming ones are keyed on other repos. */
+  connections?: RepoConnection[];
+  /* Slug to name and package count, for the repositories a connection points
+     at. Connections are keyed on slug while the graph labels repositories by
+     name, and the connection's own `target_package_count` always describes the
+     target — which is the wrong repo to attribute it to on an incoming row. */
+  repoInfo?: Record<string, { name: string; packages: number }>;
   onLoadFullGraph: () => void;
+  onSelectRepo?: (slug: string) => void;
   onClose: () => void;
 }
 
@@ -103,10 +112,60 @@ function CveRow({ cve, query }: { cve: WorkspaceCveSummary; query: string }) {
   );
 }
 
-export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery, onLoadFullGraph, onClose }: Props) {
+function ConnRow({
+  slug,
+  name,
+  packages,
+  conn,
+  onSelect,
+}: {
+  slug: string;
+  name: string;
+  packages: number;
+  conn: RepoConnection;
+  onSelect?: (slug: string) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        className={`wo-conn-row${conn.is_active ? "" : " inactive"}`}
+        onClick={onSelect ? () => onSelect(slug) : undefined}
+        disabled={!onSelect}
+        title={onSelect ? `Open ${name}` : name}
+      >
+        <span className="wo-conn-name">{name}</span>
+        {!conn.is_active && <span className="wo-conn-flag">Inactive</span>}
+        <span className="wo-conn-meta">
+          {packages > 0 && <span>{packages.toLocaleString()} packages</span>}
+          {/* The formats the connection actually carries. Absent when the
+              target has no upstreams configured for it, which is not the same
+              as carrying none — so the row says nothing rather than "0". */}
+          {conn.formats.map((f) => (
+            <span key={f} className="wo-conn-format">{f}</span>
+          ))}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery, connections = [], repoInfo = {}, onLoadFullGraph, onSelectRepo, onClose }: Props) {
   const [query, setQuery] = useState(initialQuery ?? "");
   const [sevFilter, setSevFilter] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  /* Both directions. Outgoing is what this repo has configured; incoming is
+     who reaches into it, which is the half that matters for blast radius —
+     a CVE here is served to every repo in that list. */
+  const outgoing = useMemo(
+    () => connections.filter((c) => c.source === data.slug),
+    [connections, data.slug],
+  );
+  const incoming = useMemo(
+    () => connections.filter((c) => c.target === data.slug),
+    [connections, data.slug],
+  );
+
   const [reportLoading, setReportLoading] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -197,6 +256,57 @@ export default function WorkspaceRepoPanel({ data, owner, expanded, initialQuery
           <span className="wo-stat-label">Unique CVEs</span>
         </div>
       </div>
+
+      {(outgoing.length > 0 || incoming.length > 0) && (
+        <div className="wo-conn">
+          {outgoing.length > 0 && (
+            <>
+              <h3 className="section-title">
+                Connected repositories
+                <span className="wo-conn-count">{outgoing.length}</span>
+              </h3>
+              <p className="wo-conn-hint">Packages resolved from these repositories.</p>
+              <ul className="wo-conn-list">
+                {outgoing.map((c) => (
+                  <ConnRow
+                    key={`out:${c.target}`}
+                    slug={c.target}
+                    name={repoInfo[c.target]?.name ?? c.target}
+                    packages={repoInfo[c.target]?.packages ?? c.target_package_count}
+                    conn={c}
+                    onSelect={onSelectRepo}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
+          {incoming.length > 0 && (
+            <>
+              <h3 className="section-title">
+                Connected from
+                <span className="wo-conn-count">{incoming.length}</span>
+              </h3>
+              <p className="wo-conn-hint">
+                These repositories resolve packages from this one, so its findings reach them.
+              </p>
+              <ul className="wo-conn-list">
+                {incoming.map((c) => (
+                  <ConnRow
+                    key={`in:${c.source}`}
+                    slug={c.source}
+                    name={repoInfo[c.source]?.name ?? c.source}
+                    /* Never conn.target_package_count here: that is this
+                       repository's own count, not the one reaching into it. */
+                    packages={repoInfo[c.source]?.packages ?? 0}
+                    conn={c}
+                    onSelect={onSelectRepo}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Primary actions sit above the findings, not below them. Paginated or
           not, a list of hundreds of CVEs pushed these off the bottom of the
