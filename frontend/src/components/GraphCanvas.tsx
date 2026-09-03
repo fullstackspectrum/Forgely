@@ -14,7 +14,7 @@ import { NodeRingProgram } from "../programs/NodeRingProgram";
 import EdgeDottedProgram from "../programs/EdgeDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel, drawLockBadge } from "../lib/hoverRenderer";
 import { placeRadially, refineForceLayout, clusterAround, groupSpacing, assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
-import { focusNodes } from "../lib/focus";
+import { fitAround, focusNodes } from "../lib/focus";
 import type { Point } from "../lib/layout";
 import type { GraphResponse, Severity, LayoutType, EdgeStyle, NodeData } from "../types";
 import LayoutPopout from "./LayoutPopout";
@@ -1593,18 +1593,13 @@ export default function GraphCanvas({
             graph.forEachNode((node, attrs) => {
               if (attrs.nodeType === "repo") repoNode = node;
             });
-            if (!repoNode) return;
-            const pos = sigma.getNodeDisplayData(repoNode);
-            if (pos) {
-              sigma.getCamera().animate(
-                { x: pos.x, y: pos.y, ratio: 0.4 },
-                { duration: 400 }
-              );
-            }
+            /* Was a hardcoded ratio of 0.4, which zoomed *in* on the repository
+               and pushed most of the graph off screen. */
+            if (repoNode) fitAround(sigma, repoNode);
           }}
-          title="Recenter on Repo"
+          title="Fit graph — centre on the repository and show every node"
         >
-          ⊙
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
         {onRefresh && (
           <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh data">
