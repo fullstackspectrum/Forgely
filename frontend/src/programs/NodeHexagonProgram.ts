@@ -6,7 +6,7 @@ import { NodeProgram, drawDiscNodeLabel } from "sigma/rendering";
 import { floatColor } from "sigma/utils";
 import type { NodeDisplayData, RenderParams } from "sigma/types";
 import type { Settings } from "sigma/settings";
-import { drawDarkNodeHover } from "../lib/hoverRenderer";
+import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import { token } from "../lib/palette";
 
 const { UNSIGNED_BYTE, FLOAT, TRIANGLES } = WebGLRenderingContext;
@@ -160,7 +160,11 @@ function drawHexagonNodeHover(
 }
 
 export class NodeHexagonProgram extends NodeProgram<typeof UNIFORMS[number]> {
-  drawLabel = drawDiscNodeLabel;
+  /* Sigma prefers a program's own drawLabel over
+     settings.defaultDrawNodeLabel, so this has to be the shared renderer:
+     leaving it on sigma's default silently ignored the setting the
+     canvases were passing. */
+  drawLabel = drawNodeLabel;
   drawHover = drawDarkNodeHover;
 
   getDefinition() {
