@@ -854,8 +854,13 @@ export default function GraphCanvas({
        and two overlapping pulses on one node read as neither. */
     const RING_COUNT = 2;
     const pulsing: Array<{ id: string; size: number; kind: "critical" | "malware" }> = [];
+    /* An open hub stands for versions that are now on screen in their own
+       right, and each of them pulses for itself. Leaving the hub pulsing too
+       double-counts one finding — and the hub is already dimmed once open,
+       so it would be the faded node making the most noise. */
+    const openHubIds = new Set(grouped.openGroups);
     graph.forEachNode((nid, attrs) => {
-      if (attrs.nodeType !== "package") return;
+      if (attrs.nodeType !== "package" || openHubIds.has(nid)) return;
       if (attrs.is_malware_detected) pulsing.push({ id: nid, size: attrs.size, kind: "malware" });
       else if (attrs.severity === "Critical") pulsing.push({ id: nid, size: attrs.size, kind: "critical" });
     });
@@ -1056,7 +1061,7 @@ export default function GraphCanvas({
            Malware first, and only malware: a package that is both throbs once,
            under the malware setting. Two reasons to pulse do not mean two
            pulses, and the ring around it is already drawn on the same rule. */
-        if (attrs.nodeType === "package") {
+        if (attrs.nodeType === "package" && !st.openHubs.has(node)) {
           const isMalware = !!(attrs as any).is_malware_detected;
           const pulses = isMalware
             ? !st.hideMalwareAnimation
@@ -1348,6 +1353,9 @@ export default function GraphCanvas({
       const st = stateRef.current;
       graph.forEachNode((nodeId, attrs) => {
         if (!attrs.is_quarantined && !attrs.is_malware_detected) return;
+        /* Same rule as the pulse: an open hub's versions carry their own
+           badges, so badging the hub as well marks one package twice. */
+        if (st.openHubs.has(nodeId)) return;
         const d = sigma.getNodeDisplayData(nodeId);
         if (!d || d.hidden) return;
         const { x, y } = (sigma as any).framedGraphToViewport(d);
