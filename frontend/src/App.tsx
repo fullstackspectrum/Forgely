@@ -17,7 +17,6 @@ import WorkspaceRepoPanel from "./components/WorkspaceRepoPanel";
 import WorkspaceOverviewPanel from "./components/WorkspaceOverviewPanel";
 import Legend from "./components/Legend";
 import LoadingIndicator from "./components/LoadingIndicator";
-import ConnectModal from "./components/ConnectModal";
 import SettingsDialog from "./components/SettingsDialog";
 import OrgSearchBar from "./components/OrgSearchBar";
 import { apiFetch, getApiKey, clearApiKey } from "./lib/auth";
@@ -51,7 +50,7 @@ export default function App() {
   const [hideDependencies, setHideDependencies] = useState(settings.hideDependencies);
   const [hideUnsupported, setHideUnsupported] = useState(settings.hideUnsupported);
   const [hideCriticalAnimation, setHideCriticalAnimation] = useState(settings.hideCriticalAnimation);
-  const [connectOpen, setConnectOpen] = useState(false);
+  const [hideMalwareAnimation, setHideMalwareAnimation] = useState(settings.hideMalwareAnimation);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [legendCollapsed, setLegendCollapsed] = useState(settings.legendCollapsed);
   const [hasKey, setHasKey] = useState(!!getApiKey());
@@ -389,31 +388,28 @@ export default function App() {
         hideDependencies={hideDependencies}
         hideUnsupported={hideUnsupported}
         hideCriticalAnimation={hideCriticalAnimation}
+        hideMalwareAnimation={hideMalwareAnimation}
         onHideSharedCveEdgesChange={persist("hideSharedCveEdges", setHideSharedCveEdges)}
         onHideDependenciesChange={persist("hideDependencies", setHideDependencies)}
         onHideUnsupportedChange={persist("hideUnsupported", setHideUnsupported)}
         onHideCriticalAnimationChange={persist("hideCriticalAnimation", setHideCriticalAnimation)}
+        onHideMalwareAnimationChange={persist("hideMalwareAnimation", setHideMalwareAnimation)}
         edgeStyle={edgeStyle}
         onEdgeStyleChange={changeEdgeStyle}
         hasKey={hasKey}
-        onConnectClick={() => setConnectOpen(true)}
-        onDisconnect={() => { clearApiKey(); setHasKey(false); }}
+        onConnectionChanged={() => { setHasKey(!!getApiKey()); setRepoRefreshKey((k) => k + 1); }}
+        onDisconnect={() => { clearApiKey(); setHasKey(false); setRepoRefreshKey((k) => k + 1); }}
         onReset={() => {
           const d = resetSettings();
           setHideSharedCveEdges(d.hideSharedCveEdges);
           setHideDependencies(d.hideDependencies);
           setHideUnsupported(d.hideUnsupported);
           setHideCriticalAnimation(d.hideCriticalAnimation);
+          setHideMalwareAnimation(d.hideMalwareAnimation);
           setEdgeStyle(d.edgeStyle);
           setLayout(d.layout);
           setLegendCollapsed(d.legendCollapsed);
         }}
-      />
-
-      <ConnectModal
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        onConnected={() => { setHasKey(!!getApiKey()); setRepoRefreshKey((k) => k + 1); setConnectOpen(false); }}
       />
 
       {/* Packages tab content */}
@@ -458,6 +454,7 @@ export default function App() {
               hideDependencies={hideDependencies}
               hideUnsupported={hideUnsupported}
               hideCriticalAnimation={hideCriticalAnimation}
+              hideMalwareAnimation={hideMalwareAnimation}
               onNodeSelect={setSelectedNode}
               onNodeHover={setHoveredNode}
 
@@ -618,7 +615,9 @@ export default function App() {
         <ApiErrorToast
           message={apiToast}
           onDismiss={() => setApiToast(null)}
-          onReconnect={() => { setApiToast(null); setConnectOpen(true); }}
+          /* Reconnecting lives in settings now, so the toast opens that
+             instead of a modal of its own. */
+          onReconnect={() => { setApiToast(null); setSettingsOpen(true); }}
         />
       )}
     </div>

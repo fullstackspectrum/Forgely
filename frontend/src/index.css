@@ -5296,6 +5296,89 @@ td, th,
 .legend-edge-connected { border-top-color: rgba(133, 183, 235, 0.9); }
 .legend-edge-upstream  { border-top-color: rgba(133, 183, 235, 0.5); border-top-style: dashed; }
 
+/* ===== Connection panel, inside Settings ===== */
+
+.settings-connection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+}
+
+.settings-conn-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-conn-state {
+  font-size: var(--fg-text-sm);
+  font-weight: 600;
+}
+
+/* The dot carries no margin-left:auto here, unlike on the settings button. */
+.settings-connection-panel .settings-btn-dot {
+  margin-left: 0;
+}
+
+.settings-conn-disconnect {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.settings-conn-disconnect:hover {
+  color: var(--s-critical);
+}
+
+.settings-conn-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.settings-conn-user {
+  font-size: var(--fg-text-sm);
+  font-weight: 600;
+}
+
+.settings-conn-email {
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.settings-conn-key {
+  margin-left: auto;
+  font-family: var(--fg-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--t-muted);
+  letter-spacing: 1px;
+}
+
+.settings-conn-entry {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-conn-entry .connect-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-conn-help {
+  font-size: var(--fg-text-xs);
+}
+
 /* ===== Connected repositories, in the workspace repo panel ===== */
 
 .wo-conn {
@@ -6176,19 +6259,73 @@ td, th,
 }
 
 .settings-btn-dot.connected {
-  background: var(--s-none);
+  /* Was --s-none, the neutral blue-grey the severity ramp uses for "no
+     findings" — which made a live connection look like a scan result. Green is
+     the convention for a healthy connection and is used nowhere else. */
+  background: var(--c-ok);
 }
 
 .settings-modal {
   width: min(520px, calc(100vw - 32px));
   max-height: min(80vh, 720px);
+  /* max-height alone does nothing here: .modal-content is not a flex column,
+     so the body had no bounded height and its overflow-y never engaged —
+     content simply ran out of the bottom of the modal. */
+  display: flex;
+  flex-direction: column;
+  /* So the rounded corners clip the scrolling body. */
+  overflow: hidden;
 }
 
 .settings-body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* min-height: 0 is what actually lets a flex child scroll — without it the
+     body grows to its content instead of to its share of the modal. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+/* ===== Settings tabs ===== */
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.settings-tab {
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  color: var(--t-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--t-primary);
+}
+
+.settings-tab.active {
+  color: var(--t-primary);
+  border-bottom-color: var(--c-action);
+}
+
+/* The connection state, legible from the tab without opening it. */
+.settings-tab .settings-btn-dot {
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .settings-section {
@@ -6289,6 +6426,7 @@ td, th,
   padding-top: 12px;
   margin-top: 4px;
   border-top: 1px solid var(--c-hairline);
+  flex: none;
 }
 
 .settings-footer-note {

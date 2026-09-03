@@ -20,6 +20,9 @@ const SEV_TOKEN: Record<string, string> = {
 const severityColor = (sev: string): string | undefined =>
   sev in SEV_TOKEN ? token(SEV_TOKEN[sev]) : undefined;
 
+/* Between two badges sharing a row. */
+const BADGE_GAP = 5;
+
 const SEVERITY_BADGE_BG: Record<string, string> = {
   Critical: "rgba(232, 117, 107,0.22)",
   High:     "rgba(240, 138, 90,0.22)",
@@ -40,6 +43,14 @@ export function drawDarkNodeHover(
   const severity       = data.severity      as string | undefined;
   const nodeType       = data.nodeType      as string | undefined;
   const isQuarantined  = !!data.is_quarantined;
+  /* Lowercased on the node, and left that way: package formats are written
+     lowercase everywhere they appear — npm, docker, maven — and title-casing
+     them here would disagree with the panel and the filter chips. */
+  const format         = (data.format as string | undefined) || "";
+  /* Rides along on the format row rather than taking one of its own: they are
+     the same kind of fact — what this artefact is — and a Docker image that is
+     "docker · arm64" reads as one answer, not two. */
+  const architecture   = (data.architecture as string | undefined) || "";
 
   // Skip empty hover for repo nodes
   if (!label) return;
@@ -67,10 +78,17 @@ export function drawDarkNodeHover(
     contentW = Math.max(contentW, context.measureText("Quarantined").width + 22);
     context.font = `${weight} ${fontSize}px ${font}`;
   }
+  if (format) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    let rowW = context.measureText(format).width + 14;
+    if (architecture) rowW += context.measureText(architecture).width + 14 + BADGE_GAP;
+    contentW = Math.max(contentW, rowW);
+    context.font = `${weight} ${fontSize}px ${font}`;
+  }
 
   const accentW   = severityColor(severity ?? "") ? ACCENT_W : 0;
   const boxWidth  = Math.round(contentW + PAD_X * 2 + accentW);
-  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0);
+  const extraRows = (showSeverity ? 1 : 0) + (isQuarantined ? 1 : 0) + (format ? 1 : 0);
   const boxHeight = Math.round(fontSize + PAD_Y * 2 + extraRows * (fontSize + INNER_GAP));
 
   const x = data.x + data.size + 8;
@@ -112,8 +130,40 @@ export function drawDarkNodeHover(
     context.fillText(label, textX, y + PAD_Y);
   }
 
-  // ── Layer 6: severity badge ───────────────────────────────────────────────
+  // ── Layer 6: format badge ────────────────────────────────────────────────
   let nextRowY = y + PAD_Y + fontSize + INNER_GAP;
+  if (format) {
+    context.font = `500 ${fontSize - 2}px ${font}`;
+    const fW     = context.measureText(format).width + 14;
+    const badgeH = Math.round(fontSize - 1);
+
+    /* Neutral, like the quarantine badge and for the same reason: a format is
+       a classification, not a severity, and every tinted chip that is not a
+       severity makes the severity chips mean less. It leads the badge rows
+       because it says what the thing *is*, before what is wrong with it. */
+    context.fillStyle = "rgba(139, 156, 175, 0.18)";
+    roundedRect(context, textX, nextRowY, fW, badgeH, 3);
+    context.fill();
+
+    context.fillStyle    = token("--fg-n-300");
+    context.textBaseline = "top";
+    context.fillText(format, textX + 7, nextRowY + 1);
+
+    /* Docker manifests carry two, and "noarch" is dropped upstream, so this is
+       absent for most packages rather than saying nothing. */
+    if (architecture) {
+      const aX = textX + fW + BADGE_GAP;
+      const aW = context.measureText(architecture).width + 14;
+      context.fillStyle = "rgba(139, 156, 175, 0.18)";
+      roundedRect(context, aX, nextRowY, aW, badgeH, 3);
+      context.fill();
+      context.fillStyle = token("--fg-n-300");
+      context.fillText(architecture, aX + 7, nextRowY + 1);
+    }
+    nextRowY += fontSize + INNER_GAP;
+  }
+
+  // ── Layer 7: severity badge ───────────────────────────────────────────────
   if (showSeverity && severity) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const badgeFg = severityColor(severity) ?? token("--t-muted");
@@ -131,7 +181,7 @@ export function drawDarkNodeHover(
     nextRowY += fontSize + INNER_GAP;
   }
 
-  // ── Layer 7: quarantine badge row ────────────────────────────────────────
+  // ── Layer 8: quarantine badge row ────────────────────────────────────────
   if (isQuarantined) {
     context.font = `500 ${fontSize - 2}px ${font}`;
     const qText  = "Quarantined";
@@ -161,7 +211,7 @@ export function drawDarkNodeHover(
     context.fillRect(lx - lr * 0.6, ly - lr * 0.1, lr * 1.2, lr * 1.0);
   }
 
-  // ── Layer 8: corner lock badge on the node itself ────────────────────────
+  // ── Layer 9: corner lock badge on the node itself ────────────────────────
   if (isQuarantined) {
     const br = Math.max(5, (data.size ?? 1) * 0.58);
     drawLockBadge(context, data.x + (data.size ?? 1) * 0.72, data.y - (data.size ?? 1) * 0.72, br);
@@ -240,19 +290,20 @@ export function drawNodeLabel(
   context.fillText(label, textX, data.y);
 }
 
-export { drawLockBadge };
+export { drawLockBadge, drawMalwareBadge };
 
 /** Draws a small amber lock badge centred at (cx, cy) with radius r. */
 function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
   ctx.save();
 
-  // Dark border ring for contrast against any node colour
+  /* A light ring, not a dark one. The disc below is now dark, so the halo that
+     separates the badge from the node underneath has to be the opposite: a
+     dark ring on a dark disc merged the two into one blob. */
   ctx.beginPath();
-  ctx.arc(cx, cy, r + r * 0.18, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(10, 22, 34,0.55)";
+  ctx.arc(cx, cy, r + r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = token("--c-bg");
   ctx.fill();
 
-  // Amber filled background circle
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   /* Not a severity colour. This was --s-medium (gold), which meant every
@@ -261,16 +312,24 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
      amber discs competing with the single ember origin. §1: "there is exactly
      one of it on screen. If your UI has three amber things in it, the
      metaphor is dead and so is the colour's meaning." */
-  ctx.fillStyle = token("--fg-n-400");
+  /* Was --fg-n-400, a mid grey, carrying a near-white glyph: about 3:1, which
+     is not enough for a shape this small, and in the light theme --t-primary
+     is dark so the lock nearly vanished into the disc. A dark disc with a
+     white glyph is high contrast in both themes and stays neutral — a
+     quarantine is a state, not a severity, and must not borrow the ramp. */
+  ctx.fillStyle = token("--fg-n-800");
   ctx.fill();
 
   // White lock — shackle (open-bottom arch)
   const shackleR   = r * 0.36;
   const shackleY   = cy - r * 0.12;
-  const shackleW   = r * 0.22;
+  const shackleW   = r * 0.26;
   ctx.beginPath();
   ctx.arc(cx, shackleY, shackleR, Math.PI, 0);
-  ctx.strokeStyle = token("--t-primary");
+  /* Fixed light, not --t-primary: the disc is dark in both themes, so the
+     glyph has to be too — a theme-following colour turned the lock dark-on-dark
+     in the light theme. */
+  ctx.strokeStyle = token("--fg-n-0");
   ctx.lineWidth   = shackleW;
   ctx.lineCap     = "round";
   ctx.stroke();
@@ -292,7 +351,8 @@ function drawLockBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   ctx.lineTo(bX, bY + br);
   ctx.arcTo(bX, bY, bX + br, bY, br);
   ctx.closePath();
-  ctx.fillStyle = token("--t-primary");
+  // Matches the shackle above, for the same reason.
+  ctx.fillStyle = token("--fg-n-0");
   ctx.fill();
 
   ctx.restore();
@@ -310,4 +370,53 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+
+/**
+ * Malware badge: the same disc as the lock, carrying a warning glyph.
+ *
+ * Shares the lock's construction deliberately — both are states of a package
+ * rather than severities, and a reader who has learned to spot one small disc
+ * in the corner of a node should not have to learn a second visual language
+ * for the other. Only the glyph and the disc colour differ.
+ *
+ * The disc is the one place a severity-adjacent colour is warranted: malware
+ * is not a CVE score, but it is the most serious thing a package can carry,
+ * and a neutral grey would file it alongside "quarantined".
+ */
+function drawMalwareBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.save();
+
+  // Light halo, so the badge separates from the node underneath.
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = token("--c-bg");
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = token("--g-sev-critical");
+  ctx.fill();
+
+  /* An exclamation mark, not a skull or a biohazard: at this size anything
+     with internal detail turns to mush, and a bar with a dot below it stays
+     legible down to a handful of pixels. */
+  const barW = Math.max(1.5, r * 0.24);
+  const barTop = cy - r * 0.46;
+  const barBot = cy + r * 0.12;
+  ctx.strokeStyle = token("--fg-n-0");
+  ctx.lineWidth = barW;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx, barTop);
+  ctx.lineTo(cx, barBot);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy + r * 0.46, barW * 0.62, 0, Math.PI * 2);
+  ctx.fillStyle = token("--fg-n-0");
+  ctx.fill();
+
+  ctx.restore();
 }
