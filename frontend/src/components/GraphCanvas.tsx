@@ -770,6 +770,7 @@ export default function GraphCanvas({
         format: (node.data.format || "").toLowerCase(),
         is_quarantined: node.data.is_quarantined ?? false,
         is_malware_detected: node.data.is_malware_detected ?? false,
+        architecture: node.data.architecture ?? "",
         /* Squares from the mark. The repository is its centre cell, which is
            the displaced one — so it carries the tilt permanently rather than
            only while selected. Dependencies keep the hexagon: they are a

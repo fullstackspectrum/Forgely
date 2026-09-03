@@ -20,6 +20,9 @@ const SEV_TOKEN: Record<string, string> = {
 const severityColor = (sev: string): string | undefined =>
   sev in SEV_TOKEN ? token(SEV_TOKEN[sev]) : undefined;
 
+/* Between two badges sharing a row. */
+const BADGE_GAP = 5;
+
 const SEVERITY_BADGE_BG: Record<string, string> = {
   Critical: "rgba(232, 117, 107,0.22)",
   High:     "rgba(240, 138, 90,0.22)",
@@ -44,6 +47,10 @@ export function drawDarkNodeHover(
      lowercase everywhere they appear — npm, docker, maven — and title-casing
      them here would disagree with the panel and the filter chips. */
   const format         = (data.format as string | undefined) || "";
+  /* Rides along on the format row rather than taking one of its own: they are
+     the same kind of fact — what this artefact is — and a Docker image that is
+     "docker · arm64" reads as one answer, not two. */
+  const architecture   = (data.architecture as string | undefined) || "";
 
   // Skip empty hover for repo nodes
   if (!label) return;
@@ -73,7 +80,9 @@ export function drawDarkNodeHover(
   }
   if (format) {
     context.font = `500 ${fontSize - 2}px ${font}`;
-    contentW = Math.max(contentW, context.measureText(format).width + 14);
+    let rowW = context.measureText(format).width + 14;
+    if (architecture) rowW += context.measureText(architecture).width + 14 + BADGE_GAP;
+    contentW = Math.max(contentW, rowW);
     context.font = `${weight} ${fontSize}px ${font}`;
   }
 
@@ -139,6 +148,18 @@ export function drawDarkNodeHover(
     context.fillStyle    = token("--fg-n-300");
     context.textBaseline = "top";
     context.fillText(format, textX + 7, nextRowY + 1);
+
+    /* Docker manifests carry two, and "noarch" is dropped upstream, so this is
+       absent for most packages rather than saying nothing. */
+    if (architecture) {
+      const aX = textX + fW + BADGE_GAP;
+      const aW = context.measureText(architecture).width + 14;
+      context.fillStyle = "rgba(139, 156, 175, 0.18)";
+      roundedRect(context, aX, nextRowY, aW, badgeH, 3);
+      context.fill();
+      context.fillStyle = token("--fg-n-300");
+      context.fillText(architecture, aX + 7, nextRowY + 1);
+    }
     nextRowY += fontSize + INNER_GAP;
   }
 
