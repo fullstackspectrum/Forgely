@@ -5296,6 +5296,89 @@ td, th,
 .legend-edge-connected { border-top-color: rgba(133, 183, 235, 0.9); }
 .legend-edge-upstream  { border-top-color: rgba(133, 183, 235, 0.5); border-top-style: dashed; }
 
+/* ===== Connection panel, inside Settings ===== */
+
+.settings-connection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+}
+
+.settings-conn-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-conn-state {
+  font-size: var(--fg-text-sm);
+  font-weight: 600;
+}
+
+/* The dot carries no margin-left:auto here, unlike on the settings button. */
+.settings-connection-panel .settings-btn-dot {
+  margin-left: 0;
+}
+
+.settings-conn-disconnect {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.settings-conn-disconnect:hover {
+  color: var(--s-critical);
+}
+
+.settings-conn-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.settings-conn-user {
+  font-size: var(--fg-text-sm);
+  font-weight: 600;
+}
+
+.settings-conn-email {
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.settings-conn-key {
+  margin-left: auto;
+  font-family: var(--fg-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--t-muted);
+  letter-spacing: 1px;
+}
+
+.settings-conn-entry {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-conn-entry .connect-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-conn-help {
+  font-size: var(--fg-text-xs);
+}
+
 /* ===== Connected repositories, in the workspace repo panel ===== */
 
 .wo-conn {
@@ -6176,7 +6259,10 @@ td, th,
 }
 
 .settings-btn-dot.connected {
-  background: var(--s-none);
+  /* Was --s-none, the neutral blue-grey the severity ramp uses for "no
+     findings" — which made a live connection look like a scan result. Green is
+     the convention for a healthy connection and is used nowhere else. */
+  background: var(--c-ok);
 }
 
 .settings-modal {
