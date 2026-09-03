@@ -10,6 +10,7 @@ import LayoutPopout from "./LayoutPopout";
 import { SEVERITY_COLORS } from "../types";
 import type { WorkspaceOverviewResponse, LayoutType, EdgeStyle } from "../types";
 import { token } from "../lib/palette";
+import { fitAround } from "../lib/focus";
 import { drawNodeLabel } from "../lib/hoverRenderer";
 
 interface Props {
@@ -452,18 +453,15 @@ export default function WorkspaceOverviewCanvas({
           </button>
         </div>
 
-        {/* Recenter on workspace node */}
         <button
           className="graph-recenter-btn"
-          title="Recenter"
+          title="Fit graph — centre on the workspace and show every repository"
           onClick={() => {
             const sigma = sigmaRef.current;
-            if (!sigma) return;
-            const pos = sigma.getNodeDisplayData(wsId);
-            if (pos) sigma.getCamera().animate({ x: pos.x, y: pos.y, ratio: 0.8 }, { duration: 400 });
+            if (sigma) fitAround(sigma, wsId);
           }}
         >
-          ⊙
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
 
         {onRefresh && (

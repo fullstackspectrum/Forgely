@@ -12,6 +12,7 @@ import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
 import { token } from "../lib/palette";
+import { fitAround } from "../lib/focus";
 import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
 /* Size carries weight, and separates the two kinds that share a shape: a team
@@ -506,11 +507,21 @@ export default function OrgGraphCanvas({
           className="graph-recenter-btn"
           onClick={() => {
             const sigma = sigmaRef.current;
-            if (sigma) sigma.getCamera().animatedReset({ duration: 400 });
+            const graph = graphRef.current;
+            if (!sigma || !graph) return;
+            let orgNode: string | null = null;
+            graph.forEachNode((node, attrs) => {
+              if (attrs.nodeType === "org") orgNode = node;
+            });
+            /* animatedReset fits the graph's own bounding box, which leaves the
+               workspace wherever the layout put it. Fit around it instead, so
+               the thing every edge points at is also in the middle. */
+            if (orgNode) fitAround(sigma, orgNode);
+            else sigma.getCamera().animatedReset({ duration: 400 });
           }}
-          title="Recenter"
+          title="Fit graph — centre on the workspace and show every node"
         >
-          ⊙
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
         {onRefresh && (
           <button className="graph-refresh-btn" onClick={onRefresh} title="Refresh data">

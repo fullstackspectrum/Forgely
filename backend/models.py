@@ -29,6 +29,8 @@ class NodeData(BaseModel):
     slug: str = ""
     pkg_type: str = ""
     is_quarantined: bool = False
+    is_malware_detected: bool = False
+    architecture: str = ""
 
 
 class GraphNode(BaseModel):

@@ -23,6 +23,9 @@ const STATUS_FILTERS: { key: string; label: string }[] = [
   { key: "vulnerable",  label: "Vulnerable" },
   { key: "safe",        label: "Safe" },
   { key: "quarantined", label: "Quarantined" },
+  /* Above the CVE-shaped filters: malware is not a vulnerability score, it is
+     a package that should not be there at all. */
+  { key: "malware",     label: "Malware" },
   { key: "shared_cve",  label: "Shared CVEs" },
   { key: "has_deps",    label: "Has dependencies" },
 ];

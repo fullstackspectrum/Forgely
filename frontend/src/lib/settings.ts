@@ -21,6 +21,7 @@ export interface Settings {
   hideDependencies: boolean;
   hideUnsupported: boolean;
   hideCriticalAnimation: boolean;
+  hideMalwareAnimation: boolean;
   edgeStyle: EdgeStyle;
   layout: LayoutType;
   legendCollapsed: boolean;
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideDependencies: false,
   hideUnsupported: false,
   hideCriticalAnimation: false,
+  hideMalwareAnimation: false,
   edgeStyle: "curved",
   layout: "force",
   /* Collapsed until the user opens it: the key teaches the vocabulary once,
@@ -68,6 +70,7 @@ export function loadSettings(): Settings {
       hideDependencies: bool("hideDependencies"),
       hideUnsupported: bool("hideUnsupported"),
       hideCriticalAnimation: bool("hideCriticalAnimation"),
+      hideMalwareAnimation: bool("hideMalwareAnimation"),
       legendCollapsed: bool("legendCollapsed"),
       edgeStyle: EDGE_STYLES.includes(parsed.edgeStyle as EdgeStyle)
         ? (parsed.edgeStyle as EdgeStyle) : DEFAULT_SETTINGS.edgeStyle,
