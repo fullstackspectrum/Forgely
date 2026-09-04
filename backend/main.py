@@ -1150,25 +1150,35 @@ def search_packages(owner: str, repo: str, query: str, request: Request):
 @app.post("/api/auth/validate")
 def validate_api_key(request: Request):
     """Validate a Cloudsmith API key by hitting the /v1/user/self/ endpoint."""
-    api_key = request.headers.get("X-Api-Key", "")
+    # Whichever key this request would actually use, resolved the same way
+    # every other endpoint resolves it. Checking only the header reported the
+    # saved key as broken on an instance whose key comes from the environment —
+    # while every data call kept working, because those do fall back.
+    header_key = request.headers.get("X-Api-Key", "")
+    api_key = header_key or os.getenv("CLOUDSMITH_API_KEY", "")
+    # `source` lets the UI say where the key came from. "Not connected" and
+    # "the key you saved has stopped working" are different problems with
+    # different fixes, and they looked identical before.
+    source = "request" if header_key else "server" if api_key else "none"
     if not api_key:
-        raise HTTPException(status_code=400, detail="No API key provided")
+        return {"valid": False, "error": "No API key provided", "source": source}
     session = create_session(api_key)
     try:
         resp = session.get("https://api.cloudsmith.io/v1/user/self/", timeout=10)
         if resp.status_code == 401:
-            return {"valid": False, "error": "Invalid API key"}
+            return {"valid": False, "error": "Invalid API key", "source": source}
         resp.raise_for_status()
         user = resp.json()
         return {
             "valid": True,
+            "source": source,
             "name": user.get("name", ""),
             "slug": user.get("slug", ""),
             "email": user.get("email", ""),
         }
     except Exception as exc:
         log.warning("API key validation failed: %s", exc)
-        return {"valid": False, "error": str(exc)}
+        return {"valid": False, "error": str(exc), "source": source}
 
 
 def _report_theme(theme: str | None) -> str:

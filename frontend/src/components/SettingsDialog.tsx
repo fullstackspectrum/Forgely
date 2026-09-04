@@ -239,6 +239,9 @@ function ConnectionPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<{ name: string; slug: string; email: string } | null>(null);
+  /* Where the key the server actually used came from: this browser, the
+     server's own environment, or nowhere. */
+  const [source, setSource] = useState<"request" | "server" | "none">("none");
   /* Read on every render rather than held in state: disconnecting clears it
      from storage, and a copy here would keep showing the old suffix. */
   const stored = getApiKey();
@@ -247,14 +250,29 @@ function ConnectionPanel({
      silent — the panel still shows the key and its controls, and a broken key
      announces itself the moment anything else is fetched. */
   useEffect(() => {
-    if (!hasKey) { setUser(null); return; }
+    if (!hasKey) { setUser(null); setSource("none"); return; }
     let active = true;
     apiFetch("/api/auth/validate", { method: "POST" })
       .then((r) => r.json())
       .then((d) => {
         if (!active) return;
-        if (d.valid) setUser({ name: d.name, slug: d.slug, email: d.email });
-        else { setUser(null); setError("The saved key no longer works — enter a new one"); }
+        setSource(d.source ?? "none");
+        if (d.valid) {
+          setUser({ name: d.name, slug: d.slug, email: d.email });
+          setError(null);
+        } else {
+          setUser(null);
+          /* Only a key this browser stored can have "stopped working". A
+             server-configured key that fails is the operator's to fix, and a
+             missing one is not a failure at all. */
+          setError(
+            d.source === "request"
+              ? "The saved key no longer works — enter a new one"
+              : d.source === "server"
+                ? "The key configured on the server was rejected by Cloudsmith"
+                : null,
+          );
+        }
       })
       .catch(() => { if (active) setUser(null); });
     return () => { active = false; };
@@ -298,7 +316,10 @@ function ConnectionPanel({
       <div className="settings-conn-status">
         <span className={`settings-btn-dot${hasKey ? " connected" : ""}`} />
         <span className="settings-conn-state">{hasKey ? "Connected" : "Not connected"}</span>
-        {hasKey && (
+        {/* Only offered when there is something here to disconnect. Clearing
+            this browser's storage does nothing to a key set on the server, and
+            offering the button implied otherwise. */}
+        {stored && (
           <button className="settings-conn-disconnect" onClick={disconnect}>Disconnect</button>
         )}
       </div>
@@ -309,11 +330,15 @@ function ConnectionPanel({
             {user ? (user.name || user.slug) : "Checking…"}
           </span>
           {user?.email && <span className="settings-conn-email">{user.email}</span>}
-          {stored && (
+          {stored ? (
             <code className="settings-conn-key" title="Only the last four characters are shown">
               {"•".repeat(8)}{stored.slice(-4)}
             </code>
-          )}
+          ) : source === "server" ? (
+            <span className="settings-conn-scope" title="Set by CLOUDSMITH_API_KEY where Forgely is running">
+              Configured on the server
+            </span>
+          ) : null}
         </div>
       )}
 
@@ -321,19 +346,19 @@ function ConnectionPanel({
         <input
           type="password"
           className="connect-input"
-          placeholder={hasKey ? "Replace with a new API key" : "Cloudsmith API key"}
+          placeholder={stored ? "Replace with a new API key" : "Cloudsmith API key"}
           value={key}
           onChange={(e) => setKey(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && connect()}
         />
         <button className="btn btn-accent" onClick={connect} disabled={busy || !key.trim()}>
-          {busy ? "…" : hasKey ? "Switch" : "Connect"}
+          {busy ? "…" : stored ? "Switch" : "Connect"}
         </button>
       </div>
 
       {error && <div className="connect-error">{error}</div>}
 
-      {!hasKey && (
+      {!stored && (
         <a
           className="settings-conn-help"
           href="https://app.cloudsmith.com/user/settings/api/"

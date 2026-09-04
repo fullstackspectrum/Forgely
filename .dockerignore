@@ -16,6 +16,11 @@ frontend/tsconfig.tsbuildinfo
 
 # Local caches and scratch
 backend/.cache
+# Scan reports and screenshots name real workspaces and repositories. Nothing
+# copies them today, but they must not be one stray COPY away from shipping.
+reports
+*.jpg
+*.png
 *.log
 .DS_Store
 .vscode
