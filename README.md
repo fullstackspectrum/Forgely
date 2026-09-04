@@ -173,16 +173,45 @@ cd Forgely
 
 ### 2. Run
 
+<details open>
+<summary><b>Docker</b> — one container, nothing to install</summary>
+
+```bash
+docker build -t forgely .
+docker run -d -p 8000:8000 -v forgely-cache:/data --name forgely forgely
+```
+
+Then open **http://localhost:8000** and add your API key under **Settings →
+Connection**. Or with compose:
+
+```bash
+docker compose up -d
+```
+
+The image serves the frontend and the API from one origin, so there is no CORS
+to configure and no second container to run. The volume holds the scan cache,
+which is keyed on scan completion time rather than a TTL — keeping it between
+runs turns a cold rebuild of several thousand packages into a local read.
+
+</details>
+
+<details>
+<summary><b>From source</b> — for development</summary>
+
 ```bash
 ./start.sh
 ```
 
-The start script creates the Python virtual environment, installs all dependencies, and launches both servers:
+</details>
+
+`start.sh` creates the Python virtual environment, installs all dependencies, and launches both servers:
 
 - Backend → **http://localhost:8000**
 - Frontend → **http://localhost:3000**
 
-Press `Ctrl+C` to stop both servers.
+Press `Ctrl+C` to stop both servers. In development the frontend is served by
+Vite and proxies `/api` to the backend; the container instead serves the built
+frontend from the backend itself.
 
 <details>
 <summary>Manual start</summary>
@@ -211,7 +240,9 @@ npm run dev
 | `CLOUDSMITH_API_KEY` | Yes* | Cloudsmith API key (*can also be set via the in-app Connect modal) |
 | `CLOUDSMITH_OWNER` | No | Default organisation slug (pre-populates the workspace selector) |
 | `CLOUDSMITH_REPO` | No | Default repository slug (pre-populates the repo selector) |
-| `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`) |
+| `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`). Not needed in the container, where one origin serves both |
+| `FORGELY_CACHE_PATH` | No | Where the scan cache lives (container default: `/data/scans.db`) |
+| `FORGELY_STATIC_DIR` | No | Built frontend to serve. Set in the image; unset in development, where Vite serves it |
 
 ---
 
@@ -383,6 +414,9 @@ Forgely/
 ├── .claude/
 │   └── commands/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
+├── Dockerfile                        # Multi-stage build: frontend, then runtime
+├── docker-compose.yml                # One-command run, with a cache volume
+├── .dockerignore                     # Keeps .env and local state out of the image
 ├── start.sh                          # Start script (backend + frontend)
 ├── .env                              # Credentials (not committed)
 ├── assets/

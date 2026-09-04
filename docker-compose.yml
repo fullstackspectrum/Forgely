@@ -1,0 +1,34 @@
+# Forgely, for people who would rather type one command than remember flags.
+#
+#   docker compose up -d   →   http://localhost:8000
+#
+# No API key is needed here: the Connection tab in Settings takes one and
+# stores it in the browser. Set CLOUDSMITH_API_KEY below only if you would
+# rather every visitor to this instance share one server-side key.
+
+services:
+  forgely:
+    build: .
+    image: forgely:latest
+    container_name: forgely
+    ports:
+      - "8000:8000"
+    volumes:
+      # The scan cache. Keyed on scan completion time, so it never goes stale
+      # and is worth keeping between runs — a warm cache turns a cold graph
+      # build of several thousand packages into a local read.
+      - forgely-cache:/data
+    environment:
+      # All optional. Uncomment what you need.
+      # - CLOUDSMITH_API_KEY=${CLOUDSMITH_API_KEY}
+      # - CLOUDSMITH_OWNER=your-workspace
+      # - CLOUDSMITH_REPO=your-repo
+      #
+      # Only needed if the frontend is served from a different origin. In this
+      # image it is not: one container serves both.
+      # - CORS_ORIGINS=https://forgely.example.com
+      - FORGELY_CACHE_PATH=/data/scans.db
+    restart: unless-stopped
+
+volumes:
+  forgely-cache:

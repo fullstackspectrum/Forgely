@@ -1,0 +1,29 @@
+# Keep the build context small and, more importantly, keep credentials and
+# local state out of the image.
+.env
+.git
+.gitignore
+
+# Never copy a host virtualenv or node_modules into the build: the image
+# installs its own, and these are platform-specific.
+backend/.venv
+backend/__pycache__
+**/__pycache__
+*.py[cod]
+frontend/node_modules
+frontend/dist
+frontend/tsconfig.tsbuildinfo
+
+# Local caches and scratch
+backend/.cache
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Not needed at runtime
+assets/readme
+docs
+.claude
+*.md
+!CHANGELOG.md
