@@ -177,9 +177,24 @@ cd Forgely
 <summary><b>Docker</b> — one container, nothing to install</summary>
 
 ```bash
-docker build -t forgely .
-docker run -d -p 8000:8000 -v forgely-cache:/data --name forgely forgely
+./build-image.sh
+docker run -d -p 8000:8000 -v forgely-cache:/data --name forgely forgely:latest
 ```
+
+`build-image.sh` tags the image with the version from `frontend/package.json`,
+so the tag cannot drift from the version the app reports in its own footer, and
+attaches OCI annotations (source, revision, licence, created). Add `--push`
+with a registry to publish a multi-arch build:
+
+```bash
+./build-image.sh --push -r ghcr.io/your-org     # linux/amd64 + linux/arm64
+./build-image.sh --help                         # all options
+```
+
+> [!IMPORTANT]
+> `docker run` needs `-p 8000:8000`. Without it the container starts and
+> reports healthy but nothing reaches it — and if a local dev server is still
+> on port 8000, you will be talking to that instead.
 
 Then open **http://localhost:8000** and add your API key under **Settings →
 Connection**. Or with compose:
@@ -432,6 +447,7 @@ Forgely/
 │   └── commands/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
 ├── Dockerfile                        # Multi-stage build: frontend, then runtime
+├── build-image.sh                    # Builds and tags from package.json; --push to publish
 ├── docker-compose.yml                # One-command run, with a cache volume
 ├── .dockerignore                     # Keeps .env and local state out of the image
 ├── start.sh                          # Start script (backend + frontend)

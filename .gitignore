@@ -22,6 +22,14 @@ node_modules/
 backend/.cache/
 *.tsbuildinfo
 
+# Vulnerability scan reports. They name real workspaces, repositories and image
+# digests, so they are working output rather than something to publish.
+reports/
+
+# Working screenshots. The README's own images live in assets/readme/.
+/*.jpg
+/*.png
+
 # IDE
 .vscode/
 .idea/
