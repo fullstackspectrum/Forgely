@@ -30,6 +30,10 @@ reports/
 /*.jpg
 /*.png
 
+# Pasted into the Docker Hub overview field rather than read from the repo, so
+# it lives here only as a working copy.
+DOCKERHUB.md
+
 # IDE
 .vscode/
 .idea/
