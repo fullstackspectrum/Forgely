@@ -18,7 +18,10 @@ cd "$ROOT"
 # Defaults
 # ---------------------------------------------------------------------------
 IMAGE_NAME="${FORGELY_IMAGE:-forgely}"
-REGISTRY="${FORGELY_REGISTRY:-}"
+# Docker Hub namespace. No registry host: Docker Hub is the default registry, so
+# `fullstackspectrum/forgely` resolves there without qualifying it. Override
+# with -r for anywhere else, e.g. -r ghcr.io/acme.
+REGISTRY="${FORGELY_REGISTRY:-fullstackspectrum}"
 PUSH=false
 TAG_LATEST=true
 EXTRA_TAGS=()
@@ -36,8 +39,10 @@ Usage: ./build-image.sh [options]
 
   --push                 Push to the registry instead of loading locally.
                          Builds for linux/amd64 and linux/arm64 by default.
-  -r, --registry HOST    Registry and namespace, e.g. ghcr.io/acme.
-                         Also settable as FORGELY_REGISTRY.
+  -r, --registry NS      Namespace, or registry and namespace. Defaults to
+                         fullstackspectrum (Docker Hub); pass ghcr.io/acme or
+                         similar for another registry. Also FORGELY_REGISTRY.
+                         Pass an empty string for a bare local `forgely` tag.
   -n, --name NAME        Image name (default: forgely, or FORGELY_IMAGE).
   -t, --tag TAG          Extra tag. Repeatable.
       --platform LIST    Override platforms, e.g. linux/amd64.
@@ -46,7 +51,8 @@ Usage: ./build-image.sh [options]
   -h, --help             This.
 
 Examples
-  ./build-image.sh
+  ./build-image.sh                       # fullstackspectrum/forgely:<version>
+  ./build-image.sh --push                # push that to Docker Hub
   ./build-image.sh --push -r ghcr.io/acme
   ./build-image.sh --platform linux/amd64 --no-latest
 EOF
@@ -126,7 +132,7 @@ declare -a ANNOTATIONS=(
   "org.opencontainers.image.vendor=Forgely"
   # Set explicitly, or the base image's own authors label survives and the
   # image claims to have been written by the Chainguard team.
-  "org.opencontainers.image.authors=Forgely"
+  "org.opencontainers.image.authors=FullStackSpectrum"
   "org.opencontainers.image.base.name=cgr.dev/chainguard/python:latest"
 )
 [[ -n "$SOURCE_URL" ]] && ANNOTATIONS+=(
@@ -152,8 +158,10 @@ for a in "${ANNOTATIONS[@]}"; do LABEL_ARGS+=(--label "$a"); done
 # Output mode
 # ---------------------------------------------------------------------------
 if $PUSH; then
+  # Only reachable if someone has deliberately cleared the default namespace:
+  # pushing a bare `forgely` tag would target the Docker Hub library org.
   [[ -n "$REGISTRY" ]] || {
-    echo "--push needs a registry: pass -r HOST/NAMESPACE or set FORGELY_REGISTRY" >&2
+    echo "--push needs a namespace: pass -r NAMESPACE or set FORGELY_REGISTRY" >&2
     exit 2
   }
   OUTPUT_ARGS=(--push)
