@@ -193,6 +193,23 @@ to configure and no second container to run. The volume holds the scan cache,
 which is keyed on scan completion time rather than a TTL — keeping it between
 runs turns a cold rebuild of several thousand packages into a local read.
 
+It builds on [Chainguard](https://www.chainguard.dev/) images and scans clean:
+
+```
+$ trivy image forgely
+Total: 0 (CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0)
+```
+
+The runtime stage is distroless — no shell and no package manager — so
+`docker exec … sh` will not work. Use `docker logs`, or build against
+`cgr.dev/chainguard/python:latest-dev` if you need to look around inside.
+
+> [!NOTE]
+> Chainguard's free tier publishes only `:latest`, which tracks the newest
+> Python rather than a pinned minor version. If you need the interpreter held
+> still, `python:3.12-alpine` is the next best base — 0 critical and 0 high,
+> 5 medium, and it keeps a shell.
+
 </details>
 
 <details>
