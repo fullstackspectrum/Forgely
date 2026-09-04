@@ -11,7 +11,7 @@ import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
-import { token } from "../lib/palette";
+import { token, dimToCanvas, DIM } from "../lib/palette";
 import { fitAround } from "../lib/focus";
 import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
@@ -174,6 +174,7 @@ export default function OrgGraphCanvas({
     hoverNeighbors: new Set<string>(),
     filters,
     searchResults: new Set<string>(),
+    searchConnected: new Set<string>(),
   });
 
   useEffect(() => {
@@ -182,12 +183,28 @@ export default function OrgGraphCanvas({
     if (selectedNode && graph) {
       graph.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
+
+    /* Whatever a search hit is attached to.
+       
+       The edge reducer keeps every edge that touches a match, so without this
+       those edges ran out to nodes painted in the canvas colour — lines to
+       nowhere. Searching a repository is a question about what it is connected
+       to, so the answers have to be on screen. */
+    const searchConnected = new Set<string>();
+    if (graph && searchResults.length > 0) {
+      for (const id of searchResults) {
+        if (!graph.hasNode(id)) continue;
+        graph.forEachNeighbor(id, (n) => searchConnected.add(n));
+      }
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
       neighbors,
       filters,
       searchResults: new Set(searchResults),
+      searchConnected,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, filters, searchResults]);
@@ -342,8 +359,20 @@ export default function OrgGraphCanvas({
                picking one type still drew 83 of 109 nodes — and made choosing
                two types identical to choosing one, since the first already
                dragged the second in. "Filter by type" now means what it
-               says. */
-            if (st.filters.size > 0 && !isOrg && !st.filters.has(nType)) {
+               says.
+
+               A search match is the exception. With a search active the filter
+               is a question *about that match* — "which of its upstreams" —
+               so applying it to the match itself deleted the thing being asked
+               about and left the chosen type floating with no edges. The
+               filter still applies to everything around it, which is what
+               narrows the view. */
+            if (
+              st.filters.size > 0
+              && !isOrg
+              && !st.filters.has(nType)
+              && !st.searchResults.has(node)
+            ) {
               res.hidden = true;
               return res;
             }
@@ -353,6 +382,12 @@ export default function OrgGraphCanvas({
               if (st.searchResults.has(node)) {
                 res.highlighted = true;
                 res.zIndex = 10;
+              } else if (st.searchConnected.has(node)) {
+                /* What the match is attached to: dimmed so the match still
+                   leads, but drawn in its own colour and keeping its label —
+                   the point of the search was to find out what these are. */
+                res.color = dimToCanvas(res.color as string, DIM.searchConnected);
+                res.zIndex = 1;
               } else if (!isOrg) {
                 res.color = token("--c-bg");
                 res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
@@ -403,9 +438,15 @@ export default function OrgGraphCanvas({
               const srcType = graph.getNodeAttribute(src, "nodeType") as string;
               const tgtType = graph.getNodeAttribute(tgt, "nodeType") as string;
               /* Both ends, not either: an edge to a node that is hidden has
-                 nothing at the far end of it. */
-              const srcMatch = srcType === "org" || st.filters.has(srcType);
-              const tgtMatch = tgtType === "org" || st.filters.has(tgtType);
+                 nothing at the far end of it.
+
+                 "Hidden" has to mean the same thing here as in the node
+                 reducer, which exempts search matches from the filter. Without
+                 the same exemption this hid every edge out of the searched
+                 node — the nodes at both ends were on screen and the line
+                 between them was not. */
+              const srcMatch = srcType === "org" || st.filters.has(srcType) || st.searchResults.has(src);
+              const tgtMatch = tgtType === "org" || st.filters.has(tgtType) || st.searchResults.has(tgt);
               if (!srcMatch || !tgtMatch) {
                 res.hidden = true;
                 return res;
