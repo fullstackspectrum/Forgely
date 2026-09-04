@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from cloudsmith import (
     APP_VERSION,
@@ -1148,25 +1150,35 @@ def search_packages(owner: str, repo: str, query: str, request: Request):
 @app.post("/api/auth/validate")
 def validate_api_key(request: Request):
     """Validate a Cloudsmith API key by hitting the /v1/user/self/ endpoint."""
-    api_key = request.headers.get("X-Api-Key", "")
+    # Whichever key this request would actually use, resolved the same way
+    # every other endpoint resolves it. Checking only the header reported the
+    # saved key as broken on an instance whose key comes from the environment —
+    # while every data call kept working, because those do fall back.
+    header_key = request.headers.get("X-Api-Key", "")
+    api_key = header_key or os.getenv("CLOUDSMITH_API_KEY", "")
+    # `source` lets the UI say where the key came from. "Not connected" and
+    # "the key you saved has stopped working" are different problems with
+    # different fixes, and they looked identical before.
+    source = "request" if header_key else "server" if api_key else "none"
     if not api_key:
-        raise HTTPException(status_code=400, detail="No API key provided")
+        return {"valid": False, "error": "No API key provided", "source": source}
     session = create_session(api_key)
     try:
         resp = session.get("https://api.cloudsmith.io/v1/user/self/", timeout=10)
         if resp.status_code == 401:
-            return {"valid": False, "error": "Invalid API key"}
+            return {"valid": False, "error": "Invalid API key", "source": source}
         resp.raise_for_status()
         user = resp.json()
         return {
             "valid": True,
+            "source": source,
             "name": user.get("name", ""),
             "slug": user.get("slug", ""),
             "email": user.get("email", ""),
         }
     except Exception as exc:
         log.warning("API key validation failed: %s", exc)
-        return {"valid": False, "error": str(exc)}
+        return {"valid": False, "error": str(exc), "source": source}
 
 
 def _report_theme(theme: str | None) -> str:
@@ -2025,3 +2037,54 @@ def get_org_graph(owner: str, request: Request, refresh: bool = False):
     result = _build_org_graph(api_key, owner)
     _cache_put(cache_key, result)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Static frontend
+#
+# Only mounted when a build is actually present, which is the case in the
+# container image and not in development — there `vite` serves the frontend on
+# :3000 and proxies /api here, so mounting a stale dist would be worse than
+# serving nothing.
+#
+# Declared last on purpose: the catch-all below matches every path, so any
+# route registered after it would be unreachable.
+# ---------------------------------------------------------------------------
+
+STATIC_DIR_ENV = "FORGELY_STATIC_DIR"
+_static_dir = pathlib.Path(
+    os.getenv(STATIC_DIR_ENV) or (pathlib.Path(__file__).parent.parent / "frontend" / "dist")
+)
+
+if _static_dir.is_dir():
+    log.info("Serving frontend from %s", _static_dir)
+
+    # Hashed filenames, so they can be cached hard. index.html must not be.
+    _assets = _static_dir / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        """Any path that is not an API route resolves to the single page app.
+
+        A real file wins where one exists — favicons, fonts, the brand SVGs —
+        and everything else falls through to index.html so the client router
+        can handle it. Unknown /api paths still 404 rather than being handed a
+        page of HTML, which would turn a typo'd endpoint into a parse error at
+        the other end.
+        """
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        candidate = (_static_dir / full_path).resolve()
+        # Containment check: a path like ../../etc/passwd must not escape.
+        if candidate.is_file() and candidate.is_relative_to(_static_dir.resolve()):
+            return FileResponse(candidate)
+
+        index = _static_dir / "index.html"
+        if not index.is_file():
+            raise HTTPException(status_code=404, detail="Frontend build not found")
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+else:
+    log.info("No frontend build at %s — API only", _static_dir)

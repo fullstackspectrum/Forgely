@@ -5357,6 +5357,12 @@ td, th,
   color: var(--t-muted);
 }
 
+.settings-conn-scope {
+  margin-left: auto;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
 .settings-conn-key {
   margin-left: auto;
   font-family: var(--fg-font-mono, ui-monospace, monospace);

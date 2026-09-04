@@ -17,6 +17,16 @@
 
 **Forgely** is a security graph visualization engine for Cloudsmith artifact repositories. It covers two core cloud-native security disciplines — **SCA** and **CIEM** — surfacing them as interactive, colour-coded graphs so DevOps and Security teams can identify blast radii, transitive risks, and access exposure at a glance.
 
+Runs as a single container — the backend serves the frontend, so there is one
+image, one port and no CORS to configure:
+
+```bash
+docker run -d -p 8000:8000 -v forgely-cache:/data fullstackspectrum/forgely:latest
+```
+
+See [Quick Start](#-quick-start) for compose, building it yourself, or running
+from source.
+
 
 Workspace overview
 ![Example – Workspace Overview](assets/readme/example_workspace_graph.jpg)
@@ -88,7 +98,8 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 │  Browser                                                │
 │  React + Vite  ──  Sigma.js (WebGL)  ──  graphology     │
 └────────────────────────┬────────────────────────────────┘
-                         │ /api/*
+                         │ /api/*  (same origin in the container,
+                         │          proxied from :3000 in development)
 ┌────────────────────────▼────────────────────────────────┐
 │  FastAPI  (localhost:8000)                              │
 │  In-memory + SQLite scan cache · ThreadPoolExecutor      │
@@ -158,31 +169,113 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Run the container
+
+Nothing to clone, no toolchain to install — just Docker.
+
+```bash
+docker run -d \
+  --name forgely \
+  -p 8000:8000 \
+  -v forgely-cache:/data \
+  fullstackspectrum/forgely:latest
+```
+
+Open **http://localhost:8000** and add your Cloudsmith API key under
+**Settings → Connection**. The key is stored in your browser, not in the image.
+[Generate one here](https://app.cloudsmith.com/user/settings/api/).
+
+Or with compose:
+
+```yaml
+services:
+  forgely:
+    image: fullstackspectrum/forgely:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - forgely-cache:/data
+    restart: unless-stopped
+
+volumes:
+  forgely-cache:
+```
+
+> [!IMPORTANT]
+> `-p 8000:8000` is required. Without it the container starts and reports
+> healthy but nothing reaches it — and if a local dev server is already on port
+> 8000, you will be talking to that instead.
+
+**Platforms:** `linux/amd64` and `linux/arm64`. Windows is covered by
+`linux/amd64`, since Docker Desktop runs Linux containers through WSL2.
+
+The image serves the frontend and the API from one origin, so there is no CORS
+to configure and no second container to run. Mount `/data` to keep the scan
+cache between runs: it is keyed on each package's scan completion time rather
+than a TTL, so a warm cache turns a cold build of several thousand packages
+into a local read.
+
+<details>
+<summary><b>Build the image yourself</b></summary>
+
+```bash
+./build-image.sh                             # build and load locally
+./build-image.sh --push                      # multi-arch, push to Docker Hub
+./build-image.sh --push -r ghcr.io/your-org  # somewhere else
+./build-image.sh --help                      # all options
+```
+
+The tag comes from `frontend/package.json`, so it cannot drift from the version
+the app reports in its own footer. OCI annotations (source, revision, licence,
+created) are attached as both annotations and labels — registry UIs read the
+former, `docker inspect` reads the latter.
+
+The image is built on [Chainguard](https://www.chainguard.dev/) bases and scans
+clean:
+
+```
+$ trivy image fullstackspectrum/forgely
+Total: 0 (CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0)
+```
+
+The runtime stage is distroless — no shell, no package manager — so
+`docker exec … sh` will not work. Use `docker logs`, or build against
+`cgr.dev/chainguard/python:latest-dev` if you need to look around inside.
+
+> [!NOTE]
+> Chainguard's free tier publishes only `:latest`, which tracks the newest
+> Python rather than a pinned minor version. If you need the interpreter held
+> still, `python:3.12-alpine` is the next best base — 0 critical and 0 high,
+> 5 medium, and it keeps a shell.
+
+</details>
+
+---
+
+### Run from source
+
+For development, where Vite serves the frontend with hot reload and proxies
+`/api` to the backend.
+
+**Prerequisites**
 
 - **Python 3.10+** — [python.org](https://www.python.org/downloads/)
 - **Node.js 18+** and **npm** — [nodejs.org](https://nodejs.org/)
 - A **Cloudsmith API key** — [Generate one here](https://app.cloudsmith.com/user/settings/api/)
 
-### 1. Clone
-
 ```bash
-git clone https://github.com/your-user/Forgely.git
+git clone https://github.com/colinmoynes/Forgely.git
 cd Forgely
-```
-
-### 2. Run
-
-```bash
 ./start.sh
 ```
 
-The start script creates the Python virtual environment, installs all dependencies, and launches both servers:
+`start.sh` creates the Python virtual environment, installs all dependencies,
+and launches both servers:
 
 - Backend → **http://localhost:8000**
 - Frontend → **http://localhost:3000**
 
-Press `Ctrl+C` to stop both servers.
+Press `Ctrl+C` to stop both.
 
 <details>
 <summary>Manual start</summary>
@@ -211,7 +304,9 @@ npm run dev
 | `CLOUDSMITH_API_KEY` | Yes* | Cloudsmith API key (*can also be set via the in-app Connect modal) |
 | `CLOUDSMITH_OWNER` | No | Default organisation slug (pre-populates the workspace selector) |
 | `CLOUDSMITH_REPO` | No | Default repository slug (pre-populates the repo selector) |
-| `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`) |
+| `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`). Not needed in the container, where one origin serves both |
+| `FORGELY_CACHE_PATH` | No | Where the scan cache lives (container default: `/data/scans.db`) |
+| `FORGELY_STATIC_DIR` | No | Built frontend to serve. Set in the image; unset in development, where Vite serves it |
 
 ---
 
@@ -383,6 +478,10 @@ Forgely/
 ├── .claude/
 │   └── commands/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
+├── Dockerfile                        # Multi-stage build: frontend, then runtime
+├── build-image.sh                    # Builds and tags from package.json; --push to publish
+├── docker-compose.yml                # One-command run, with a cache volume
+├── .dockerignore                     # Keeps .env and local state out of the image
 ├── start.sh                          # Start script (backend + frontend)
 ├── .env                              # Credentials (not committed)
 ├── assets/

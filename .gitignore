@@ -22,6 +22,18 @@ node_modules/
 backend/.cache/
 *.tsbuildinfo
 
+# Vulnerability scan reports. They name real workspaces, repositories and image
+# digests, so they are working output rather than something to publish.
+reports/
+
+# Working screenshots. The README's own images live in assets/readme/.
+/*.jpg
+/*.png
+
+# Pasted into the Docker Hub overview field rather than read from the repo, so
+# it lives here only as a working copy.
+DOCKERHUB.md
+
 # IDE
 .vscode/
 .idea/
