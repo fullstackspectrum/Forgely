@@ -438,9 +438,15 @@ export default function OrgGraphCanvas({
               const srcType = graph.getNodeAttribute(src, "nodeType") as string;
               const tgtType = graph.getNodeAttribute(tgt, "nodeType") as string;
               /* Both ends, not either: an edge to a node that is hidden has
-                 nothing at the far end of it. */
-              const srcMatch = srcType === "org" || st.filters.has(srcType);
-              const tgtMatch = tgtType === "org" || st.filters.has(tgtType);
+                 nothing at the far end of it.
+
+                 "Hidden" has to mean the same thing here as in the node
+                 reducer, which exempts search matches from the filter. Without
+                 the same exemption this hid every edge out of the searched
+                 node — the nodes at both ends were on screen and the line
+                 between them was not. */
+              const srcMatch = srcType === "org" || st.filters.has(srcType) || st.searchResults.has(src);
+              const tgtMatch = tgtType === "org" || st.filters.has(tgtType) || st.searchResults.has(tgt);
               if (!srcMatch || !tgtMatch) {
                 res.hidden = true;
                 return res;
