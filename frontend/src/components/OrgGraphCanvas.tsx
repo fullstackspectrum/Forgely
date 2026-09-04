@@ -359,8 +359,20 @@ export default function OrgGraphCanvas({
                picking one type still drew 83 of 109 nodes — and made choosing
                two types identical to choosing one, since the first already
                dragged the second in. "Filter by type" now means what it
-               says. */
-            if (st.filters.size > 0 && !isOrg && !st.filters.has(nType)) {
+               says.
+
+               A search match is the exception. With a search active the filter
+               is a question *about that match* — "which of its upstreams" —
+               so applying it to the match itself deleted the thing being asked
+               about and left the chosen type floating with no edges. The
+               filter still applies to everything around it, which is what
+               narrows the view. */
+            if (
+              st.filters.size > 0
+              && !isOrg
+              && !st.filters.has(nType)
+              && !st.searchResults.has(node)
+            ) {
               res.hidden = true;
               return res;
             }
