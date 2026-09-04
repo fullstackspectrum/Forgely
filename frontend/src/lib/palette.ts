@@ -97,6 +97,10 @@ export const DIM = {
   edge: 0.05,
   /** The group node that was clicked open. */
   openHub: 0.5,
+  /** Attached to a search hit. Well above the recede levels above: these are
+      the answer to "what is this connected to", so they have to be readable —
+      they are simply subordinate to the match itself. */
+  searchConnected: 0.55,
 } as const;
 
 export function dimToCanvas(color: string, keep: number): string {

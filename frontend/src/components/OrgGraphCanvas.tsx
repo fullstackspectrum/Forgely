@@ -11,7 +11,7 @@ import EdgeCurvedDottedProgram from "../programs/EdgeCurvedDottedProgram";
 import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
-import { token } from "../lib/palette";
+import { token, dimToCanvas, DIM } from "../lib/palette";
 import { fitAround } from "../lib/focus";
 import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
@@ -174,6 +174,7 @@ export default function OrgGraphCanvas({
     hoverNeighbors: new Set<string>(),
     filters,
     searchResults: new Set<string>(),
+    searchConnected: new Set<string>(),
   });
 
   useEffect(() => {
@@ -182,12 +183,28 @@ export default function OrgGraphCanvas({
     if (selectedNode && graph) {
       graph.forEachNeighbor(selectedNode, (n) => neighbors.add(n));
     }
+
+    /* Whatever a search hit is attached to.
+       
+       The edge reducer keeps every edge that touches a match, so without this
+       those edges ran out to nodes painted in the canvas colour — lines to
+       nowhere. Searching a repository is a question about what it is connected
+       to, so the answers have to be on screen. */
+    const searchConnected = new Set<string>();
+    if (graph && searchResults.length > 0) {
+      for (const id of searchResults) {
+        if (!graph.hasNode(id)) continue;
+        graph.forEachNeighbor(id, (n) => searchConnected.add(n));
+      }
+    }
+
     stateRef.current = {
       ...stateRef.current,
       selectedNode,
       neighbors,
       filters,
       searchResults: new Set(searchResults),
+      searchConnected,
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, filters, searchResults]);
@@ -353,6 +370,12 @@ export default function OrgGraphCanvas({
               if (st.searchResults.has(node)) {
                 res.highlighted = true;
                 res.zIndex = 10;
+              } else if (st.searchConnected.has(node)) {
+                /* What the match is attached to: dimmed so the match still
+                   leads, but drawn in its own colour and keeping its label —
+                   the point of the search was to find out what these are. */
+                res.color = dimToCanvas(res.color as string, DIM.searchConnected);
+                res.zIndex = 1;
               } else if (!isOrg) {
                 res.color = token("--c-bg");
                 res.size = Math.max(2, (attrs.size ?? 1) * 0.28);
