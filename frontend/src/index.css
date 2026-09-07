@@ -1462,6 +1462,26 @@ body {
   color: var(--t-inverse);
 }
 
+/* Built like the quarantine badge beside it, but tinted rather than neutral.
+   Quarantine is deliberately neutral because it is a state, not a severity —
+   malware is the one package state that genuinely is worse than any CVE score,
+   and the node badge on the canvas already draws it in this colour. */
+.malware-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--fg-radius-lg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: var(--fg-sev-critical-bg);
+  border: 1px solid var(--g-sev-critical);
+  color: var(--g-sev-critical);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .quarantine-badge {
   display: inline-flex;
   align-items: center;

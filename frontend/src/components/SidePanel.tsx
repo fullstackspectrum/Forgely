@@ -299,6 +299,20 @@ export default function SidePanel({
           <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
             {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
           </span>
+          {/* Ahead of quarantine: malware is the worse fact, and this row is
+              read left to right. Taken from the node rather than the fetched
+              detail, so it appears with the panel rather than a moment later —
+              the graph already carries the flag to draw the node's badge. */}
+          {(d.is_malware_detected || detail?.is_malware_detected) && (
+            <span className="malware-badge" title="Malware was detected in this package">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="7" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              Malware
+            </span>
+          )}
           {d.is_quarantined && (
             <span className="quarantine-badge" title="This package is quarantined">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -437,16 +451,12 @@ export default function SidePanel({
           formats carry one. */}
       {detail?.summary && <p className="panel-summary-text">{detail.summary}</p>}
 
-      {/* Flags worth interrupting for. Quarantine already has its own badge in
-          the header, so only the two the graph does not draw appear here. */}
-      {(detail?.is_malware_detected || detail?.policy_violated) && (
+      {/* Malware moved up to the status row beside quarantine: both are states
+          of the package, and burying the worse one below the metadata meant it
+          arrived with the detail fetch rather than with the panel. */}
+      {detail?.policy_violated && (
         <div className="pkg-flags">
-          {detail.is_malware_detected && (
-            <span className="pkg-flag pkg-flag-danger">Malware detected</span>
-          )}
-          {detail.policy_violated && (
-            <span className="pkg-flag pkg-flag-warn">Policy violated</span>
-          )}
+          <span className="pkg-flag pkg-flag-warn">Policy violated</span>
         </div>
       )}
       </div>
