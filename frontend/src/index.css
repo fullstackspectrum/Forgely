@@ -5494,6 +5494,106 @@ td, th,
   background: var(--c-tint-subtle);
 }
 
+/* ===== Who can reach this: CIEM access, on an SCA package ===== */
+
+.access-hint {
+  margin: 0 0 10px;
+  font-size: var(--fg-text-xs);
+  line-height: 1.45;
+  color: var(--t-muted);
+}
+
+.access-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.access-count {
+  font-size: var(--fg-text-xs);
+  padding: 2px 8px;
+  border-radius: var(--fg-radius-sm);
+  background: var(--c-tint-subtle);
+  border: 1px solid var(--c-tint);
+  color: var(--t-secondary);
+}
+
+/* Admin and Write can replace the artefact; Read only receives it. Tinted, not
+   filled — this is a permission, not a severity, and the severity ramp has to
+   keep meaning what it means. */
+.access-count-admin {
+  color: var(--s-critical);
+  border-color: var(--s-critical);
+  background: var(--fg-sev-critical-bg);
+}
+
+.access-count-write {
+  color: var(--s-medium);
+  border-color: var(--s-medium);
+  background: var(--fg-sev-medium-bg);
+}
+
+.access-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.access-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+}
+
+/* The stripe carries the permission, so a list of twenty scans as a column of
+   colour rather than twenty words to read. */
+.access-row[data-permission="Admin"] { border-left-color: var(--s-critical); }
+.access-row[data-permission="Write"] { border-left-color: var(--s-medium); }
+
+.access-name {
+  min-width: 0;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-perm {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--t-muted);
+}
+
+.access-via {
+  grid-column: 1 / -1;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.access-more {
+  margin: 6px 0 0;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.access-tokens {
+  margin-top: 10px;
+}
+
 /* ===== Group detail: one name, every version of it ===== */
 
 .group-search {

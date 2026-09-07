@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from "react";
 import { currentTheme } from "../lib/theme";
 import SeverityMark from "./SeverityMark";
-import type { GraphResponse, GraphNode, CVERecord, PackageDetail, Severity } from "../types";
+import type { GraphResponse, GraphNode, CVERecord, PackageDetail, RepoIdentity, Severity } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { useCveDescriptions } from "../hooks/useCveDescriptions";
 
@@ -48,6 +48,7 @@ const EMPTY_SEVERITIES: Set<Severity> = new Set();
 
 import { usePackageDetail } from "../hooks/usePackageDetail";
 import { usePackageGroup } from "../hooks/usePackageGroup";
+import { useRepoAccess } from "../hooks/useRepoAccess";
 import { GROUP_PREFIX, groupKeyOf } from "../lib/groupPackages";
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
@@ -127,6 +128,13 @@ export default function SidePanel({
     owner,
     repo,
     node?.type === "package" ? node.data.slug : "",
+  );
+
+  /* Who can reach the repository this package lives in. Keyed on the repo, so
+     clicking between packages in it does not refetch. */
+  const { access } = useRepoAccess(
+    node?.type === "package" ? owner : "",
+    node?.type === "package" ? repo : "",
   );
 
   /* A group node stands for several packages and is not in `data` at all —
@@ -430,6 +438,51 @@ export default function SidePanel({
 
       <div className="panel-details">
 
+      {/* Who can reach this — the CIEM answer, on the SCA side.
+          
+          A vulnerable package is only as exposed as the people who can reach
+          the repository holding it: Admin and Write are who could replace the
+          artefact, Read is who is served it. Answering that used to mean
+          switching tabs and rebuilding the identity graph. */}
+      {access && access.identities.length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Who can reach this</h3>
+          <p className="access-hint">
+            Access to <strong>{access.repo}</strong>, the repository this package
+            is published in.
+          </p>
+
+          <div className="access-counts">
+            {([["Admin", access.admin], ["Write", access.write], ["Read", access.read]] as const)
+              .filter(([, n]) => n > 0)
+              .map(([label, n]) => (
+                <span key={label} className={`access-count access-count-${label.toLowerCase()}`}>
+                  <strong>{n}</strong> {label}
+                </span>
+              ))}
+          </div>
+
+          <ul className="access-list">
+            {access.identities.slice(0, ACCESS_ROWS).map((i) => (
+              <AccessRow key={i.id} identity={i} />
+            ))}
+          </ul>
+          {access.identities.length > ACCESS_ROWS && (
+            <p className="access-more">
+              +{access.identities.length - ACCESS_ROWS} more with access
+            </p>
+          )}
+
+          {access.entitlements.length > 0 && (
+            <p className="access-hint access-tokens">
+              {access.entitlements.length} entitlement{access.entitlements.length === 1 ? "" : "s"}
+              {" "}can download from it without a user account:{" "}
+              {access.entitlements.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Identifiers — the fields that actually name this artefact in its own
           ecosystem. Every format uses different keys (a Docker image has a
           platform, a Conda package a build string, an Alpine package a distro
@@ -722,6 +775,31 @@ function isDigest(value: string): boolean {
 function shortDigest(value: string): string {
   const hex = value.replace(/^sha256[:-]/i, "");
   return hex.length > 14 ? `${hex.slice(0, 12)}…` : hex;
+}
+
+/* Enough to see the shape of the exposure without scrolling; the rest is a
+ * count, because past a handful the answer is "lots of people" and the precise
+ * list belongs in the CIEM graph. */
+const ACCESS_ROWS = 8;
+
+function AccessRow({ identity }: { identity: RepoIdentity }) {
+  /* Why they have it, in the fewest words that are still true. */
+  const reason =
+    identity.via === "org"
+      ? `organisation ${identity.org_role || "role"}`
+      : identity.via === "team"
+        ? `team ${identity.team}`
+        : "granted on this repository";
+
+  return (
+    <li className="access-row" data-permission={identity.permission}>
+      <span className="access-name" title={identity.id}>{identity.name}</span>
+      <span className="access-perm">{identity.permission}</span>
+      <span className="access-via">
+        {identity.kind === "service" ? "service · " : ""}{reason}
+      </span>
+    </li>
+  );
 }
 
 /* ================================================================

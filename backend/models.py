@@ -176,3 +176,34 @@ class PackageDetail(BaseModel):
     web_url: str = ""
     cdn_url: str = ""
     signature_url: str = ""
+
+
+class RepoIdentity(BaseModel):
+    """One identity that can reach a repository, and how."""
+
+    id: str
+    name: str
+    kind: str = "user"          # user | service
+    permission: str = "Read"    # Admin | Write | Read
+    # "direct" for a grant on the repository itself, "team" through a team
+    # grant, "org" for an organisation role that carries access to everything.
+    via: str = "direct"
+    team: str = ""
+    org_role: str = ""
+
+
+class RepoAccess(BaseModel):
+    """Who can reach one repository.
+
+    The join between the two halves of the app: SCA knows a package lives in a
+    repository, CIEM knows who can reach that repository, and this is the
+    answer to "so who can touch this artefact".
+    """
+
+    owner: str
+    repo: str
+    identities: list[RepoIdentity] = []
+    entitlements: list[str] = []
+    admin: int = 0
+    write: int = 0
+    read: int = 0

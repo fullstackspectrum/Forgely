@@ -54,6 +54,8 @@ from models import (
     GraphStats,
     NodeData,
     PackageDetail,
+    RepoAccess,
+    RepoIdentity,
     RepoConnection,
     WorkspaceCveSummary,
     WorkspaceOverviewResponse,
@@ -1118,6 +1120,141 @@ def get_package_group(request: Request, owner: str, repo: str, name: str):
         ),
     )
     return [_package_detail(p) for p in members]
+
+
+# Ranked strongest first, so "the strongest wins" is a comparison rather than a
+# table of special cases.
+_PERMISSION_RANK = {"Admin": 3, "Write": 2, "Read": 1}
+
+# Organisation roles that carry access to every repository regardless of what
+# the repository itself grants. A privileges list that omits them is not wrong,
+# it is just not the whole answer — and the whole answer is the point here.
+_ORG_ADMIN_ROLES = {"Owner", "Manager"}
+
+
+def _normalise_permission(value: str) -> str:
+    """Cloudsmith's privilege strings, reduced to the three that matter."""
+    v = (value or "").strip().lower()
+    if "admin" in v or "owner" in v:
+        return "Admin"
+    if "write" in v:
+        return "Write"
+    return "Read"
+
+
+@app.get("/api/repo-access/{owner}/{repo}", response_model=RepoAccess)
+def get_repo_access(request: Request, owner: str, repo: str):
+    """Every identity that can reach one repository, and how.
+
+    Four upstream calls, not the whole CIEM graph: that builds privileges,
+    entitlements and upstreams for *every* repository in the workspace, and a
+    package panel needs one. Members and services carry their own team
+    membership, so expanding team grants costs no extra call either.
+
+    Cached like the other builds — the answer changes when someone's access
+    changes, not while a user clicks between packages in the same repository.
+    """
+    api_key = _get_api_key(request)
+    cache_key = f"repo-access:{owner}/{repo}"
+    entry = _cache.get(cache_key)
+    if entry and time.time() - entry["ts"] < WORKSPACE_CACHE_TTL:
+        return entry["data"]
+
+    session = create_session(api_key)
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            f_privs = pool.submit(fetch_repo_privileges, session, owner, repo)
+            f_ents = pool.submit(fetch_repo_entitlements, session, owner, repo)
+            f_members = pool.submit(fetch_org_members, session, owner)
+            f_services = pool.submit(fetch_org_services, session, owner)
+            privs, ents = f_privs.result(), f_ents.result()
+            members, services = f_members.result(), f_services.result()
+    except Exception as exc:  # noqa: BLE001 - the panel must survive this
+        log.warning("Repo access fetch failed for %s/%s: %s", owner, repo, exc)
+        raise HTTPException(status_code=502, detail="Could not load repository access") from exc
+
+    priv_entries = privs if isinstance(privs, list) else (privs or {}).get("privileges") or []
+
+    # Explicit grants, split by what they are granted to.
+    user_grants: dict[str, str] = {}
+    service_grants: dict[str, str] = {}
+    team_grants: dict[str, str] = {}
+    for item in priv_entries:
+        if not isinstance(item, dict):
+            continue
+        perm = _normalise_permission(
+            item.get("privilege") or item.get("role") or item.get("permission") or "Read"
+        )
+        for key, bucket in (("user", user_grants), ("service", service_grants), ("team", team_grants)):
+            value = item.get(key)
+            slug = value.get("slug") if isinstance(value, dict) else value
+            if slug:
+                bucket[str(slug)] = perm
+
+    def strongest(current: str | None, candidate: str) -> str:
+        if current is None:
+            return candidate
+        return candidate if _PERMISSION_RANK[candidate] > _PERMISSION_RANK[current] else current
+
+    identities: list[RepoIdentity] = []
+
+    def consider(slug: str, name: str, kind: str, org_role: str, teams: list) -> None:
+        """Best access this identity has, and the shortest reason for it."""
+        best: str | None = None
+        via, team_name = "direct", ""
+
+        if org_role in _ORG_ADMIN_ROLES:
+            best, via = "Admin", "org"
+
+        explicit = (user_grants if kind == "user" else service_grants).get(slug)
+        if explicit and strongest(best, explicit) == explicit and explicit != best:
+            best, via, team_name = explicit, "direct", ""
+        elif explicit:
+            best = strongest(best, explicit)
+
+        for t in teams or []:
+            t_slug = t.get("slug") if isinstance(t, dict) else t
+            granted = team_grants.get(str(t_slug or ""))
+            if not granted:
+                continue
+            if best is None or _PERMISSION_RANK[granted] > _PERMISSION_RANK[best]:
+                best, via = granted, "team"
+                team_name = (t.get("name") if isinstance(t, dict) else str(t)) or str(t_slug)
+
+        if best is None:
+            return
+        identities.append(RepoIdentity(
+            id=f"{kind}:{slug}", name=name or slug, kind=kind,
+            permission=best, via=via, team=team_name,
+            org_role=org_role if via == "org" else "",
+        ))
+
+    for m in members:
+        slug = m.get("slug") or m.get("user") or ""
+        if slug:
+            consider(str(slug), m.get("user_name") or str(slug), "user",
+                     m.get("role") or "", m.get("teams") or [])
+    for sv in services:
+        slug = sv.get("slug") or sv.get("name") or ""
+        if slug:
+            consider(str(slug), sv.get("name") or str(slug), "service",
+                     sv.get("role") or "", sv.get("teams") or [])
+
+    # Strongest first, then by name: the panel reads top-down and the dangerous
+    # answers should be at the top of it.
+    identities.sort(key=lambda i: (-_PERMISSION_RANK[i.permission], i.name.lower()))
+
+    result = RepoAccess(
+        owner=owner,
+        repo=repo,
+        identities=identities,
+        entitlements=[e.get("name") or "token" for e in ents if isinstance(e, dict)],
+        admin=sum(1 for i in identities if i.permission == "Admin"),
+        write=sum(1 for i in identities if i.permission == "Write"),
+        read=sum(1 for i in identities if i.permission == "Read"),
+    )
+    _cache_put(cache_key, result)
+    return result
 
 
 @app.get("/api/search")
