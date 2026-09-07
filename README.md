@@ -127,26 +127,37 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 - **Severity-coded nodes** — Critical / High / Medium / Low / Safe / Unscanned, each with a distinct colour
 - **Pulsing critical nodes** — animated ring effect on Critical packages to draw immediate attention (toggleable)
 - **Hover effects** — node glow + size boost; un-hovered edges dim out; connected nodes stay highlighted
-- **Quarantine indicators** — quarantined packages rendered with a distinct ring node program
+- **Quarantine indicators** — quarantined packages rendered with a distinct ring node program, drawn above the selection ring rather than behind it
+- **Malware detection** — a status filter, a node indicator that also surfaces on the group containing the package, and an optional pulse animation. Malware takes precedence over Critical wherever both would claim the same node; an expanded group pulses on its child versions only, not on the open hub as well
+- **Hover tooltips** — package format and, for container images, architecture, on plated labels that stay legible against node imagery in either theme
 - **Docked details panel** — click any node to open a full-height panel on the right; the graph and top bar make room for it rather than being covered. Expand to full screen for deep inspection, where the CVE and dependency lists reflow into columns
+- **Panel tabs** — a package splits across Details, Vulnerabilities, Dependencies and Reachability. The Dependencies tab appears only when dependency data exists, since not every format reports it
 - **CVE detail cards** — per-CVE severity badge, affected/fixed versions, NVD and GitHub Advisory links; paginated with search and severity filter
 - **Format cards** — repo overview panel shows package formats with total counts; format cards dim when a severity filter is active
 - **Most vulnerable** — top-5 most vulnerable packages listed in the repo panel, clickable to navigate directly to that node
 - **Dependency graph** — expandable dependencies list within the package panel; click to refocus on a dependency node
+- **Fit graph** — centres on the repository and zooms out until every node is on screen
 - **Attack path panel** — visualises the full attack chain: Client Tools → Internet → Registry → Repository → Package → CVE, with format-specific client tool examples
 - **Version grouping** — packages sharing a name collapse to one node carrying the group's worst severity (292 nodes to 15 on a container repo). Click a group to inspect it, double-click to open it in the graph, or expand/collapse every group at once from the graph controls
 - **Group details panel** — a group's panel lists every version worst-first with its severity, type, architecture and tags, searchable by tag — which matters for Docker, where the version is a digest and the tag is the only readable part
 - **Package metadata** — digests (click to copy), format-specific identifiers, tags, uploader, filename, architecture and distribution, fetched on selection so the graph payload stays small
 - **CVE search** — search by CVE ID or package name; matching nodes are highlighted in the graph
 - **Severity filter** — Critical / High / Medium / Low, multi-select: pick Critical *and* High to see both. No selection means every severity
-- **Status filters** — Vulnerable / Safe / Quarantined / Shared CVEs / Has dependencies, combined with AND or OR. "Safe" means *scanned and clean*, not merely "no findings recorded", so packages whose format cannot be scanned are excluded
-- **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation
+- **Status filters** — Vulnerable / Safe / Quarantined / Malware / Shared CVEs / Has dependencies, combined with AND or OR. "Safe" means *scanned and clean*, not merely "no findings recorded", so packages whose format cannot be scanned are excluded
+- **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation, malware animation
 - **Format filter** — click a format card in the repo panel to isolate packages of that format in the graph
 - **Workspace overview** — cross-repository SCA view: all repos in an organisation rendered as a single graph, with aggregate vulnerability stats, package format heatmap, severity breakdown, and cross-repo CVE search
 - **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree, Horizontal; edge style auto-switches to match layout
 - **Viewport-filling layout** — the initial scatter is stretched to the container's aspect ratio and spread by golden angle, so a wide window is used rather than letterboxed and no run of related packages lands in one arc
 - **Density scaling** — on a large repository, node sizes are scaled down against the space available, which is what browser zoom-out was being used for
 - **Refresh** — force re-fetch bypasses the cache and pulls fresh data from Cloudsmith
+
+### Linking SCA and CIEM
+
+- **Exposure summary** — the package panel answers *who can reach this artifact*, without switching graphs and rebuilding a different one
+- **Reachability tab** — access data loads with its own spinner, so a slow lookup never holds up the vulnerability data next to it
+- **Jump to CIEM** — open the identity graph focused on the repository hosting a package, straight from that package
+- **Per-repository fetch** — access is keyed on the repository rather than the package, so clicking between packages in one repo is a single request
 
 ### CIEM — Cloud Infrastructure Entitlement Management
 
@@ -155,12 +166,13 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 - **Prefixed search** — search with type prefixes (`repo:`, `user:`, `service:`, `team:`, `entitlement:`, `upstream:`) or free text
 - **Node detail panel** — click any node to see role, email, permissions, status, team memberships, and all connected relationships grouped by edge type
 - **Access path visibility** — entitlement and access edges are rendered as dashed curves to distinguish them from structural relationships
+- **Connected repositories** — Cloudsmith's repository connections drawn as a distinct directional edge in both the workspace overview and the identity graph, and listed in the repository panel
 
 ### General
 
 - **Vulnly reports** — generate self-contained HTML vulnerability reports for any scanned package via [vulnly](https://pypi.org/project/vulnly/), opened in a new tab
 - **Workspace selector** — switch between Cloudsmith organisations; repository selector with per-namespace package counts
-- **API key management** — connect/disconnect via in-app modal; key validated against the Cloudsmith API before saving
+- **API key management** — a Connection tab in Settings, not a separate dialog; shows the authorised user for the current credential, and validates the key against the Cloudsmith API before saving. Stored in the browser, never in the image
 - **Panel collapse** — left control panel can be fully collapsed for more graph space
 - **Version string** — panel header shows truncated version with full tooltip and one-click copy to clipboard
 - **Dark security-product theme** — graph-paper grid background, glassmorphism toolbars, custom scrollbars
@@ -334,6 +346,7 @@ npm run dev
 | `/api/cve/{owner}/{repo}/{slug}` | GET | Full CVE records for one package, descriptions included |
 | `/api/package/{owner}/{repo}/{slug}` | GET | Full metadata for one package: digests, tags, identifiers |
 | `/api/package-group/{owner}/{repo}` | GET | Every version published under `?name=` |
+| `/api/repo-access/{owner}/{repo}` | GET | Identities, teams and entitlements that can reach a repository — the SCA/CIEM join |
 | `/api/search` | GET | Search packages by name/version/format |
 | `/api/changelog` | GET | CHANGELOG.md, rendered in the version modal |
 | `/api/workspace-overview` | GET | Cross-repo SCA overview for `?owner=` (10 min cache) |
@@ -428,7 +441,13 @@ Forgely/
 │       │   ├── GraphCanvas.tsx              # SCA artifact graph (Sigma.js WebGL)
 │       │   ├── OrgGraphCanvas.tsx           # CIEM identity graph (Sigma.js WebGL)
 │       │   ├── WorkspaceOverviewCanvas.tsx  # Cross-repo SCA overview graph
-│       │   ├── SidePanel.tsx                # Package / repo / dependency detail panel
+│       │   ├── SidePanel.tsx                # Routes a selection to one of the panels below
+│       │   ├── panels/
+│       │   │   ├── PackagePanel.tsx         # Details / vulns / deps / reachability tabs
+│       │   │   ├── GroupPanel.tsx           # Every version behind a grouped node
+│       │   │   ├── DependencyPanel.tsx      # Transitive dependency detail
+│       │   │   ├── RepoPanel.tsx            # Repository summary, formats, most vulnerable
+│       │   │   └── shared.tsx               # Pieces the four panels have in common
 │       │   ├── OrgSidePanel.tsx             # CIEM node detail panel
 │       │   ├── WorkspaceOverviewPanel.tsx   # Workspace-level SCA summary panel
 │       │   ├── WorkspaceRepoPanel.tsx       # Per-repo SCA detail panel (overview mode)

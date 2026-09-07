@@ -92,19 +92,23 @@ echo "  frontend/package-lock.json"
 
 if $CHANGELOG && [[ -f CHANGELOG.md ]]; then
   DATE="$(date '+%-d %B %Y')"
-  # Inserted after the `# Changelog` title so the newest release is first,
-  # matching how the file already reads. Left empty on purpose — a generated
+  # Inserted above the newest existing release so the file stays newest-first,
+  # falling back to just after the title when there are no releases yet. The
+  # `### ` heading is not decoration: the in-app changelog modal only renders
+  # bullets that sit inside a section, so a bare list here would parse away to
+  # a release with nothing under it. Left empty on purpose — a generated
   # summary of a release is worse than an obvious blank waiting to be filled.
   python3 - "$NEW" "$DATE" <<'PY'
 import pathlib, sys
 version, date = sys.argv[1], sys.argv[2]
 p = pathlib.Path("CHANGELOG.md")
 lines = p.read_text().split("\n")
-for i, line in enumerate(lines):
-    if line.startswith("# "):
-        lines[i + 1:i + 1] = ["", f"## v{version} — {date}", "", "- "]
-        break
-p.write_text("\n".join(lines))
+block = [f"## v{version} — {date}", "", "### Changes", "", "- ", ""]
+at = next((i for i, l in enumerate(lines) if l.startswith("## ")), None)
+if at is None:
+    at = next((i for i, l in enumerate(lines) if l.startswith("# ")), -1) + 1
+    block = [""] + block
+p.write_text("\n".join(lines[:at] + block + lines[at:]))
 PY
   echo "  CHANGELOG.md (heading added — fill it in)"
 fi
