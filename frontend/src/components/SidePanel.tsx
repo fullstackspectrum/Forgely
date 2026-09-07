@@ -282,6 +282,70 @@ export default function SidePanel({
         <span className="panel-eyebrow">Package</span>
         <h2 className="panel-title">{node.label}</h2>
         {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
+
+      {/* The actions belong with what they act on: they were below the
+          severity badges, which put a row of state between the package's
+          name and the things you can do to it. */}
+      {((onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High")) || canGenerateReport || cloudsmithUrl) && (
+      <div className="panel-status-actions">
+        {onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High") && (
+          <button
+            type="button"
+            className="attack-graph-btn"
+            onClick={onOpenAttackGraph}
+            title="View attack path"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            <span>Attack path</span>
+          </button>
+        )}
+        {(canGenerateReport || cloudsmithUrl) && (
+          <>
+          {canGenerateReport && (
+            <button
+              type="button"
+              className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
+              onClick={handleGenerateReport}
+              disabled={reportLoading || reportDone}
+              title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
+            >
+              {reportLoading ? (
+                <span className="vulnly-spinner" aria-hidden="true" />
+              ) : reportDone ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              )}
+              <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
+            </button>
+          )}
+          {cloudsmithUrl && (
+            <a
+              className="cloudsmith-view-btn"
+              href={cloudsmithUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View in Cloudsmith"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          )}
+          </>
+        )}
+      </div>
+      )}
       </div>
 
       <div className="panel-status-row">
@@ -323,66 +387,6 @@ export default function SidePanel({
             </span>
           )}
         </div>
-        {((onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High")) || canGenerateReport || cloudsmithUrl) && (
-        <div className="panel-status-actions">
-          {onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High") && (
-            <button
-              type="button"
-              className="attack-graph-btn"
-              onClick={onOpenAttackGraph}
-              title="View attack path"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="18" cy="5" r="3"/>
-                <circle cx="6" cy="12" r="3"/>
-                <circle cx="18" cy="19" r="3"/>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-              </svg>
-              <span>Attack path</span>
-            </button>
-          )}
-          {(canGenerateReport || cloudsmithUrl) && (
-            <>
-            {canGenerateReport && (
-              <button
-                type="button"
-                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
-                onClick={handleGenerateReport}
-                disabled={reportLoading || reportDone}
-                title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
-              >
-                {reportLoading ? (
-                  <span className="vulnly-spinner" aria-hidden="true" />
-                ) : reportDone ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                )}
-                <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
-              </button>
-            )}
-            {cloudsmithUrl && (
-              <a
-                className="cloudsmith-view-btn"
-                href={cloudsmithUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="View in Cloudsmith"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
-            )}
-            </>
-          )}
-        </div>
-        )}
       </div>
       {reportError && (
         <div className="vulnly-report-error" role="alert">

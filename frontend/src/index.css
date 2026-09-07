@@ -1422,6 +1422,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Wraps: three actions and a long package name will not share a line at the
+     docked width, and a button pushed off the edge is a button that is gone. */
+  flex-wrap: wrap;
+}
+
+/* Spacing when it sits in the header rather than on the status row, where the
+   row's own gap used to provide it. */
+.panel-header .panel-status-actions {
+  margin-top: 12px;
 }
 
 .vuln-count-inline {
