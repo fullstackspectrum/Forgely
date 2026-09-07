@@ -8,8 +8,13 @@
 
 services:
   forgely:
-    build: .
-    image: forgely:latest
+    image: fullstackspectrum/forgely:latest
+    # Commented out on purpose. With a `build:` here, `docker compose up`
+    # rebuilds from this checkout and stamps the tag above over whatever you
+    # pulled, so you can sit looking at a stale local image wondering why a
+    # change never landed. Uncomment to develop against your working tree;
+    # otherwise `docker compose pull` gets you the published image.
+    # build: .
     container_name: forgely
     ports:
       - "8000:8000"
