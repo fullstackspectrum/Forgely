@@ -4566,6 +4566,22 @@ body {
   padding: 0 32px 32px;
 }
 
+/* Expanded, the metadata reads as three label/value pairs per row rather than
+   one, which is why the sections around it were gridded too.
+   
+   `auto 1fr` across a full-screen panel put every value hard against the left
+   edge with a thousand pixels of empty box to its right — the label and its
+   value were technically aligned and visually unrelated.
+   
+   Repeating the pair rather than using auto-fill is deliberate: MetaRow emits
+   the label and the value as flat siblings, so the pairing is positional. Six
+   columns pair them correctly; an auto-fill of single tracks would not. */
+.panel-overlay-expanded .panel-meta {
+  grid-template-columns: repeat(3, max-content minmax(120px, 1fr));
+  column-gap: 24px;
+  padding: 16px;
+}
+
 .panel-overlay-expanded .panel-header {
   margin: 0 -32px 20px;
   padding: 20px 32px 18px;
