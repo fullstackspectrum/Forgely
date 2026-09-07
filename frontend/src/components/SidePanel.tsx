@@ -65,6 +65,8 @@ interface Props {
   onFormatFilterChange?: (f: string | null) => void;
   onNodeSelect?: (id: string) => void;
   onOpenAttackGraph?: () => void;
+  /* Open the identity graph focused on the repository holding this package. */
+  onViewInCiem?: (repoSlug: string) => void;
 }
 
 export default function SidePanel({
@@ -79,6 +81,7 @@ export default function SidePanel({
   onFormatFilterChange,
   onNodeSelect,
   onOpenAttackGraph,
+  onViewInCiem,
 }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [showSharedOnly, setShowSharedOnly] = useState(false);
@@ -506,6 +509,23 @@ export default function SidePanel({
             Access to <strong>{access.repo}</strong>, the repository this package
             is published in.
           </p>
+
+          {/* The list below answers "who"; the graph answers "how" — which
+              teams and entitlements the access actually runs through. */}
+          {onViewInCiem && (
+            <button
+              type="button"
+              className="access-ciem-btn"
+              onClick={() => onViewInCiem(access.repo)}
+              title={`Open the identity graph focused on ${access.repo}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+              View access graph
+            </button>
+          )}
 
           <div className="access-counts">
             {([["Admin", access.admin], ["Write", access.write], ["Read", access.read]] as const)

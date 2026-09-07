@@ -12,7 +12,7 @@ import { drawDarkNodeHover, drawNodeLabel } from "../lib/hoverRenderer";
 import type { OrgGraphResponse, LayoutType, EdgeStyle } from "../types";
 import { ORG_NODE_COLORS, ORG_NODE_SHAPE } from "../types";
 import { token, dimToCanvas, DIM } from "../lib/palette";
-import { fitAround } from "../lib/focus";
+import { fitAround, focusNodes } from "../lib/focus";
 import { assignCircle, assignRings, resolveOverlaps } from "../lib/layout";
 
 /* Size carries weight, and separates the two kinds that share a shape: a team
@@ -208,6 +208,22 @@ export default function OrgGraphCanvas({
     };
     sigmaRef.current?.refresh();
   }, [selectedNode, filters, searchResults]);
+
+  /* Bring the selected node into view.
+     
+     The reducers highlight it and dim everything else, but nothing moved the
+     camera — fine when the selection came from clicking something already on
+     screen, useless when it arrives from elsewhere. Opening a package's access
+     graph selected a repo that could be anywhere in a hundred-node layout.
+     
+     focusNodes holds the current zoom for a single node and only recentres, so
+     this does not yank the view on an ordinary click either. */
+  useEffect(() => {
+    const sigma = sigmaRef.current;
+    const graph = graphRef.current;
+    if (!sigma || !graph || !selectedNode || !graph.hasNode(selectedNode)) return;
+    focusNodes(sigma, [selectedNode]);
+  }, [selectedNode, data]);
 
   /* Apply layout algorithm */
   useEffect(() => {
