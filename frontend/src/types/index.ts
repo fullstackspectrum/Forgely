@@ -272,3 +272,25 @@ export interface PackageDetail {
   cdn_url: string;
   signature_url: string;
 }
+
+/* Who can reach a repository — the CIEM answer, surfaced on an SCA package. */
+export interface RepoIdentity {
+  id: string;
+  name: string;
+  kind: "user" | "service";
+  permission: "Admin" | "Write" | "Read";
+  /** "direct" on the repo, "team" through a team grant, "org" via an org role. */
+  via: "direct" | "team" | "org";
+  team: string;
+  org_role: string;
+}
+
+export interface RepoAccess {
+  owner: string;
+  repo: string;
+  identities: RepoIdentity[];
+  entitlements: string[];
+  admin: number;
+  write: number;
+  read: number;
+}

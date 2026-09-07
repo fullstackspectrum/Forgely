@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from "react";
 import { currentTheme } from "../lib/theme";
 import SeverityMark from "./SeverityMark";
-import type { GraphResponse, GraphNode, CVERecord, PackageDetail, Severity } from "../types";
+import type { GraphResponse, GraphNode, CVERecord, PackageDetail, RepoIdentity, Severity } from "../types";
 import { SEVERITY_COLORS, SEVERITY_RANK } from "../types";
 import { useCveDescriptions } from "../hooks/useCveDescriptions";
 
@@ -48,6 +48,7 @@ const EMPTY_SEVERITIES: Set<Severity> = new Set();
 
 import { usePackageDetail } from "../hooks/usePackageDetail";
 import { usePackageGroup } from "../hooks/usePackageGroup";
+import { useRepoAccess } from "../hooks/useRepoAccess";
 import { GROUP_PREFIX, groupKeyOf } from "../lib/groupPackages";
 import { getFormatIcon } from "../lib/formatIcons";
 import { apiFetch } from "../lib/auth";
@@ -64,6 +65,8 @@ interface Props {
   onFormatFilterChange?: (f: string | null) => void;
   onNodeSelect?: (id: string) => void;
   onOpenAttackGraph?: () => void;
+  /* Open the identity graph focused on the repository holding this package. */
+  onViewInCiem?: (repoSlug: string) => void;
 }
 
 export default function SidePanel({
@@ -78,12 +81,16 @@ export default function SidePanel({
   onFormatFilterChange,
   onNodeSelect,
   onOpenAttackGraph,
+  onViewInCiem,
 }: Props) {
   const [sevFilter, setSevFilter] = useState<string>("All");
   const [showSharedOnly, setShowSharedOnly] = useState(false);
   const [cveQuery, setCveQuery] = useState<string>("");
   const [cvePage, setCvePage] = useState(0);
   const [depsExpanded, setDepsExpanded] = useState(false);
+  /* Reachability is a different question from "what is this package", and
+     answering it inline meant scrolling past every digest and tag to reach it. */
+  const [panelTab, setPanelTab] = useState<"details" | "vulns" | "reach">("details");
   const [reportLoading, setReportLoading] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -113,7 +120,7 @@ export default function SidePanel({
   /* CVE descriptions are fetched on demand rather than carried in the graph
      payload (perf/08). Declared before the early returns for the same reason
      as `dependencies` above. */
-  const { descriptions: cveDescriptions } = useCveDescriptions(
+  const { descriptions: cveDescriptions, loading: cveLoading } = useCveDescriptions(
     owner,
     repo,
     node?.type === "package" && node.data.cves.length > 0 ? node.data.slug : "",
@@ -123,10 +130,17 @@ export default function SidePanel({
      return, for the same reason as the two hooks around it: a group id does
      not resolve to a node, and a hook skipped on that render would change the
      hook order React is counting on. */
-  const { detail } = usePackageDetail(
+  const { detail, loading: detailLoading } = usePackageDetail(
     owner,
     repo,
     node?.type === "package" ? node.data.slug : "",
+  );
+
+  /* Who can reach the repository this package lives in. Keyed on the repo, so
+     clicking between packages in it does not refetch. */
+  const { access, loading: accessLoading } = useRepoAccess(
+    node?.type === "package" ? owner : "",
+    node?.type === "package" ? repo : "",
   );
 
   /* A group node stands for several packages and is not in `data` at all —
@@ -268,6 +282,70 @@ export default function SidePanel({
         <span className="panel-eyebrow">Package</span>
         <h2 className="panel-title">{node.label}</h2>
         {d.version && <span className="panel-version"><VersionString version={d.version} /></span>}
+
+      {/* The actions belong with what they act on: they were below the
+          severity badges, which put a row of state between the package's
+          name and the things you can do to it. */}
+      {((onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High")) || canGenerateReport || cloudsmithUrl) && (
+      <div className="panel-status-actions">
+        {onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High") && (
+          <button
+            type="button"
+            className="attack-graph-btn"
+            onClick={onOpenAttackGraph}
+            title="View attack path"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            <span>Attack path</span>
+          </button>
+        )}
+        {(canGenerateReport || cloudsmithUrl) && (
+          <>
+          {canGenerateReport && (
+            <button
+              type="button"
+              className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
+              onClick={handleGenerateReport}
+              disabled={reportLoading || reportDone}
+              title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
+            >
+              {reportLoading ? (
+                <span className="vulnly-spinner" aria-hidden="true" />
+              ) : reportDone ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              )}
+              <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
+            </button>
+          )}
+          {cloudsmithUrl && (
+            <a
+              className="cloudsmith-view-btn"
+              href={cloudsmithUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View in Cloudsmith"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          )}
+          </>
+        )}
+      </div>
+      )}
       </div>
 
       <div className="panel-status-row">
@@ -285,6 +363,20 @@ export default function SidePanel({
           <span className="vuln-count-inline" style={d.vuln_count > 0 ? { color: sevColor } : undefined}>
             {d.vuln_count} {d.vuln_count === 1 ? "vulnerability" : "vulnerabilities"}
           </span>
+          {/* Ahead of quarantine: malware is the worse fact, and this row is
+              read left to right. Taken from the node rather than the fetched
+              detail, so it appears with the panel rather than a moment later —
+              the graph already carries the flag to draw the node's badge. */}
+          {(d.is_malware_detected || detail?.is_malware_detected) && (
+            <span className="malware-badge" title="Malware was detected in this package">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="7" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              Malware
+            </span>
+          )}
           {d.is_quarantined && (
             <span className="quarantine-badge" title="This package is quarantined">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -295,66 +387,6 @@ export default function SidePanel({
             </span>
           )}
         </div>
-        {((onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High")) || canGenerateReport || cloudsmithUrl) && (
-        <div className="panel-status-actions">
-          {onOpenAttackGraph && (d.max_severity === "Critical" || d.max_severity === "High") && (
-            <button
-              type="button"
-              className="attack-graph-btn"
-              onClick={onOpenAttackGraph}
-              title="View attack path"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="18" cy="5" r="3"/>
-                <circle cx="6" cy="12" r="3"/>
-                <circle cx="18" cy="19" r="3"/>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-              </svg>
-              <span>Attack path</span>
-            </button>
-          )}
-          {(canGenerateReport || cloudsmithUrl) && (
-            <>
-            {canGenerateReport && (
-              <button
-                type="button"
-                className={`vulnly-report-btn${d.vuln_count === 0 ? " vulnly-report-btn-clean" : ""}${reportDone ? " vulnly-report-btn-done" : ""}`}
-                onClick={handleGenerateReport}
-                disabled={reportLoading || reportDone}
-                title={reportLoading ? "Generating report…" : reportDone ? "Report downloaded" : "Download Vulnly HTML report"}
-              >
-                {reportLoading ? (
-                  <span className="vulnly-spinner" aria-hidden="true" />
-                ) : reportDone ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                )}
-                <span>{reportLoading ? "Generating…" : reportDone ? "Downloaded!" : "Vulnly Report"}</span>
-              </button>
-            )}
-            {cloudsmithUrl && (
-              <a
-                className="cloudsmith-view-btn"
-                href={cloudsmithUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="View in Cloudsmith"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              </a>
-            )}
-            </>
-          )}
-        </div>
-        )}
       </div>
       {reportError && (
         <div className="vulnly-report-error" role="alert">
@@ -410,26 +442,156 @@ export default function SidePanel({
         {detail?.status && <MetaRow label="Status" value={detail.status} />}
       </div>
 
+      {/* The rows above are the ones that need the fetched detail. Without
+          this the panel looked finished while half of it was still coming. */}
+      {detailLoading && !detail && (
+        <div className="panel-loading">
+          <Spinner label="Loading package metadata" />
+          <span>Loading digests, tags and identifiers…</span>
+        </div>
+      )}
+
       {/* A one-line summary is worth more than any row above it, but only some
           formats carry one. */}
       {detail?.summary && <p className="panel-summary-text">{detail.summary}</p>}
 
-      {/* Flags worth interrupting for. Quarantine already has its own badge in
-          the header, so only the two the graph does not draw appear here. */}
-      {(detail?.is_malware_detected || detail?.policy_violated) && (
+      {/* Malware moved up to the status row beside quarantine: both are states
+          of the package, and burying the worse one below the metadata meant it
+          arrived with the detail fetch rather than with the panel. */}
+      {detail?.policy_violated && (
         <div className="pkg-flags">
-          {detail.is_malware_detected && (
-            <span className="pkg-flag pkg-flag-danger">Malware detected</span>
-          )}
-          {detail.policy_violated && (
-            <span className="pkg-flag pkg-flag-warn">Policy violated</span>
-          )}
+          <span className="pkg-flag pkg-flag-warn">Policy violated</span>
         </div>
       )}
       </div>
 
       <div className="panel-details">
 
+      {/* Two questions, two tabs: what this package is, and who can reach it.
+          Both were one scroll before, and the second was under every digest. */}
+      <div className="panel-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === "details"}
+          className={`panel-tab${panelTab === "details" ? " active" : ""}`}
+          onClick={() => setPanelTab("details")}
+        >
+          Details
+          {detailLoading && <Spinner />}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === "vulns"}
+          className={`panel-tab${panelTab === "vulns" ? " active" : ""}`}
+          onClick={() => setPanelTab("vulns")}
+        >
+          Vulnerabilities
+          {cveLoading
+            ? <Spinner />
+            : d.vuln_count > 0 && (
+              /* Tinted by severity: the count is the one number on this panel
+                 worth reading before deciding which tab to open. */
+              <span className="panel-tab-count" data-severity={d.max_severity ?? undefined}>
+                {d.vuln_count}
+              </span>
+            )}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === "reach"}
+          className={`panel-tab${panelTab === "reach" ? " active" : ""}`}
+          onClick={() => setPanelTab("reach")}
+        >
+          Reachability
+          {accessLoading
+            ? <Spinner />
+            : access && <span className="panel-tab-count">{access.identities.length}</span>}
+        </button>
+      </div>
+      {panelTab === "reach" && (<>
+
+      {/* Who can reach this — the CIEM answer, on the SCA side.
+          
+          A vulnerable package is only as exposed as the people who can reach
+          the repository holding it: Admin and Write are who could replace the
+          artefact, Read is who is served it. Answering that used to mean
+          switching tabs and rebuilding the identity graph. */}
+      {accessLoading && !access && (
+        <div className="panel-section panel-loading">
+          <Spinner label="Loading reachability" />
+          <span>Working out who can reach this repository…</span>
+        </div>
+      )}
+
+      {!accessLoading && access && access.identities.length === 0 && (
+        <p className="cve-empty">No identities have access to this repository.</p>
+      )}
+
+      {!accessLoading && !access && (
+        <p className="cve-empty">Could not load reachability for this repository.</p>
+      )}
+
+      {access && access.identities.length > 0 && (
+        <div className="panel-section">
+          <h3 className="section-title">Who can reach this</h3>
+          <p className="access-hint">
+            Access to <strong>{access.repo}</strong>, the repository this package
+            is published in.
+          </p>
+
+          {/* The list below answers "who"; the graph answers "how" — which
+              teams and entitlements the access actually runs through. */}
+          {onViewInCiem && (
+            <button
+              type="button"
+              className="access-ciem-btn"
+              onClick={() => onViewInCiem(access.repo)}
+              title={`Open the identity graph focused on ${access.repo}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+              View access graph
+            </button>
+          )}
+
+          <div className="access-counts">
+            {([["Admin", access.admin], ["Write", access.write], ["Read", access.read]] as const)
+              .filter(([, n]) => n > 0)
+              .map(([label, n]) => (
+                <span key={label} className={`access-count access-count-${label.toLowerCase()}`}>
+                  <strong>{n}</strong> {label}
+                </span>
+              ))}
+          </div>
+
+          <ul className="access-list">
+            {access.identities.slice(0, ACCESS_ROWS).map((i) => (
+              <AccessRow key={i.id} identity={i} />
+            ))}
+          </ul>
+          {access.identities.length > ACCESS_ROWS && (
+            <p className="access-more">
+              +{access.identities.length - ACCESS_ROWS} more with access
+            </p>
+          )}
+
+          {access.entitlements.length > 0 && (
+            <p className="access-hint access-tokens">
+              {access.entitlements.length} entitlement{access.entitlements.length === 1 ? "" : "s"}
+              {" "}can download from it without a user account:{" "}
+              {access.entitlements.join(", ")}
+            </p>
+          )}
+        </div>
+      )}
+      </>)}
+
+      {panelTab === "details" && (<>
       {/* Identifiers — the fields that actually name this artefact in its own
           ecosystem. Every format uses different keys (a Docker image has a
           platform, a Conda package a build string, an Alpine package a distro
@@ -540,6 +702,9 @@ export default function SidePanel({
         </div>
       )}
 
+      </>)}
+
+      {panelTab === "vulns" && (<>
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
         const sorted = [...d.cves].sort(
@@ -699,6 +864,7 @@ export default function SidePanel({
           </div>
         );
       })()}
+      </>)}
       </div>
     </div>
   );
@@ -722,6 +888,31 @@ function isDigest(value: string): boolean {
 function shortDigest(value: string): string {
   const hex = value.replace(/^sha256[:-]/i, "");
   return hex.length > 14 ? `${hex.slice(0, 12)}…` : hex;
+}
+
+/* Enough to see the shape of the exposure without scrolling; the rest is a
+ * count, because past a handful the answer is "lots of people" and the precise
+ * list belongs in the CIEM graph. */
+const ACCESS_ROWS = 8;
+
+function AccessRow({ identity }: { identity: RepoIdentity }) {
+  /* Why they have it, in the fewest words that are still true. */
+  const reason =
+    identity.via === "org"
+      ? `organisation ${identity.org_role || "role"}`
+      : identity.via === "team"
+        ? `team ${identity.team}`
+        : "granted on this repository";
+
+  return (
+    <li className="access-row" data-permission={identity.permission}>
+      <span className="access-name" title={identity.id}>{identity.name}</span>
+      <span className="access-perm">{identity.permission}</span>
+      <span className="access-via">
+        {identity.kind === "service" ? "service · " : ""}{reason}
+      </span>
+    </li>
+  );
 }
 
 /* ================================================================
@@ -986,6 +1177,17 @@ function Digest({ label, value }: { label: string; value: string }) {
       <code className="pkg-digest-value">{value}</code>
     </button>
   );
+}
+
+/**
+ * Inline "still loading" mark.
+ *
+ * Sized to sit on a line of text rather than to be noticed: these appear beside
+ * labels that already say what is coming, so the spinner only needs to say
+ * "not yet", not "look here".
+ */
+function Spinner({ label = "Loading" }: { label?: string }) {
+  return <span className="inline-spinner" role="status" aria-label={label} />;
 }
 
 function MetaRow({

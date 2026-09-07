@@ -81,6 +81,14 @@ export default function App() {
   const [orgLoading, setOrgLoading] = useState(false);
   const [orgError, setOrgError] = useState<string | null>(null);
   const [orgSelectedNode, setOrgSelectedNode] = useState<string | null>(null);
+
+  /* Jump from a package to the identity graph for the repository holding it.
+     The org graph fetches lazily on tab change, and selecting a node that is
+     not there yet is harmless — the selection is applied once it arrives. */
+  const viewRepoInCiem = useCallback((slug: string) => {
+    setTab("organisation");
+    setOrgSelectedNode(`repo:${slug}`);
+  }, []);
   const [orgPanelExpanded, setOrgPanelExpanded] = useState(false);
   const [orgLayout, setOrgLayout] = useState<LayoutType>("radial");
   const [orgEdgeStyle, setOrgEdgeStyle] = useState<EdgeStyle>("curved");
@@ -483,7 +491,7 @@ export default function App() {
                   </button>
                   <button className="panel-close" onClick={() => { setSelectedNode(null); setPanelExpanded(false); }}>×</button>
                 </div>
-                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} severities={severities} formatFilter={formatFilter} onSeveritiesChange={setSeverities} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} />
+                <SidePanel data={data} nodeId={selectedNode} owner={owner} repo={repo} expanded={panelExpanded} severities={severities} formatFilter={formatFilter} onSeveritiesChange={setSeverities} onFormatFilterChange={setFormatFilter} onNodeSelect={setSelectedNode} onOpenAttackGraph={() => setAttackGraphOpen(true)} onViewInCiem={viewRepoInCiem} />
               </div>
             );
           })()}

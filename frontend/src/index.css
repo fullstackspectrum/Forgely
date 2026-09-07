@@ -1300,9 +1300,29 @@ body {
 }
 .side-panel-expanded .panel-summary {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  /* One column, widening to two where there is room.
+     
+     It was two fixed `minmax(260px, 1fr)` tracks, which demand about 610px
+     with gap and padding and overflowed below that instead of reflowing. The
+     first fix used auto-fit, which reflows but also gives *five* columns on a
+     wide screen — the layout wants two, not as many as fit. */
+  grid-template-columns: 1fr;
   gap: 16px 24px;
   align-items: start;
+}
+
+@media (min-width: 760px) {
+  .side-panel-expanded .panel-summary {
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  }
+}
+
+/* The metadata lays out its own label/value pairs across the full width, so it
+   spans the summary rather than sitting in one column of it. Without this its
+   box was one column wide while its content ran across three — the border and
+   background stopped after the first pair and the rest sat outside them. */
+.side-panel-expanded .panel-summary > .panel-meta {
+  grid-column: 1 / -1;
 }
 /* Header + status row spans the full summary width */
 .side-panel-expanded .panel-summary > .panel-header,
@@ -1320,6 +1340,10 @@ body {
 .side-panel-expanded .panel-summary > *,
 .side-panel-expanded .panel-details > * {
   margin: 0;
+  /* A grid item's default min-width is auto, so one long unbreakable string —
+     a 64-character digest, a scoped package name — widens its track past the
+     panel instead of wrapping inside it. */
+  min-width: 0;
 }
 /* CVE list becomes a multi-column responsive grid in expanded mode */
 .side-panel-expanded .cve-list {
@@ -1422,6 +1446,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Wraps: three actions and a long package name will not share a line at the
+     docked width, and a button pushed off the edge is a button that is gone. */
+  flex-wrap: wrap;
+}
+
+/* Spacing when it sits in the header rather than on the status row, where the
+   row's own gap used to provide it. */
+.panel-header .panel-status-actions {
+  margin-top: 12px;
 }
 
 .vuln-count-inline {
@@ -1460,6 +1493,26 @@ body {
 .severity-badge-clickable.active {
   background: var(--sev-fg, var(--c-action));
   color: var(--t-inverse);
+}
+
+/* Built like the quarantine badge beside it, but tinted rather than neutral.
+   Quarantine is deliberately neutral because it is a state, not a severity —
+   malware is the one package state that genuinely is worse than any CVE score,
+   and the node badge on the canvas already draws it in this colour. */
+.malware-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--fg-radius-lg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: var(--fg-sev-critical-bg);
+  border: 1px solid var(--g-sev-critical);
+  color: var(--g-sev-critical);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .quarantine-badge {
@@ -4537,6 +4590,34 @@ body {
   padding: 0 32px 32px;
 }
 
+/* Expanded, the metadata reads as three label/value pairs per row rather than
+   one, which is why the sections around it were gridded too.
+   
+   `auto 1fr` across a full-screen panel put every value hard against the left
+   edge with a thousand pixels of empty box to its right — the label and its
+   value were technically aligned and visually unrelated.
+   
+   Repeating the pair rather than using auto-fill is deliberate: MetaRow emits
+   the label and the value as flat siblings, so the pairing is positional. Six
+   columns pair them correctly; an auto-fill of single tracks would not. */
+/* Pairs per row, but only where they fit. Unconditionally three pairs is
+   itself a wide minimum, which is what made a narrow expanded panel overflow.
+   Stepped rather than auto-fit because the pairing is positional — see the
+   note on repeat() above. */
+@media (min-width: 760px) {
+  .panel-overlay-expanded .panel-meta {
+    grid-template-columns: repeat(2, max-content minmax(120px, 1fr));
+    column-gap: 24px;
+    padding: 16px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .panel-overlay-expanded .panel-meta {
+    grid-template-columns: repeat(3, max-content minmax(120px, 1fr));
+  }
+}
+
 .panel-overlay-expanded .panel-header {
   margin: 0 -32px 20px;
   padding: 20px 32px 18px;
@@ -5494,6 +5575,220 @@ td, th,
   background: var(--c-tint-subtle);
 }
 
+/* ===== Package panel tabs and loading states ===== */
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 -20px 14px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  color: var(--t-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.panel-tab:hover { color: var(--t-primary); }
+
+.panel-tab.active {
+  color: var(--t-primary);
+  border-bottom-color: var(--c-action);
+}
+
+/* How many identities, or how many CVEs, without opening the tab. */
+.panel-tab-count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: var(--fg-radius-pill, 999px);
+  background: var(--c-tint-subtle);
+  color: var(--t-muted);
+}
+
+/* The vulnerability count carries its worst severity, so the tab bar says how
+   bad before you open it. Tinted, never a solid fill behind small text. */
+.panel-tab-count[data-severity="Critical"] {
+  background: var(--fg-sev-critical-bg);
+  color: var(--s-critical);
+}
+.panel-tab-count[data-severity="High"] {
+  background: var(--fg-sev-high-bg);
+  color: var(--s-high);
+}
+.panel-tab-count[data-severity="Medium"] {
+  background: var(--fg-sev-medium-bg);
+  color: var(--s-medium);
+}
+.panel-tab-count[data-severity="Low"] {
+  background: var(--fg-sev-low-bg);
+  color: var(--s-low);
+}
+
+/* Neutral, and it borrows the existing keyframes rather than defining a second
+   spin: the vulnly button's spinner is red because a report is about findings,
+   and "still loading" is not a finding. */
+.inline-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border: 2px solid var(--c-tint);
+  border-top-color: var(--t-muted);
+  border-radius: 50%;
+  animation: vulnly-spin 0.7s linear infinite;
+}
+
+.panel-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+/* Reduced motion: keep the mark, drop the spin. */
+@media (prefers-reduced-motion: reduce) {
+  .inline-spinner { animation: none; opacity: 0.6; }
+}
+
+/* ===== Who can reach this: CIEM access, on an SCA package ===== */
+
+.access-hint {
+  margin: 0 0 10px;
+  font-size: var(--fg-text-xs);
+  line-height: 1.45;
+  color: var(--t-muted);
+}
+
+.access-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.access-count {
+  font-size: var(--fg-text-xs);
+  padding: 2px 8px;
+  border-radius: var(--fg-radius-sm);
+  background: var(--c-tint-subtle);
+  border: 1px solid var(--c-tint);
+  color: var(--t-secondary);
+}
+
+/* Admin and Write can replace the artefact; Read only receives it. Tinted, not
+   filled — this is a permission, not a severity, and the severity ramp has to
+   keep meaning what it means. */
+.access-count-admin {
+  color: var(--s-critical);
+  border-color: var(--s-critical);
+  background: var(--fg-sev-critical-bg);
+}
+
+.access-count-write {
+  color: var(--s-medium);
+  border-color: var(--s-medium);
+  background: var(--fg-sev-medium-bg);
+}
+
+.access-ciem-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+  color: var(--t-secondary);
+  font: inherit;
+  font-size: var(--fg-text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.access-ciem-btn:hover {
+  border-color: var(--c-action);
+  color: var(--t-primary);
+  background: var(--c-surface-raised);
+}
+
+.access-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.access-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-border);
+  border-radius: var(--fg-radius-md);
+  background: var(--c-bg-subtle);
+}
+
+/* The stripe carries the permission, so a list of twenty scans as a column of
+   colour rather than twenty words to read. */
+.access-row[data-permission="Admin"] { border-left-color: var(--s-critical); }
+.access-row[data-permission="Write"] { border-left-color: var(--s-medium); }
+
+.access-name {
+  min-width: 0;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-perm {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--t-muted);
+}
+
+.access-via {
+  grid-column: 1 / -1;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.access-more {
+  margin: 6px 0 0;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+.access-tokens {
+  margin-top: 10px;
+}
+
 /* ===== Group detail: one name, every version of it ===== */
 
 .group-search {
@@ -6130,6 +6425,18 @@ td, th,
 .panel-overlay .panel-summary,
 .panel-overlay .panel-details {
   min-height: 0;
+  /* Never shrink below their own content.
+     
+     Docked these are `display: contents` and none of this applies. Expanded
+     they become real boxes — a grid and a flex column — and therefore flex
+     items of the scrolling panel, where the default flex-shrink: 1 plus the
+     min-height: 0 above let them be squeezed shorter than what is inside them.
+     The grid then overflowed its own box: the metadata ran 58px past the
+     summary and straight through the section beneath it.
+     
+     The panel already scrolls, so the right answer is to keep the content's
+     height and let it. */
+  flex-shrink: 0;
 }
 
 /* Primary actions, pinned under the header. */
