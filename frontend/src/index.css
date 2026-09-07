@@ -5494,6 +5494,78 @@ td, th,
   background: var(--c-tint-subtle);
 }
 
+/* ===== Package panel tabs and loading states ===== */
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 -20px 14px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: var(--fg-text-sm);
+  font-weight: 500;
+  color: var(--t-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.panel-tab:hover { color: var(--t-primary); }
+
+.panel-tab.active {
+  color: var(--t-primary);
+  border-bottom-color: var(--c-action);
+}
+
+/* How many identities, without opening the tab. */
+.panel-tab-count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: var(--fg-radius-pill, 999px);
+  background: var(--c-tint-subtle);
+  color: var(--t-muted);
+}
+
+/* Neutral, and it borrows the existing keyframes rather than defining a second
+   spin: the vulnly button's spinner is red because a report is about findings,
+   and "still loading" is not a finding. */
+.inline-spinner {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border: 2px solid var(--c-tint);
+  border-top-color: var(--t-muted);
+  border-radius: 50%;
+  animation: vulnly-spin 0.7s linear infinite;
+}
+
+.panel-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: var(--fg-text-xs);
+  color: var(--t-muted);
+}
+
+/* Reduced motion: keep the mark, drop the spin. */
+@media (prefers-reduced-motion: reduce) {
+  .inline-spinner { animation: none; opacity: 0.6; }
+}
+
 /* ===== Who can reach this: CIEM access, on an SCA package ===== */
 
 .access-hint {

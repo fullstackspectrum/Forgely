@@ -85,6 +85,9 @@ export default function SidePanel({
   const [cveQuery, setCveQuery] = useState<string>("");
   const [cvePage, setCvePage] = useState(0);
   const [depsExpanded, setDepsExpanded] = useState(false);
+  /* Reachability is a different question from "what is this package", and
+     answering it inline meant scrolling past every digest and tag to reach it. */
+  const [panelTab, setPanelTab] = useState<"details" | "reach">("details");
   const [reportLoading, setReportLoading] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -124,7 +127,7 @@ export default function SidePanel({
      return, for the same reason as the two hooks around it: a group id does
      not resolve to a node, and a hook skipped on that render would change the
      hook order React is counting on. */
-  const { detail } = usePackageDetail(
+  const { detail, loading: detailLoading } = usePackageDetail(
     owner,
     repo,
     node?.type === "package" ? node.data.slug : "",
@@ -132,7 +135,7 @@ export default function SidePanel({
 
   /* Who can reach the repository this package lives in. Keyed on the repo, so
      clicking between packages in it does not refetch. */
-  const { access } = useRepoAccess(
+  const { access, loading: accessLoading } = useRepoAccess(
     node?.type === "package" ? owner : "",
     node?.type === "package" ? repo : "",
   );
@@ -418,6 +421,15 @@ export default function SidePanel({
         {detail?.status && <MetaRow label="Status" value={detail.status} />}
       </div>
 
+      {/* The rows above are the ones that need the fetched detail. Without
+          this the panel looked finished while half of it was still coming. */}
+      {detailLoading && !detail && (
+        <div className="panel-loading">
+          <Spinner label="Loading package metadata" />
+          <span>Loading digests, tags and identifiers…</span>
+        </div>
+      )}
+
       {/* A one-line summary is worth more than any row above it, but only some
           formats carry one. */}
       {detail?.summary && <p className="panel-summary-text">{detail.summary}</p>}
@@ -438,12 +450,55 @@ export default function SidePanel({
 
       <div className="panel-details">
 
+      {/* Two questions, two tabs: what this package is, and who can reach it.
+          Both were one scroll before, and the second was under every digest. */}
+      <div className="panel-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === "details"}
+          className={`panel-tab${panelTab === "details" ? " active" : ""}`}
+          onClick={() => setPanelTab("details")}
+        >
+          Details
+          {detailLoading && <Spinner />}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === "reach"}
+          className={`panel-tab${panelTab === "reach" ? " active" : ""}`}
+          onClick={() => setPanelTab("reach")}
+        >
+          Reachability
+          {accessLoading
+            ? <Spinner />
+            : access && <span className="panel-tab-count">{access.identities.length}</span>}
+        </button>
+      </div>
+      {panelTab === "reach" && (<>
+
       {/* Who can reach this — the CIEM answer, on the SCA side.
           
           A vulnerable package is only as exposed as the people who can reach
           the repository holding it: Admin and Write are who could replace the
           artefact, Read is who is served it. Answering that used to mean
           switching tabs and rebuilding the identity graph. */}
+      {accessLoading && !access && (
+        <div className="panel-section panel-loading">
+          <Spinner label="Loading reachability" />
+          <span>Working out who can reach this repository…</span>
+        </div>
+      )}
+
+      {!accessLoading && access && access.identities.length === 0 && (
+        <p className="cve-empty">No identities have access to this repository.</p>
+      )}
+
+      {!accessLoading && !access && (
+        <p className="cve-empty">Could not load reachability for this repository.</p>
+      )}
+
       {access && access.identities.length > 0 && (
         <div className="panel-section">
           <h3 className="section-title">Who can reach this</h3>
@@ -482,7 +537,9 @@ export default function SidePanel({
           )}
         </div>
       )}
+      </>)}
 
+      {panelTab === "details" && (<>
       {/* Identifiers — the fields that actually name this artefact in its own
           ecosystem. Every format uses different keys (a Docker image has a
           platform, a Conda package a build string, an Alpine package a distro
@@ -752,6 +809,7 @@ export default function SidePanel({
           </div>
         );
       })()}
+      </>)}
       </div>
     </div>
   );
@@ -1064,6 +1122,17 @@ function Digest({ label, value }: { label: string; value: string }) {
       <code className="pkg-digest-value">{value}</code>
     </button>
   );
+}
+
+/**
+ * Inline "still loading" mark.
+ *
+ * Sized to sit on a line of text rather than to be noticed: these appear beside
+ * labels that already say what is coming, so the spinner only needs to say
+ * "not yet", not "look here".
+ */
+function Spinner({ label = "Loading" }: { label?: string }) {
+  return <span className="inline-spinner" role="status" aria-label={label} />;
 }
 
 function MetaRow({
