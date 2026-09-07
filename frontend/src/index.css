@@ -1300,7 +1300,12 @@ body {
 }
 .side-panel-expanded .panel-summary {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  /* auto-fit, not two fixed tracks. Two `minmax(260px, 1fr)` columns demand
+     544px plus gap and padding — about 610px — and below that the grid
+     overflowed its own panel rather than reflowing, running the metadata off
+     the right edge and into everything beside it. auto-fit drops to a single
+     column when the room is not there. */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px 24px;
   align-items: start;
 }
@@ -1320,6 +1325,10 @@ body {
 .side-panel-expanded .panel-summary > *,
 .side-panel-expanded .panel-details > * {
   margin: 0;
+  /* A grid item's default min-width is auto, so one long unbreakable string —
+     a 64-character digest, a scoped package name — widens its track past the
+     panel instead of wrapping inside it. */
+  min-width: 0;
 }
 /* CVE list becomes a multi-column responsive grid in expanded mode */
 .side-panel-expanded .cve-list {
@@ -4576,10 +4585,22 @@ body {
    Repeating the pair rather than using auto-fill is deliberate: MetaRow emits
    the label and the value as flat siblings, so the pairing is positional. Six
    columns pair them correctly; an auto-fill of single tracks would not. */
-.panel-overlay-expanded .panel-meta {
-  grid-template-columns: repeat(3, max-content minmax(120px, 1fr));
-  column-gap: 24px;
-  padding: 16px;
+/* Pairs per row, but only where they fit. Unconditionally three pairs is
+   itself a wide minimum, which is what made a narrow expanded panel overflow.
+   Stepped rather than auto-fit because the pairing is positional — see the
+   note on repeat() above. */
+@media (min-width: 760px) {
+  .panel-overlay-expanded .panel-meta {
+    grid-template-columns: repeat(2, max-content minmax(120px, 1fr));
+    column-gap: 24px;
+    padding: 16px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .panel-overlay-expanded .panel-meta {
+    grid-template-columns: repeat(3, max-content minmax(120px, 1fr));
+  }
 }
 
 .panel-overlay-expanded .panel-header {
@@ -6370,6 +6391,18 @@ td, th,
 .panel-overlay .panel-summary,
 .panel-overlay .panel-details {
   min-height: 0;
+  /* Never shrink below their own content.
+     
+     Docked these are `display: contents` and none of this applies. Expanded
+     they become real boxes — a grid and a flex column — and therefore flex
+     items of the scrolling panel, where the default flex-shrink: 1 plus the
+     min-height: 0 above let them be squeezed shorter than what is inside them.
+     The grid then overflowed its own box: the metadata ran 58px past the
+     summary and straight through the section beneath it.
+     
+     The panel already scrolls, so the right answer is to keep the content's
+     height and let it. */
+  flex-shrink: 0;
 }
 
 /* Primary actions, pinned under the header. */
