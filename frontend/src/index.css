@@ -1300,14 +1300,29 @@ body {
 }
 .side-panel-expanded .panel-summary {
   display: grid;
-  /* auto-fit, not two fixed tracks. Two `minmax(260px, 1fr)` columns demand
-     544px plus gap and padding — about 610px — and below that the grid
-     overflowed its own panel rather than reflowing, running the metadata off
-     the right edge and into everything beside it. auto-fit drops to a single
-     column when the room is not there. */
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* One column, widening to two where there is room.
+     
+     It was two fixed `minmax(260px, 1fr)` tracks, which demand about 610px
+     with gap and padding and overflowed below that instead of reflowing. The
+     first fix used auto-fit, which reflows but also gives *five* columns on a
+     wide screen — the layout wants two, not as many as fit. */
+  grid-template-columns: 1fr;
   gap: 16px 24px;
   align-items: start;
+}
+
+@media (min-width: 760px) {
+  .side-panel-expanded .panel-summary {
+    grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  }
+}
+
+/* The metadata lays out its own label/value pairs across the full width, so it
+   spans the summary rather than sitting in one column of it. Without this its
+   box was one column wide while its content ran across three — the border and
+   background stopped after the first pair and the rest sat outside them. */
+.side-panel-expanded .panel-summary > .panel-meta {
+  grid-column: 1 / -1;
 }
 /* Header + status row spans the full summary width */
 .side-panel-expanded .panel-summary > .panel-header,
