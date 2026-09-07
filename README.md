@@ -219,6 +219,16 @@ into a local read.
 <summary><b>Build the image yourself</b></summary>
 
 ```bash
+./bump-version.sh                            # 1.0.0-beta.11 -> 1.0.0-beta.12
+./bump-version.sh minor --tag --changelog    # release, tag it, start a changelog entry
+./bump-version.sh --help                     # all options
+```
+
+`frontend/package.json` is the single source of truth for the version: the
+footer reads it, the backend sends it as its User-Agent, and the image tag
+comes from it, so one bump keeps all three in step.
+
+```bash
 ./build-image.sh                             # build and load locally
 ./build-image.sh --push                      # multi-arch, push to Docker Hub
 ./build-image.sh --push -r ghcr.io/your-org  # somewhere else
@@ -480,6 +490,7 @@ Forgely/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
 ├── Dockerfile                        # Multi-stage build: frontend, then runtime
 ├── build-image.sh                    # Builds and tags from package.json; --push to publish
+├── bump-version.sh                   # Bumps the version package.json and the image tag share
 ├── docker-compose.yml                # One-command run, with a cache volume
 ├── .dockerignore                     # Keeps .env and local state out of the image
 ├── start.sh                          # Start script (backend + frontend)
