@@ -58,7 +58,7 @@ export default function PackagePanel({
   const [depsExpanded, setDepsExpanded] = useState(false);
   /* Reachability is a different question from "what is this package", and
      answering it inline meant scrolling past every digest and tag to reach it. */
-  const [panelTab, setPanelTab] = useState<"details" | "vulns" | "reach">("details");
+  const [panelTab, setPanelTab] = useState<"details" | "vulns" | "deps" | "reach">("details");
   const [reportLoading, setReportLoading] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -115,6 +115,17 @@ export default function PackagePanel({
   /* The router only sends packages here, but the node can still be missing
      for a frame while the graph rebuilds under a held selection. */
   if (!node || node.type !== "package") return null;
+
+  /* Dependencies are not universal: plenty of formats do not declare them and
+     Cloudsmith does not resolve them for every one that does. The tab is only
+     offered when there is something behind it.
+     
+     Derived rather than corrected in an effect, because the selection can
+     change under a held tab — click a package with dependencies, open the tab,
+     click one without — and an effect would render the empty tab once before
+     fixing it. */
+  const hasDeps = dependencies.length > 0;
+  const activeTab = panelTab === "deps" && !hasDeps ? "details" : panelTab;
 
   const toggleSeverity = (s: Severity) => {
     if (!onSeveritiesChange) return;
@@ -396,8 +407,8 @@ export default function PackagePanel({
         <button
           type="button"
           role="tab"
-          aria-selected={panelTab === "details"}
-          className={`panel-tab${panelTab === "details" ? " active" : ""}`}
+          aria-selected={activeTab === "details"}
+          className={`panel-tab${activeTab === "details" ? " active" : ""}`}
           onClick={() => setPanelTab("details")}
         >
           Details
@@ -406,8 +417,8 @@ export default function PackagePanel({
         <button
           type="button"
           role="tab"
-          aria-selected={panelTab === "vulns"}
-          className={`panel-tab${panelTab === "vulns" ? " active" : ""}`}
+          aria-selected={activeTab === "vulns"}
+          className={`panel-tab${activeTab === "vulns" ? " active" : ""}`}
           onClick={() => setPanelTab("vulns")}
         >
           Vulnerabilities
@@ -421,11 +432,23 @@ export default function PackagePanel({
               </span>
             )}
         </button>
+        {hasDeps && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "deps"}
+            className={`panel-tab${activeTab === "deps" ? " active" : ""}`}
+            onClick={() => setPanelTab("deps")}
+          >
+            Dependencies
+            <span className="panel-tab-count">{dependencies.length}</span>
+          </button>
+        )}
         <button
           type="button"
           role="tab"
-          aria-selected={panelTab === "reach"}
-          className={`panel-tab${panelTab === "reach" ? " active" : ""}`}
+          aria-selected={activeTab === "reach"}
+          className={`panel-tab${activeTab === "reach" ? " active" : ""}`}
           onClick={() => setPanelTab("reach")}
         >
           Reachability
@@ -434,7 +457,7 @@ export default function PackagePanel({
             : access && <span className="panel-tab-count">{access.identities.length}</span>}
         </button>
       </div>
-      {panelTab === "reach" && (<>
+      {activeTab === "reach" && (<>
 
       {/* Who can reach this — the CIEM answer, on the SCA side.
           
@@ -514,7 +537,7 @@ export default function PackagePanel({
       )}
       </>)}
 
-      {panelTab === "details" && (<>
+      {activeTab === "details" && (<>
       {/* Identifiers — the fields that actually name this artefact in its own
           ecosystem. Every format uses different keys (a Docker image has a
           platform, a Conda package a build string, an Alpine package a distro
@@ -568,6 +591,10 @@ export default function PackagePanel({
         </div>
       )}
 
+
+      </>)}
+
+      {activeTab === "deps" && (<>
       {/* Dependencies */}
       {dependencies.length > 0 && (
         <div className="panel-section">
@@ -624,10 +651,9 @@ export default function PackagePanel({
           )}
         </div>
       )}
-
       </>)}
 
-      {panelTab === "vulns" && (<>
+      {activeTab === "vulns" && (<>
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
         const sorted = [...d.cves].sort(
