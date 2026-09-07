@@ -90,7 +90,7 @@ export default function SidePanel({
   const [depsExpanded, setDepsExpanded] = useState(false);
   /* Reachability is a different question from "what is this package", and
      answering it inline meant scrolling past every digest and tag to reach it. */
-  const [panelTab, setPanelTab] = useState<"details" | "reach">("details");
+  const [panelTab, setPanelTab] = useState<"details" | "vulns" | "reach">("details");
   const [reportLoading, setReportLoading] = useState(false);
   const [reportDone, setReportDone] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -120,7 +120,7 @@ export default function SidePanel({
   /* CVE descriptions are fetched on demand rather than carried in the graph
      payload (perf/08). Declared before the early returns for the same reason
      as `dependencies` above. */
-  const { descriptions: cveDescriptions } = useCveDescriptions(
+  const { descriptions: cveDescriptions, loading: cveLoading } = useCveDescriptions(
     owner,
     repo,
     node?.type === "package" && node.data.cves.length > 0 ? node.data.slug : "",
@@ -483,6 +483,24 @@ export default function SidePanel({
         <button
           type="button"
           role="tab"
+          aria-selected={panelTab === "vulns"}
+          className={`panel-tab${panelTab === "vulns" ? " active" : ""}`}
+          onClick={() => setPanelTab("vulns")}
+        >
+          Vulnerabilities
+          {cveLoading
+            ? <Spinner />
+            : d.vuln_count > 0 && (
+              /* Tinted by severity: the count is the one number on this panel
+                 worth reading before deciding which tab to open. */
+              <span className="panel-tab-count" data-severity={d.max_severity ?? undefined}>
+                {d.vuln_count}
+              </span>
+            )}
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={panelTab === "reach"}
           className={`panel-tab${panelTab === "reach" ? " active" : ""}`}
           onClick={() => setPanelTab("reach")}
@@ -684,6 +702,9 @@ export default function SidePanel({
         </div>
       )}
 
+      </>)}
+
+      {panelTab === "vulns" && (<>
       {/* CVE list */}
       {d.cves.length > 0 && (() => {
         const sorted = [...d.cves].sort(

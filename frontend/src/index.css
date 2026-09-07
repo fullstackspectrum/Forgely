@@ -5609,7 +5609,7 @@ td, th,
   border-bottom-color: var(--c-action);
 }
 
-/* How many identities, without opening the tab. */
+/* How many identities, or how many CVEs, without opening the tab. */
 .panel-tab-count {
   font-size: 10px;
   font-weight: 600;
@@ -5617,6 +5617,25 @@ td, th,
   border-radius: var(--fg-radius-pill, 999px);
   background: var(--c-tint-subtle);
   color: var(--t-muted);
+}
+
+/* The vulnerability count carries its worst severity, so the tab bar says how
+   bad before you open it. Tinted, never a solid fill behind small text. */
+.panel-tab-count[data-severity="Critical"] {
+  background: var(--fg-sev-critical-bg);
+  color: var(--s-critical);
+}
+.panel-tab-count[data-severity="High"] {
+  background: var(--fg-sev-high-bg);
+  color: var(--s-high);
+}
+.panel-tab-count[data-severity="Medium"] {
+  background: var(--fg-sev-medium-bg);
+  color: var(--s-medium);
+}
+.panel-tab-count[data-severity="Low"] {
+  background: var(--fg-sev-low-bg);
+  color: var(--s-low);
 }
 
 /* Neutral, and it borrows the existing keyframes rather than defining a second
