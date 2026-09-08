@@ -31,7 +31,6 @@ from source.
 Workspace overview
 ![Example – Workspace Overview](assets/readme/example_workspace_graph.jpg)
 
-
 Repository graph
 ![Example – Repo graph](assets/readme/example_repo_graph.jpg)
 
@@ -39,22 +38,22 @@ Repository graph details
 ![Example – Repo details](assets/readme/example_repo_graph_details.jpg)
 
 Package details
-![Example – Package details](assets/readme/example2.jpg)
+![Example – Package details](assets/readme/example_package_details.jpg)
 
 Package Attack Path
-![Example – Attack Path](assets/readme/example3.jpg)
+![Example – Attack Path](assets/readme/example_package_attack_path.jpg)
 
 Dependancy tracking
-![Example – Dependancies](assets/readme/example4.jpg)
+![Example – Dependancies](assets/readme/example_dependancy.jpg)
 
 CIEM graph
-![Example – CIEM Graph](assets/readme/ciem-graph.jpg)
+![Example – CIEM Graph](assets/readme/example_ciem.jpg)
 
-CIEM user
-![Example – CIEM user](assets/readme/ciem-user.jpg)
+CIEM repo
+![Example – CIEM repo](assets/readme/example_ciem_repo.jpg)
 
 CIEM attack path
-![Example – CIEM attack path](assets/readme/ciem-attack-path.jpg)
+![Example – CIEM attack path](assets/readme/example_ciem_attack_graphs.jpg)
 
 ---
 
