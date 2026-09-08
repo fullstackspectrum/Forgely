@@ -24,7 +24,6 @@ from fastapi.staticfiles import StaticFiles
 from cloudsmith import (
     APP_VERSION,
     DEPENDENCY_DENYLIST_ENV,
-    DISABLE_SHORTCIRCUIT_ENV,
     SEVERITY_RANK,
     create_session,
     dependency_denylist,
@@ -44,6 +43,8 @@ from cloudsmith import (
     fetch_team_members,
     fetch_vulnerability_scans,
     get_package_vulnerabilities,
+    osv_description,
+    osv_severity,
     scan_workers,
 )
 from models import (
@@ -347,45 +348,58 @@ def _graph_payload(result: GraphResponse) -> dict:
 
 
 def _cve_records(vulns: list[dict]) -> list[CVERecord]:
-    """Normalise Cloudsmith vulnerability entries into CVERecords.
+    """Normalise OSV advisories into CVERecords.
 
-    Extracted from _build_graph so /api/cve can produce byte-identical records
-    when it has to fall back to the API — the field-name fallbacks below are
-    load-bearing and duplicating them would let the two paths drift.
+    Extracted from _build_graph so /api/cve produces byte-identical records when
+    it falls back to the API, rather than letting the two paths drift.
+
+    The field choices here are measured, not assumed. Across 608 advisories from
+    live repositories: cve_id, details, references, package_name and
+    best_severity were present on every one, while summary and title — the OSV
+    fields whose names suggest they hold the prose — were null on all but one.
     """
     records: list[CVERecord] = []
     for v in vulns:
-        v_sev = v.get("severity", v.get("max_severity", "Unknown"))
-        cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
+        # cve_id first, deliberately. `id` is the source database's own
+        # identifier (UBUNTU-CVE-2026-63795, ALPINE-CVE-2026-31789), so keying
+        # on it would file the same CVE under a different name per distro and
+        # break the shared-CVE edges that connect affected packages.
+        cve_id = v.get("cve_id") or v.get("vulnerability_id") or v.get("id") or ""
 
-        affected = (
-            v.get("package_name")
-            or v.get("affected_package")
-            or v.get("package")
-            or v.get("component")
-            or v.get("dependency")
-            or ""
-        )
-        raw_av = v.get("affected_version") or v.get("package_version") or ""
-        affected_version = raw_av.get("raw_version", "") if isinstance(raw_av, dict) else str(raw_av)
-        raw_fv = v.get("fixed_version") or v.get("fixed_in") or v.get("patched_version") or ""
-        fixed_in = raw_fv.get("raw_version", "") if isinstance(raw_fv, dict) else str(raw_fv)
+        affected_entries = v.get("affected") or []
+        first_affected = affected_entries[0] if affected_entries else {}
+        affected = v.get("package_name") or (first_affected.get("package") or {}).get("name") or ""
+
+        versions = first_affected.get("versions") or []
+        affected_version = str(versions[0]) if versions else ""
+
+        # OSV expresses "fixed" as an event inside a version range rather than a
+        # field. Roughly a third of advisories carry one; the rest are open.
+        fixed_in = ""
+        for entry in affected_entries:
+            for rng in entry.get("ranges") or []:
+                for event in rng.get("events") or []:
+                    if event.get("fixed"):
+                        fixed_in = str(event["fixed"])
+                        break
+                if fixed_in:
+                    break
+            if fixed_in:
+                break
 
         refs = v.get("references") or []
-        first_ref = refs[0].get("url", "") if refs and isinstance(refs[0], dict) else (refs[0] if refs else "")
-        api_url = v.get("url") or v.get("advisory_url") or first_ref or ""
+        api_url = refs[0].get("url", "") if refs and isinstance(refs[0], dict) else ""
+
         nvd_url = ""
         ghsa_url = ""
-        if cve_id and cve_id.upper().startswith("CVE-"):
+        if cve_id.upper().startswith("CVE-"):
             nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
             ghsa_url = f"https://github.com/advisories?query={cve_id}"
-        elif cve_id and cve_id.upper().startswith("GHSA-"):
+        elif cve_id.upper().startswith("GHSA-"):
             ghsa_url = f"https://github.com/advisories/{cve_id}"
 
-        description = v.get("description") or v.get("title") or v.get("summary", "")
-
         records.append(CVERecord(
-            id=cve_id, severity=v_sev, description=description,
+            id=cve_id, severity=osv_severity(v), description=osv_description(v),
             url=api_url, nvd_url=nvd_url, ghsa_url=ghsa_url,
             affected=affected, affected_version=affected_version, fixed_in=fixed_in,
         ))
@@ -560,7 +574,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
             "size_mb": round(scan_cache.size_bytes() / 1024 / 1024, 1),
         }
 
-    shortcircuit_suspects: list[str] = []
+    disagreements: list[str] = []
     for meta in pkg_metas:
         pkg = meta["pkg"]
         slug = meta["slug"]
@@ -589,7 +603,7 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
             and vuln_count == 0
             and max_sev in (None, "None")
         ):
-            shortcircuit_suspects.append(node_id)
+            disagreements.append(node_id)
 
         # Normalise: the Cloudsmith API may return "Unknown" as max_severity
         # even when the scan completed cleanly with 0 vulnerabilities.
@@ -649,14 +663,14 @@ def _build_graph(api_key: str, owner: str, repo: str, refresh: bool = False,
         else:
             stats["Safe"] += 1
 
-    if shortcircuit_suspects:
+    if disagreements:
         log.warning(
-            "%d package(s) report 'Scan Detected Vulnerabilities' but resolved to clean — "
-            "the scan-detail short-circuit may be hiding findings. Re-run with %s=1 and diff "
-            "the graph to confirm. First few: %s",
-            len(shortcircuit_suspects),
-            DISABLE_SHORTCIRCUIT_ENV,
-            ", ".join(shortcircuit_suspects[:5]),
+            "%d package(s) report 'Scan Detected Vulnerabilities' on the package record but "
+            "returned no OSV advisories. The two come from different Cloudsmith subsystems "
+            "and can legitimately disagree while an advisory is withdrawn or a re-scan is "
+            "pending; a large or growing count is worth investigating. First few: %s",
+            len(disagreements),
+            ", ".join(disagreements[:5]),
         )
 
     # Shared-CVE edges
@@ -1368,7 +1382,7 @@ def vulnly_repo_report(owner: str, repo: str, request: Request, theme: str | Non
                     "vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}}
         counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
         for v in vulns:
-            sev = (v.get("severity") or "unknown").lower()
+            sev = osv_severity(v).lower()
             counts[sev] = counts.get(sev, 0) + 1
         total = sum(counts.values())
         status = "vulnerable" if total > 0 else "no_issues_found"
@@ -1640,12 +1654,12 @@ def _fetch_repo_vuln_summary(session, owner: str, slug: str, name: str) -> Works
                     stats["Safe"] += 1
                 total_cves += vuln_count
                 for v in vulns:
-                    cve_id = v.get("vulnerability_id") or v.get("cve_id") or v.get("identifier", "")
+                    # cve_id first, matching _cve_records: the per-database id
+                    # would file one CVE under several names across distros.
+                    cve_id = v.get("cve_id") or v.get("vulnerability_id") or v.get("id", "")
                     if not cve_id:
                         continue
-                    v_sev = v.get("severity", v.get("max_severity", "Unknown"))
-                    desc = v.get("description") or v.get("title") or v.get("summary", "")
-                    _merge_cve(cve_map, cve_id, v_sev, desc, meta["name"])
+                    _merge_cve(cve_map, cve_id, osv_severity(v), osv_description(v), meta["name"])
 
     for entry in cve_map.values():
         entry["packages"].sort()

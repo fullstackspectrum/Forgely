@@ -223,9 +223,10 @@ volumes:
 
 The image serves the frontend and the API from one origin, so there is no CORS
 to configure and no second container to run. Mount `/data` to keep the scan
-cache between runs: it is keyed on each package's scan completion time rather
-than a TTL, so a warm cache turns a cold build of several thousand packages
-into a local read.
+cache between runs: it is keyed on each package's scan completion time, so a
+warm cache turns a cold build of several thousand packages into a local read.
+Entries also expire after a day — the key catches a re-scan, but a newly
+published advisory against an unchanged package moves no timestamp.
 
 <details>
 <summary><b>Build the image yourself</b></summary>
@@ -430,7 +431,7 @@ Forgely/
 │   ├── main.py               # FastAPI app, graph construction, caching
 │   ├── cloudsmith.py         # Cloudsmith API client (packages, vulns, deps, org)
 │   ├── models.py             # Pydantic response models
-│   ├── cache.py              # Persistent scan cache (SQLite), keyed on scan time
+│   ├── cache.py              # Advisory cache (SQLite), keyed on scan time + age
 │   ├── compression.py        # Streaming gzip for the graph responses
 │   ├── perfstats.py          # Per-build request timing and cache instrumentation
 │   └── requirements.txt      # Python dependencies

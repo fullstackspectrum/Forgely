@@ -23,9 +23,21 @@ BUCKET_UNKNOWN = "other"
 
 
 def bucket_for(url: str) -> str:
-    """Classify a Cloudsmith URL into an endpoint family."""
-    path = url.split("/v1/", 1)[-1].strip("/")
-    parts = [p for p in path.split("/") if p]
+    """Classify a Cloudsmith URL into an endpoint family.
+
+    Both API versions are in use: the graph reads vulnerabilities from v2 and
+    everything else from v1. Splitting on v1 alone left every OSV call in the
+    unknown bucket, which is precisely the call this instrumentation exists to
+    account for.
+    """
+    version = ""
+    path = url
+    for marker in ("/v1/", "/v2/"):
+        if marker in url:
+            version = marker.strip("/")
+            path = url.split(marker, 1)[-1]
+            break
+    parts = [p for p in path.strip("/").split("/") if p]
     if not parts:
         return BUCKET_UNKNOWN
 
@@ -33,6 +45,9 @@ def bucket_for(url: str) -> str:
     n = len(rest)
 
     if head == "packages":
+        # v2: /packages/{slug_perm}/vulnerabilities/
+        if version == "v2" and n >= 2 and rest[1] == "vulnerabilities":
+            return "vulns.osv"
         if n >= 4 and rest[3] == "dependencies":
             return "packages.dependencies"
         return "packages.list"
