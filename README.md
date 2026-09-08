@@ -106,7 +106,7 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 └────────────────────────┬────────────────────────────────┘
                          │ HTTPS
 ┌────────────────────────▼────────────────────────────────┐
-│  Cloudsmith API  (api.cloudsmith.io/v1)                 │
+│  Cloudsmith API  (v1 packages & org · v2 OSV advisories)│
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -115,7 +115,7 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 | **Frontend** | React 18, TypeScript, Vite, Sigma.js v3 (WebGL), graphology, ForceAtlas2 |
 | **Backend** | Python 3.10+, FastAPI, uvicorn, requests, vulnly |
 | **Graph rendering** | Sigma.js with custom node programs: images, squares, hexagons, rings |
-| **Data source** | Cloudsmith REST API v1 |
+| **Data source** | Cloudsmith REST API — v1 for packages, dependencies and org data; v2 for OSV advisories |
 
 ---
 
@@ -144,7 +144,7 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 - **CVE search** — search by CVE ID or package name; matching nodes are highlighted in the graph
 - **Severity filter** — Critical / High / Medium / Low, multi-select: pick Critical *and* High to see both. No selection means every severity
 - **Status filters** — Vulnerable / Safe / Quarantined / Malware / Shared CVEs / Has dependencies, combined with AND or OR. "Safe" means *scanned and clean*, not merely "no findings recorded", so packages whose format cannot be scanned are excluded
-- **Visibility toggles** — show/hide: shared CVE edges, dependency nodes, unscanned packages, critical animation, malware animation
+- **Visibility toggles** — in Settings → General: shared CVE edges, dependencies, unsupported scans, critical animation, malware animation, and edge style
 - **Format filter** — click a format card in the repo panel to isolate packages of that format in the graph
 - **Workspace overview** — cross-repository SCA view: all repos in an organisation rendered as a single graph, with aggregate vulnerability stats, package format heatmap, severity breakdown, and cross-repo CVE search
 - **Layout switcher** — Force-directed (ForceAtlas2), Circular, Radial, Tree, Horizontal; edge style auto-switches to match layout
@@ -170,7 +170,7 @@ Combining SCA and CIEM in a single tool means you can cross-reference a vulnerab
 
 ### General
 
-- **Vulnly reports** — generate self-contained HTML vulnerability reports for any scanned package via [vulnly](https://pypi.org/project/vulnly/), opened in a new tab
+- **Vulnly reports** — self-contained HTML vulnerability reports via [vulnly](https://pypi.org/project/vulnly/), rendered from the OSV advisories the graph is already built from. Per package from the package panel, per repository from the repo panel; both download as a file and need no network access to read
 - **Workspace selector** — switch between Cloudsmith organisations; repository selector with per-namespace package counts
 - **API key management** — a Connection tab in Settings, not a separate dialog; shows the authorised user for the current credential, and validates the key against the Cloudsmith API before saving. Stored in the browser, never in the image
 - **Panel collapse** — left control panel can be fully collapsed for more graph space
@@ -287,7 +287,7 @@ For development, where Vite serves the frontend with hot reload and proxies
 - A **Cloudsmith API key** — [Generate one here](https://app.cloudsmith.com/user/settings/api/)
 
 ```bash
-git clone https://github.com/colinmoynes/Forgely.git
+git clone https://github.com/fullstackspectrum/Forgely.git
 cd Forgely
 ./start.sh
 ```
@@ -324,12 +324,28 @@ npm run dev
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLOUDSMITH_API_KEY` | Yes* | Cloudsmith API key (*can also be set via the in-app Connect modal) |
+| `CLOUDSMITH_API_KEY` | Yes* | Cloudsmith API key (*or enter it in the browser under Settings → Connection) |
 | `CLOUDSMITH_OWNER` | No | Default organisation slug (pre-populates the workspace selector) |
 | `CLOUDSMITH_REPO` | No | Default repository slug (pre-populates the repo selector) |
 | `CORS_ORIGINS` | No | Comma-separated allowed CORS origins (default: `http://localhost:3000`). Not needed in the container, where one origin serves both |
 | `FORGELY_CACHE_PATH` | No | Where the scan cache lives (container default: `/data/scans.db`) |
 | `FORGELY_STATIC_DIR` | No | Built frontend to serve. Set in the image; unset in development, where Vite serves it |
+
+<details>
+<summary><b>Tuning</b> — defaults are sized for a large workspace and rarely need changing</summary>
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FORGELY_SCAN_WORKERS` | `60` | Packages whose advisories are fetched concurrently during a graph build |
+| `FORGELY_PAGINATION_WORKERS` | `30` | Package-list pages fetched concurrently |
+| `FORGELY_DEPENDENCY_DENYLIST` | `alpine,npm,docker,generic,raw` | Comma-separated package formats to skip dependency lookups for, measured as always empty. Set it to an empty string to fetch for every format |
+| `FORGELY_PACKAGE_LIST_TTL` | `900` | Seconds a package list is reused across requests |
+| `FORGELY_MAX_CVE_CLIQUE` | `100` | Cap on packages joined by one shared CVE, so a ubiquitous advisory cannot draw a hairball |
+| `FORGELY_DISABLE_CACHE` | unset | Set to `1` to turn the persistent scan cache off entirely |
+| `FORGELY_CACHE_PRUNE_DAYS` | `90` | Age at which cached scan entries are pruned, when the cache is first opened |
+| `FORGELY_PERF_PAYLOAD` | unset | Set to `1` to attach per-build request and cache instrumentation to graph responses |
+
+</details>
 
 ---
 
@@ -342,7 +358,7 @@ npm run dev
 | `/api/namespaces` | GET | List Cloudsmith workspaces the key has access to |
 | `/api/repos/{owner}` | GET | List repositories for a workspace |
 | `/api/graph` | GET | SCA artifact graph for `?owner=&repo=` (5 min cache) |
-| `/api/graph/stream` | GET | Same graph as server-sent events, with build progress |
+| `/api/graph/stream` | GET | Same graph streamed as newline-delimited JSON, with build progress |
 | `/api/graph/refresh` | POST | Force re-fetch, bypassing cache |
 | `/api/cve/{owner}/{repo}/{slug}` | GET | Full CVE records for one package, descriptions included |
 | `/api/package/{owner}/{repo}/{slug}` | GET | Full metadata for one package: digests, tags, identifiers |
@@ -353,7 +369,7 @@ npm run dev
 | `/api/workspace-overview` | GET | Cross-repo SCA overview for `?owner=` (10 min cache) |
 | `/api/org-graph` | GET | CIEM identity graph for `?owner=` |
 | `/api/auth/validate` | POST | Validate a Cloudsmith API key |
-| `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | Generate HTML vulnerability report via [vulnly](https://pypi.org/project/vulnly/) |
+| `/api/vulnly-report/{owner}/{repo}/{slug}` | GET | HTML vulnerability report for one package, rendered from its OSV advisories via [vulnly](https://pypi.org/project/vulnly/) |
 | `/api/vulnly-repo-report/{owner}/{repo}` | GET | Same report across a whole repository |
 
 The three per-package endpoints are fetched on selection rather than inlined in
@@ -463,7 +479,6 @@ Forgely/
 │       │   ├── WorkspaceSelector.tsx        # Organisation selector
 │       │   ├── Legend.tsx                   # SCA graph legend
 │       │   ├── OrgLegend.tsx                # CIEM graph legend
-│       │   ├── ConnectModal.tsx             # API key connect/disconnect modal
 │       │   ├── SettingsDialog.tsx           # Theme and graph visibility settings
 │       │   ├── ChangelogModal.tsx           # CHANGELOG viewer, opened from the version
 │       │   ├── SeverityMark.tsx             # Severity as a shape in lists, as a node in keys
@@ -503,9 +518,6 @@ Forgely/
 │       └── index.css                  # Global styles
 │   ├── package.json
 │   └── vite.config.ts
-├── .claude/
-│   └── commands/
-│       └── commit-msg.md             # /commit-msg Claude Code skill
 ├── Dockerfile                        # Multi-stage build: frontend, then runtime
 ├── build-image.sh                    # Builds and tags from package.json; --push to publish
 ├── bump-version.sh                   # Bumps the version package.json and the image tag share
@@ -515,7 +527,6 @@ Forgely/
 ├── .env                              # Credentials (not committed)
 ├── assets/
 │   ├── brand/                        # Brand SVGs and the design tokens
-│   ├── img/
 │   └── readme/                       # README screenshots and brand lockups
 ├── CHANGELOG.md
 ├── USAGE.md

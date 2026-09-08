@@ -1,22 +1,6 @@
 # Changelog
 
-History was reset at v1.0.0-beta.12. Earlier beta entries tracked a codebase
-that has since been restructured, and describing the app as it stands is more
-useful than a trail of superseded notes. This entry is a full feature summary
-rather than a diff against beta.11.
-
-The in-app changelog reads this file, so keep the shape: `## version — date`
-(em dash), `### Section`, and `- ` bullets. Bullets outside a section are not
-rendered, and the modal prints bullet text literally, so leave out bold and
-backticks.
-
-## v1.0.0 — 8 September 2026
-
-### Changes
-
-- 
-
-## v1.0.0-beta.12 — 7 September 2026
+## v1.0.0 — September 2026
 
 ### SCA — Software Composition Analysis
 
@@ -28,12 +12,21 @@ backticks.
 - Attack path view from client tooling through the registry to a repository, package and CVE, with format-specific client examples
 - Per-CVE cards with severity, affected and fixed versions, and NVD and GitHub Advisory links
 - Most vulnerable packages listed per repository, clickable to jump to the node
-- Self-contained HTML vulnerability reports per package, generated through vulnly
+
+### Vulnerability data
+
+- Advisories read from Cloudsmith's v2 OSV endpoint: one flat record per finding rather than a scan blob whose shape varied by package format
+- Severity taken from Cloudsmith's resolved best_severity, which prefers the newer CVSS version
+- Self-contained HTML reports per package and per repository, generated through vulnly and downloaded straight from the panel
+- Reports render in-process from the same OSV advisories the graph is built from, so a report costs one extra request rather than three
+- Reports carry the theme the app is in, and a scanned-and-clean package gets a report saying so
 
 ### CIEM — Cloud Infrastructure Entitlement Management
 
 - Identity graph over repositories, members, service accounts, teams, entitlement tokens and upstream proxies
+- Each identity type has its own shape: tilted square for the workspace, square for repositories and entitlements, circle for members and teams, triangle for service accounts, hexagon for upstreams
 - Access and entitlement edges drawn as dashed curves, so permission paths read differently from structural ones
+- Repositories sharing an upstream proxy are linked, surfacing a common supply chain choke-point
 - Node panel showing role, email, permissions, status, team membership and every connected relationship grouped by edge type
 - Filter by node type with live counts
 - Prefixed search: repo, user, service, team, entitlement and upstream, or free text
@@ -57,13 +50,16 @@ backticks.
 
 - Every repository in a workspace as a single cross-repository graph
 - Aggregate vulnerability statistics, package format heatmap and severity breakdown
-- Cross-repository CVE search
+- Cross-repository CVE search, answering which repositories a given advisory reaches
 - Connected repositories rendered as a distinct directional edge, and listed in the repository panel
+- Right-click a repository to load its full graph
 - Same central node treatment, cursor behaviour and controls as the repository graph
 
 ### Graph rendering
 
 - WebGL rendering through Sigma.js, holding a smooth frame rate into the thousands of nodes
+- Fill encodes distance from the selected package, not severity, so blast radius is legible at a glance
+- Severity is a ring around the node, one width for every level, with a matching shape in dense lists so the level survives greyscale
 - Plated node labels that stay legible against node imagery in both themes
 - Hover tooltips carrying package format and, for container images, architecture
 - Quarantine badge drawn above the selection ring rather than behind it
@@ -71,6 +67,7 @@ backticks.
 - Node sizes scaled against available space on large repositories, replacing the browser zoom-out this needed before
 - Fit graph control centres on the repository and zooms to show every node
 - Five layouts: force-directed, circular, radial, tree and horizontal, with edge style following the layout
+- Light, Auto and Dark themes, Auto following the system setting
 
 ### Details panel
 
@@ -93,6 +90,17 @@ backticks.
 - Edges are retained through filtering
 - Format filter isolates one package format from the repository panel
 
+### Performance
+
+- The graph streams as it builds, so packages appear while scans are still being collected instead of after
+- Persistent scan cache keyed on each package's scan completion time, so it invalidates itself on a re-scan rather than on a timer
+- Scan and pagination work runs in parallel pools, both tunable by environment variable
+- Package pages are fetched speculatively rather than one after another
+- CVE descriptions are served per package on selection instead of inlined: they were 21.5 MB of a 29.2 MB graph payload and none of it is visible until a node is clicked
+- Descriptions in the workspace overview are truncated to summary length, taking that response from 2.36 MB to 0.42 MB gzipped
+- Graph responses are gzipped as they stream
+- Per-build instrumentation records request counts, timings and cache hit rates
+
 ### Deployment
 
 - Distroless container image on Chainguard, running as a non-root user with no shell or package manager
@@ -100,15 +108,16 @@ backticks.
 - Single container: the backend serves the built frontend, so there is no CORS to configure
 - No API key is baked into the image; keys are entered in the browser under Settings, or supplied server-side by environment variable
 - Multi-architecture image for linux/amd64 and linux/arm64, covering Windows through Docker Desktop
-- Scan cache on a mounted volume, keyed on each package's scan completion time rather than a TTL, turning a cold build of several thousand packages into a local read
+- Scan cache on a mounted volume, turning a cold build of several thousand packages into a local read
 - build-image.sh builds and pushes with the tag taken from package.json and full OCI annotations
 - bump-version.sh bumps the version that the footer, the backend and the image tag all read
 
 ### Settings and connection
 
-- Connection moved into Settings as its own tab, replacing the separate dialog
+- Connection lives in Settings as its own tab, replacing the separate dialog
 - Settings shows the authorised user for the current credential
 - Connection indicator reads green when connected
-- API key validated against Cloudsmith before it is saved
+- API key validated against Cloudsmith before it is saved, and stored in the browser rather than the image
 - Workspace and repository selectors with per-namespace package counts
+- Visibility toggles for shared CVE edges, dependencies, unsupported scans, and the critical and malware animations
 - Left control panel collapses for more graph space
