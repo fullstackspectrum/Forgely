@@ -1,6 +1,10 @@
 # Keep the build context small and, more importantly, keep credentials and
 # local state out of the image.
+#
 .env
+.env.*
+**/.env
+**/.env.*
 .git
 .gitignore
 

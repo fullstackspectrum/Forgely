@@ -1,5 +1,10 @@
-# Environment & secrets
+# Environment & secrets. Matched at every depth: a bare `.env` covers the root
+# file only, and a stray backend/.env holding a real key would be invisible
+# here and copied into the image.
 .env
+.env.*
+**/.env
+**/.env.*
 
 # Python
 __pycache__/
