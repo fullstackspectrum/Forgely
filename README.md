@@ -502,8 +502,6 @@ Forgely/
 │       └── index.css                  # Global styles
 │   ├── package.json
 │   └── vite.config.ts
-├── docs/
-│   └── performance-design.md         # Measured performance work and its results
 ├── .claude/
 │   └── commands/
 │       └── commit-msg.md             # /commit-msg Claude Code skill
