@@ -10,6 +10,12 @@ The in-app changelog reads this file, so keep the shape: `## version — date`
 rendered, and the modal prints bullet text literally, so leave out bold and
 backticks.
 
+## v1.0.0 — 8 September 2026
+
+### Changes
+
+- 
+
 ## v1.0.0-beta.12 — 7 September 2026
 
 ### SCA — Software Composition Analysis
