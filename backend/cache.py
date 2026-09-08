@@ -4,12 +4,19 @@ perf/05 of docs/performance-design.md.
 
 WHAT IS CACHED, AND WHY IT IS SAFE
 ----------------------------------
-Vulnerability scan results, keyed on the package's ``security_scan_completed_at``
-timestamp. A completed scan is immutable — its findings never change — so an
-entry keyed on the completion time can be kept indefinitely without a TTL.
-Invalidation is automatic rather than time-based: when Cloudsmith re-scans a
-package the timestamp moves, the key changes, and the old entry is simply never
-read again.
+Vulnerability advisories, keyed on the package's ``security_scan_completed_at``
+timestamp. When Cloudsmith re-scans a package that timestamp moves, the key
+changes, and the old entry is never read again.
+
+That key alone used to be sufficient, because a completed scan is immutable.
+It is no longer sufficient on its own. Since the switch to the v2 OSV endpoint
+the findings are advisories rather than the output of one scan run, and the
+advisory set for an unchanged package changes on its own: a CVE published today
+against a version scanned last month appears without the scan timestamp moving.
+Nothing cheap detects that — the advisory ``modified`` field is inside the very
+response we are trying to avoid fetching — so entries also expire by age. The
+key still does the precise invalidation; the age bound only covers what the key
+cannot see.
 
 Crucially that timestamp arrives on the *package list* response, which the build
 already fetches. So a warm build can skip the per-package scan call entirely,
@@ -41,7 +48,14 @@ log = logging.getLogger("forgely.cache")
 
 CACHE_PATH_ENV = "FORGELY_CACHE_PATH"
 CACHE_DISABLE_ENV = "FORGELY_DISABLE_CACHE"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Beyond this age an entry is ignored, however current its scan timestamp.
+# This is the bound on how long a newly published advisory can stay invisible
+# on a warm cache. A day keeps the rebuild cost negligible — only packages
+# actually re-read pay for it, one request each — while keeping the window
+# comfortably shorter than the daily rhythm most teams look at this on.
+MAX_ENTRY_AGE_SECONDS = 24 * 60 * 60
 
 
 def default_cache_path() -> pathlib.Path:
@@ -106,8 +120,8 @@ class ScanCache:
         k = self.key(owner, repo, slug, completed_at)
         with self._lock:
             row = self._conn.execute(
-                "SELECT payload FROM scans WHERE key = ? AND version = ?",
-                (k, SCHEMA_VERSION),
+                "SELECT payload FROM scans WHERE key = ? AND version = ? AND written_at > ?",
+                (k, SCHEMA_VERSION, time.time() - MAX_ENTRY_AGE_SECONDS),
             ).fetchone()
             if row is None:
                 self.misses += 1

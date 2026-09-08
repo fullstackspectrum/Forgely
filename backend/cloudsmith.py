@@ -90,35 +90,8 @@ def connection_pool_size() -> int:
     """
     return max(CONNECTION_POOL_SIZE, scan_workers(), pagination_workers())
 
+
 SEVERITY_RANK = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-
-# How many prior scans to consult when the latest yields no findings. The walk
-# was unbounded before perf/03: a package retaining N scans could cost N-1
-# extra detail round-trips to resurface findings the latest scan reports as
-# resolved. One is enough to cover an API that lags on the newest record.
-HISTORICAL_SCAN_FALLBACK = 1
-
-# Escape hatch for the perf/03 short-circuit. Set to 1/true/yes to restore the
-# pre-perf/03 behaviour of always fetching scan details.
-#
-# The short-circuit was validated exhaustively, but on a single workspace: all
-# 1,887 scannable packages on the measured workspace, zero counterexamples
-# (docs/performance-design.md §8.7). Whether every Cloudsmith account populates
-# num_vulnerabilities as reliably is not something one workspace can establish.
-# Because a wrong answer here hides security findings rather than merely slowing
-# things down, the old path stays reachable without a redeploy — run a build
-# with this set, diff the graph, and the question is settled for that account.
-DISABLE_SHORTCIRCUIT_ENV = "FORGELY_DISABLE_SCAN_SHORTCIRCUIT"
-
-
-def scan_shortcircuit_enabled() -> bool:
-    """Whether the perf/03 detail-fetch short-circuit is active.
-
-    Read lazily on every call, never at import: ``main`` imports this module
-    before it calls ``load_dotenv()``, so a module-level getenv would miss a
-    value set in .env entirely.
-    """
-    return os.getenv(DISABLE_SHORTCIRCUIT_ENV, "").strip().lower() not in ("1", "true", "yes")
 
 # ──────────────────────────────────────────────────────────────
 #  Dependency-fetch gating (perf/02)
@@ -637,153 +610,125 @@ def fetch_scan_details(session: requests.Session, owner: str, repo: str, slug: s
         raise
 
 
-def _extract_vulns(data: dict | list) -> list[dict]:
-    if isinstance(data, list):
-        return data
-    if not isinstance(data, dict):
-        return []
-    for key in ("vulnerabilities", "results", "scan_results", "security_vulnerabilities"):
-        val = data.get(key)
-        if isinstance(val, list) and val:
-            return val
-    scan_obj = data.get("scan")
-    if isinstance(scan_obj, dict):
-        for key in ("vulnerabilities", "results", "security_vulnerabilities"):
-            val = scan_obj.get(key)
-            if isinstance(val, list) and val:
-                return val
-    scans_list = data.get("scans")
-    if isinstance(scans_list, list):
-        all_vulns = []
-        for scan_entry in scans_list:
-            if isinstance(scan_entry, dict):
-                if any(k in scan_entry for k in ("severity", "cve_id", "name", "max_severity", "vuln_id")):
-                    all_vulns.append(scan_entry)
-                for key in ("vulnerabilities", "results", "scan_results"):
-                    val = scan_entry.get(key)
-                    if isinstance(val, list) and val:
-                        all_vulns.extend(val)
-        if all_vulns:
-            return all_vulns
-    for key, val in data.items():
-        if isinstance(val, list) and val and isinstance(val[0], dict):
-            if any(k in val[0] for k in ("severity", "cve_id", "name", "max_severity", "identifier")):
-                return val
-    return []
+# ---------------------------------------------------------------------------
+# Vulnerabilities: OSV advisories (v2)
+#
+# Cloudsmith exposes two vulnerability APIs. The v1 endpoint returns *scans* —
+# one record per scan run, with the findings nested somewhere inside a shape
+# that varied by package format, which is why reading it took a fallback ladder
+# and up to three round-trips per package.
+#
+# v2 returns the OSV advisories themselves: one flat, documented record per
+# finding, under a fixed {"results": [...]} envelope, ordered by severity.
+#
+# The vulnly report still reads v1. It pipes Cloudsmith's raw scan payload into
+# the vulnly CLI, which understands that shape and no other.
+# ---------------------------------------------------------------------------
+
+V2_BASE_URL = "https://api.cloudsmith.io/v2"
+
+# The server caps page_size at 500 and truncates silently above it: measured,
+# page_size=1000 returned 500 rows and reported the same page total as 500.
+OSV_PAGE_SIZE = 500
+
+# A bound on paging, in case the page-total header is ever wrong. The heaviest
+# package measured carried 4,000 advisories, which is 8 pages at the cap.
+OSV_MAX_PAGES = 40
+
+# Statuses that mean "no advisories for this package" rather than a fault.
+# 402 is included because a workspace without the entitlement answers with it,
+# and one such repository must not abort a whole graph build.
+_OSV_EMPTY_STATUSES = (400, 402, 403, 404)
+
+
+def fetch_package_osv(session: requests.Session, slug_perm: str) -> list[dict]:
+    """Every OSV advisory Cloudsmith holds for one package.
+
+    Paged sequentially on purpose. The graph build already runs scan_workers()
+    packages at once, so paging concurrently here would multiply against that
+    pool rather than add to it — and all but the largest images fit in one page.
+    """
+    url = f"{V2_BASE_URL}/packages/{slug_perm}/vulnerabilities/"
+
+    def _page(number: int) -> tuple[list[dict], int]:
+        try:
+            body, headers = _api_get_full(
+                session, url, params={"page": number, "page_size": OSV_PAGE_SIZE}
+            )
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status in _OSV_EMPTY_STATUSES:
+                if status == 402:
+                    log.warning(
+                        "Vulnerability data is not included in the plan for this "
+                        "workspace – reporting %s as clean", slug_perm,
+                    )
+                return [], 0
+            raise
+        results = body.get("results", []) if isinstance(body, dict) else []
+        try:
+            total = int(headers.get("X-Pagination-PageTotal") or 1)
+        except (TypeError, ValueError):
+            total = 1
+        return results, total
+
+    vulns, total_pages = _page(1)
+    for number in range(2, min(total_pages, OSV_MAX_PAGES) + 1):
+        page, _ = _page(number)
+        if not page:
+            break
+        vulns.extend(page)
+    return vulns
+
+
+def osv_severity(vuln: dict) -> str:
+    """One advisory's severity, in the vocabulary the rest of the app uses.
+
+    OSV carries several scores per advisory — a CVSS vector, sometimes a vendor
+    label — and Cloudsmith resolves them into ``best_severity``, preferring the
+    newer CVSS version. Its ``label`` is already normalised to critical / high /
+    medium / low; every one of the 608 advisories measured had one. Title-cased
+    to meet SEVERITY_RANK and the severity names the frontend colours by.
+    """
+    for key in ("best_severity", "highest_severity"):
+        label = ((vuln.get(key) or {}).get("label") or "").strip()
+        if label:
+            return label.title()
+    return "Unknown"
+
+
+def osv_description(vuln: dict) -> str:
+    """An advisory's prose.
+
+    ``details`` holds it. ``summary`` and ``title`` are the fields the OSV
+    schema nominates for exactly this, but both were null in 607 of the 608
+    advisories measured, so they are fallbacks rather than the first choice.
+    """
+    return (vuln.get("details") or vuln.get("title") or vuln.get("summary") or "").strip()
 
 
 def get_package_vulnerabilities(
     session: requests.Session, owner: str, repo: str, slug: str
 ) -> tuple[str | None, int, list[dict]]:
-    scans = fetch_vulnerability_scans(session, owner, repo, slug)
-    if not scans:
-        return None, 0, []
+    """(max severity, finding count, advisories) for one package.
 
-    latest = scans[0]
-    for s in scans:
-        if s.get("created_at", "") > latest.get("created_at", ""):
-            latest = s
-
-    api_count = latest.get("num_vulnerabilities") or latest.get("num_security_vulnerabilities") or 0
-    max_sev = latest.get("max_severity")
-
-    vulns = _extract_vulns(latest)
-
-    # perf/03: a scan that reports zero vulnerabilities, carries no usable
-    # severity, and embeds no inline findings has nothing for the detail
-    # endpoint to add — so skip the round-trip. This is the single largest
-    # remaining cost in the build: 1,887 detail calls, ~389s of network time.
-    #
-    # Validated against every scannable package on the language repository BEFORE
-    # implementing (docs/performance-design.md §8.7). Both the list and the
-    # detail were fetched for all 1,887; 1,863 qualified for this early return
-    # and not one of them yielded a vulnerability from the detail fetch. The 24
-    # that did not qualify all returned findings, so the rule keeps precisely
-    # the packages that matter.
-    #
-    # The value returned here is what the full path produces for these inputs:
-    # every branch below leaves vulns empty and normalises max_sev to "None".
-    if (
-        not vulns
-        and not api_count
-        and max_sev in (None, "", "None", "Unknown")
-        and scan_shortcircuit_enabled()
-    ):
+    ``owner`` and ``repo`` are unused: v2 addresses a package by its slug_perm
+    alone, which is what ``slug`` already holds throughout this codebase. They
+    are kept in the signature so the call sites and the scan cache key, which
+    are all keyed on the three together, need no change.
+    """
+    vulns = fetch_package_osv(session, slug)
+    if not vulns:
+        # "None" the string, not None. Callers distinguish "scanned and clean"
+        # from "never scanned", and packages that cannot be scanned never reach
+        # here — _build_graph seeds those directly.
         return "None", 0, []
 
-    if not vulns:
-        scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
-        if scan_id:
-            details = fetch_scan_details(session, owner, repo, slug, str(scan_id))
-            if details:
-                vulns = _extract_vulns(details)
-                if not max_sev:
-                    max_sev = details.get("max_severity")
-                if not api_count:
-                    api_count = details.get("num_vulnerabilities", 0)
+    max_rank, max_sev = 0, "Unknown"
+    for vuln in vulns:
+        severity = osv_severity(vuln)
+        rank = SEVERITY_RANK.get(severity, 0)
+        if rank > max_rank:
+            max_rank, max_sev = rank, severity
 
-    # perf/03: bound the historical fallback. Previously unbounded — a package
-    # retaining N scans could issue up to N-1 extra detail calls, each a full
-    # round-trip, to surface findings the *latest* scan says are gone.
-    #
-    # Prior scans are now considered newest-first (the old loop walked the list
-    # in arbitrary API order) and capped at HISTORICAL_SCAN_FALLBACK.
-    #
-    # Every package on the language repository has exactly one scan, so this path does
-    # not execute there. This is a bound on worst-case behaviour for workspaces
-    # that do retain history, not a saving on the measured data.
-    if not vulns and len(scans) > 1:
-        prior = sorted(
-            (s for s in scans if s is not latest),
-            key=lambda s: s.get("created_at", ""),
-            reverse=True,
-        )
-        for s in prior[:HISTORICAL_SCAN_FALLBACK]:
-            vulns = _extract_vulns(s)
-            if vulns:
-                break
-            sid = s.get("identifier") or s.get("slug_perm") or s.get("id")
-            if sid:
-                d = fetch_scan_details(session, owner, repo, slug, str(sid))
-                if d:
-                    vulns = _extract_vulns(d)
-                    if vulns:
-                        break
-
-    if not vulns and (api_count or 0) > 0 and latest.get("max_severity"):
-        embedded = []
-        for s in scans:
-            sev = s.get("max_severity") or s.get("severity")
-            if sev:
-                embedded.append({
-                    "severity": sev,
-                    "cve_id": s.get("cve_id", ""),
-                    "name": s.get("name", ""),
-                    "description": s.get("description", s.get("summary", "")),
-                    "url": s.get("url", ""),
-                })
-        if embedded:
-            vulns = embedded
-
-    if not api_count and vulns:
-        api_count = len(vulns)
-
-    if not max_sev and vulns:
-        best_rank = 0
-        for v in vulns:
-            v_sev = v.get("severity", v.get("max_severity", ""))
-            rank = SEVERITY_RANK.get(v_sev, 0)
-            if rank > best_rank:
-                best_rank = rank
-                max_sev = v_sev
-
-    # If scans existed but no severity was determined, the scan completed
-    # cleanly.  Return "None" (string) so callers can distinguish from
-    # "no scans at all" (Python None).
-    # The Cloudsmith API may also return "Unknown" as max_severity for scans
-    # that completed with 0 vulnerabilities – normalise that to "None" too.
-    api_count_int = int(api_count) if api_count is not None else 0
-    if not max_sev or (max_sev == "Unknown" and api_count_int == 0 and not vulns):
-        max_sev = "None"
-
-    return max_sev, api_count_int, vulns
+    return max_sev, len(vulns), vulns
