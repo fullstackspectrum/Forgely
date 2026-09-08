@@ -589,27 +589,6 @@ def fetch_dependencies(
         return []
 
 
-def fetch_vulnerability_scans(session: requests.Session, owner: str, repo: str, slug: str) -> list[dict]:
-    url = f"{BASE_URL}/vulnerabilities/{owner}/{repo}/{slug}/"
-    try:
-        data = _api_get(session, url)
-        return data if isinstance(data, list) else data.get("results", [data]) if isinstance(data, dict) else []
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code in (404, 400):
-            return []
-        raise
-
-
-def fetch_scan_details(session: requests.Session, owner: str, repo: str, slug: str, scan_id: str) -> dict:
-    url = f"{BASE_URL}/vulnerabilities/{owner}/{repo}/{slug}/{scan_id}/"
-    try:
-        return _api_get(session, url)
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
-            return {}
-        raise
-
-
 # ---------------------------------------------------------------------------
 # Vulnerabilities: OSV advisories (v2)
 #
@@ -621,8 +600,8 @@ def fetch_scan_details(session: requests.Session, owner: str, repo: str, slug: s
 # v2 returns the OSV advisories themselves: one flat, documented record per
 # finding, under a fixed {"results": [...]} envelope, ordered by severity.
 #
-# The vulnly report still reads v1. It pipes Cloudsmith's raw scan payload into
-# the vulnly CLI, which understands that shape and no other.
+# Nothing reads v1 any more. The vulnly report was the last caller, and it now
+# renders this feed through vulnly's cloudsmith-osv source.
 # ---------------------------------------------------------------------------
 
 V2_BASE_URL = "https://api.cloudsmith.io/v2"

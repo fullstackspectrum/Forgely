@@ -6,13 +6,24 @@ import json
 import logging
 import os
 import pathlib
-import subprocess
-import sys
-import tempfile
 import queue
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# vulnly renders its reports in-process rather than through its CLI. The app
+# already holds the advisories a report is made of, so shelling out would mean
+# re-serialising them through a pipe into a second interpreter — and vulnly's
+# cloudsmith-osv source reads exactly the v2 shape the graph is built from.
+#
+# Imported defensively so a deployment missing the dependency still serves
+# every other endpoint; the two report routes answer 500 instead.
+try:
+    import vulnly
+    VULNLY_IMPORT_ERROR = ""
+except ImportError as exc:  # pragma: no cover - depends on the install
+    vulnly = None
+    VULNLY_IMPORT_ERROR = str(exc)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -39,9 +50,7 @@ from cloudsmith import (
     fetch_repo_privileges,
     fetch_repo_upstreams,
     fetch_repos,
-    fetch_scan_details,
     fetch_team_members,
-    fetch_vulnerability_scans,
     get_package_vulnerabilities,
     osv_description,
     osv_severity,
@@ -1333,13 +1342,30 @@ def validate_api_key(request: Request):
 
 
 def _report_theme(theme: str | None) -> str:
-    """Clamp a requested report theme to what vulnly accepts.
+    """Clamp a requested report theme to what vulnly renders.
 
-    vulnly 1.0.0 takes --theme {dark,light} and defaults to dark. Anything else
-    is an argparse error, so an unexpected query value would surface to the
-    user as a failed report rather than a wrong colour.
+    vulnly has two themes, dark and light, and treats every other value as
+    dark. The frontend sends whatever the app is currently themed as, so the
+    clamp keeps an unexpected value a colour choice rather than a surprise.
     """
     return "light" if (theme or "").lower() == "light" else "dark"
+
+
+def _render_report(build) -> Response:
+    """Run one vulnly render, turning a failure into an HTTP error.
+
+    Rendering is pure string work on data already in memory, so the only
+    failures left are programming errors and a malformed advisory; either way
+    the caller gets a 500 rather than a traceback.
+    """
+    if vulnly is None:
+        raise HTTPException(status_code=500, detail=f"vulnly is not installed: {VULNLY_IMPORT_ERROR}")
+    try:
+        html = build()
+    except Exception as exc:  # noqa: BLE001 - any render failure is a 500
+        log.warning("vulnly report generation failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"vulnly failed: {exc}") from exc
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/vulnly-repo-report/{owner}/{repo}")
@@ -1347,8 +1373,8 @@ def vulnly_repo_report(owner: str, repo: str, request: Request, theme: str | Non
     """Generate an HTML repo-level vulnerability summary using vulnly.
 
     Fetches all packages in the repo, collects their latest scan results in
-    parallel, assembles the Cloudsmith repo-summary envelope, and streams the
-    rendered HTML back to the caller.
+    parallel, assembles the Cloudsmith repo-summary envelope, and returns the
+    rendered HTML to the caller.
     """
     api_key = _get_api_key(request)
     session = create_session(api_key)
@@ -1394,86 +1420,46 @@ def vulnly_repo_report(owner: str, repo: str, request: Request, theme: str | Non
         for fut in as_completed(futures):
             pkg_summaries.append(fut.result())
 
-    payload = json.dumps({"data": {"owner": owner, "repository": repo, "packages": pkg_summaries}}).encode("utf-8")
+    payload = {"data": {"owner": owner, "repository": repo, "packages": pkg_summaries}}
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_path = os.path.join(tmp, "report.html")
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith",
-                 "-o", out_path, "--theme", _report_theme(theme)],
-                input=payload,
-                capture_output=True,
-                timeout=120,
-                check=False,
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=500, detail=f"vulnly is not installed: {exc}") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise HTTPException(status_code=504, detail="vulnly repo report generation timed out.") from exc
+    def _build() -> str:
+        summary = vulnly.normalize_cloudsmith_repo_summary(payload)
+        return vulnly.generate_repo_summary_html(summary, theme=_report_theme(theme))
 
-        if proc.returncode != 0 or not os.path.exists(out_path):
-            err = proc.stderr.decode("utf-8", errors="replace")[:1000]
-            log.warning("vulnly repo report failed (rc=%s): %s", proc.returncode, err)
-            raise HTTPException(status_code=500, detail=f"vulnly failed: {err.strip() or 'unknown error'}")
-
-        with open(out_path, "rb") as f:
-            html_bytes = f.read()
-
-    return Response(content=html_bytes, media_type="text/html; charset=utf-8")
+    return _render_report(_build)
 
 
 @app.get("/api/vulnly-report/{owner}/{repo}/{slug}")
 def vulnly_report(owner: str, repo: str, slug: str, request: Request, theme: str | None = None):
     """Generate an HTML vulnerability report for a package using vulnly.
 
-    Fetches the latest Cloudsmith vulnerability scan for the package, wraps
-    it in the expected `{"data": ...}` envelope, pipes it through the
-    `vulnly` CLI, and returns the rendered HTML inline.
+    Renders the same v2 OSV advisories the graph is built from, through
+    vulnly's cloudsmith-osv source. The feed is advisory data and names no
+    package, so the identity comes from the package record and the URL.
     """
     api_key = _get_api_key(request)
     session = create_session(api_key)
 
-    scans = fetch_vulnerability_scans(session, owner, repo, slug)
-    if not scans:
-        raise HTTPException(status_code=404, detail="No vulnerability scan available for this package.")
+    _max_sev, _count, vulns = get_package_vulnerabilities(session, owner, repo, slug)
+    pkg = fetch_package(session, owner, repo, slug)
 
-    latest = max(scans, key=lambda s: s.get("created_at", ""))
-    scan_id = latest.get("identifier") or latest.get("slug_perm") or latest.get("id")
+    # An empty advisory list is a clean package, not a missing one, so it still
+    # gets a report. A format Cloudsmith cannot scan is the exception: it has no
+    # findings for the same reason it has no scan, and calling that clean would
+    # be a false all-clear. "Not supported" is the same marker the graph build
+    # treats as unscannable.
+    if not vulns and "not supported" in (pkg.get("security_scan_status") or "").lower():
+        raise HTTPException(status_code=404, detail="This package format is not scanned by Cloudsmith.")
 
-    details: dict = {}
-    if scan_id:
-        details = fetch_scan_details(session, owner, repo, slug, str(scan_id)) or {}
-    if not details:
-        details = latest
+    def _build() -> str:
+        data = vulnly.normalize_cloudsmith_osv({"results": vulns})
+        data["package_name"] = pkg.get("name") or slug
+        data["package_version"] = pkg.get("version") or "Unknown"
+        data["repository"] = f"{owner}/{repo}"
+        data["scanner_source"] = vulnly.SOURCE_LABELS["cloudsmith-osv"]
+        return vulnly.generate_html(data, theme=_report_theme(theme))
 
-    payload = json.dumps({"data": details}).encode("utf-8")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        out_path = os.path.join(tmp, "report.html")
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "vulnly", "-", "--source", "cloudsmith",
-                 "-o", out_path, "--theme", _report_theme(theme)],
-                input=payload,
-                capture_output=True,
-                timeout=60,
-                check=False,
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=500, detail=f"vulnly is not installed: {exc}") from exc
-        except subprocess.TimeoutExpired as exc:
-            raise HTTPException(status_code=504, detail="vulnly report generation timed out.") from exc
-
-        if proc.returncode != 0 or not os.path.exists(out_path):
-            err = proc.stderr.decode("utf-8", errors="replace")[:1000]
-            log.warning("vulnly failed (rc=%s): %s", proc.returncode, err)
-            raise HTTPException(status_code=500, detail=f"vulnly failed: {err.strip() or 'unknown error'}")
-
-        with open(out_path, "rb") as f:
-            html = f.read()
-
-    return Response(content=html, media_type="text/html; charset=utf-8")
+    return _render_report(_build)
 
 
 # ──────────────────────────────────────────────────────────────
