@@ -530,6 +530,7 @@ Forgely/
 ├── CHANGELOG.md
 ├── USAGE.md
 ├── LICENSE
+├── NOTICE
 └── README.md
 ```
 
@@ -537,4 +538,4 @@ Forgely/
 
 ## License
 
-See [LICENSE](LICENSE).
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
