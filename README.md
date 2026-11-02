@@ -7,6 +7,12 @@
 
 **From artifact to blast radius.**
 
+[![Docker image version](https://img.shields.io/docker/v/fullstackspectrum/forgely?sort=semver&logo=docker&label=version)](https://hub.docker.com/r/fullstackspectrum/forgely)
+[![Docker pulls](https://img.shields.io/docker/pulls/fullstackspectrum/forgely?logo=docker)](https://hub.docker.com/r/fullstackspectrum/forgely)
+[![Image size](https://img.shields.io/docker/image-size/fullstackspectrum/forgely?sort=semver&logo=docker)](https://hub.docker.com/r/fullstackspectrum/forgely/tags)
+[![License](https://img.shields.io/github/license/fullstackspectrum/Forgely)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/fullstackspectrum/Forgely)](https://github.com/fullstackspectrum/Forgely/commits/main)
+
 ---
 
 > [!CAUTION]
