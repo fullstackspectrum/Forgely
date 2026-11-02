@@ -26,6 +26,15 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --user -r requirements.txt
 
+# vulnly renders the reports and should always be its latest release. The layer
+# above is cached on requirements.txt, which a new vulnly release does not
+# change, so it gets a layer of its own keyed on the version: build-image.sh
+# passes the newest release from PyPI, and only a new one rebuilds this layer.
+# Without the arg (a plain `docker build`) it upgrades to whatever is newest
+# when the layer is first built.
+ARG VULNLY_VERSION
+RUN pip install --no-cache-dir --user --upgrade "vulnly${VULNLY_VERSION:+==$VULNLY_VERSION}"
+
 RUN mkdir -p /home/nonroot/data
 
 # ---------------------------------------------------------------------------

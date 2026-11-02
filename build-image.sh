@@ -89,6 +89,24 @@ fi
 [[ -n "$VERSION" ]] || { echo "could not read version from $PKG" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
+# vulnly, always its newest release
+#
+# Passed to the Dockerfile as a build arg, which is what makes a new release
+# reach the image: the arg changes, so the vulnly layer rebuilds instead of
+# being served from cache. Refused rather than guessed if PyPI cannot be
+# reached, since building on without it would quietly ship a cached version.
+# Set VULNLY_VERSION to pin one deliberately.
+# ---------------------------------------------------------------------------
+if [[ -z "${VULNLY_VERSION:-}" ]]; then
+  VULNLY_VERSION="$(curl -fsS --max-time 15 https://pypi.org/pypi/vulnly/json 2>/dev/null |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["info"]["version"])' 2>/dev/null)" || true
+fi
+[[ -n "${VULNLY_VERSION:-}" ]] || {
+  echo "could not resolve the latest vulnly from PyPI; set VULNLY_VERSION to build anyway" >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
 # Provenance for the annotations
 # ---------------------------------------------------------------------------
 REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -184,6 +202,7 @@ PLATFORM_ARGS=()
 # base is reused indefinitely and the image ships whatever OS packages were
 # current when it was first pulled, however many CVEs have been fixed since.
 CMD=(docker buildx build --pull
+  --build-arg "VULNLY_VERSION=${VULNLY_VERSION}"
   "${TAG_ARGS[@]}"
   ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"}
   "${ANNOTATION_ARGS[@]}"
@@ -194,6 +213,7 @@ CMD=(docker buildx build --pull
 echo "Forgely ${VERSION}"
 echo "  tags:      ${PREFIX}:${VERSION}$($TAG_LATEST && echo ", ${PREFIX}:latest")"
 echo "  revision:  ${REVISION}"
+echo "  vulnly:    ${VULNLY_VERSION}"
 echo "  platforms: ${PLATFORMS:-host}"
 echo "  output:    $($PUSH && echo push || echo "load into local Docker")"
 echo
