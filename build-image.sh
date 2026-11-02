@@ -180,7 +180,10 @@ PLATFORM_ARGS=()
 
 # `${a[@]+"${a[@]}"}` rather than `"${a[@]}"`: under `set -u` an empty array is
 # an unbound variable on bash 3.2, which is the bash macOS ships.
-CMD=(docker buildx build
+# --pull: the bases are floating `:latest` tags. Without it a locally cached
+# base is reused indefinitely and the image ships whatever OS packages were
+# current when it was first pulled, however many CVEs have been fixed since.
+CMD=(docker buildx build --pull
   "${TAG_ARGS[@]}"
   ${PLATFORM_ARGS[@]+"${PLATFORM_ARGS[@]}"}
   "${ANNOTATION_ARGS[@]}"
