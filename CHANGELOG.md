@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.2 — 2 November 2026
+
+### Build
+
+- Image builds always install the newest vulnly release, so report fixes in vulnly reach the image without waiting for a dependency change to rebuild the cached layer
+- The vulnly version in an image is shown at build time, and a build refuses to go ahead if it cannot check PyPI for the latest
+
 ## v1.0.1 — 2 November 2026
 
 ### Security
