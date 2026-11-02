@@ -49,8 +49,8 @@ Package details
 Package Attack Path
 ![Example – Attack Path](assets/readme/example_package_attack_path.jpg)
 
-Dependancy tracking
-![Example – Dependancies](assets/readme/example_dependancy.jpg)
+Dependency tracking
+![Example – Dependencies](assets/readme/example_dependancy.jpg)
 
 CIEM graph
 ![Example – CIEM Graph](assets/readme/example_ciem.jpg)
