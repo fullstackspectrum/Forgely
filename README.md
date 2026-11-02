@@ -1,17 +1,21 @@
 
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/forgely-lockup-reversed.svg">
-  <img src="assets/readme/forgely-lockup.svg" alt="Forgely" width="280">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/forgely-lockup-reversed.svg">
+    <img src="assets/readme/forgely-lockup.svg" alt="Forgely" width="280">
+  </picture>
+</p>
 
-**From artifact to blast radius.**
+<p align="center"><strong>From artifact to blast radius.</strong></p>
 
-[![Docker image version](https://img.shields.io/docker/v/fullstackspectrum/forgely?sort=semver&logo=docker&label=version)](https://hub.docker.com/r/fullstackspectrum/forgely)
-[![Docker pulls](https://img.shields.io/docker/pulls/fullstackspectrum/forgely?logo=docker)](https://hub.docker.com/r/fullstackspectrum/forgely)
-[![Image size](https://img.shields.io/docker/image-size/fullstackspectrum/forgely?sort=semver&logo=docker)](https://hub.docker.com/r/fullstackspectrum/forgely/tags)
-[![License](https://img.shields.io/github/license/fullstackspectrum/Forgely)](LICENSE)
-[![Last commit](https://img.shields.io/github/last-commit/fullstackspectrum/Forgely)](https://github.com/fullstackspectrum/Forgely/commits/main)
+<p align="center">
+  <a href="https://hub.docker.com/r/fullstackspectrum/forgely"><img src="https://img.shields.io/docker/v/fullstackspectrum/forgely?sort=semver&amp;logo=docker&amp;label=version&amp;style=flat-square&amp;labelColor=0C447C&amp;color=378ADD&amp;logoColor=white" alt="Docker image version"></a>
+  <a href="https://hub.docker.com/r/fullstackspectrum/forgely"><img src="https://img.shields.io/docker/pulls/fullstackspectrum/forgely?logo=docker&amp;label=pulls&amp;style=flat-square&amp;labelColor=0C447C&amp;color=378ADD&amp;logoColor=white" alt="Docker pulls"></a>
+  <a href="https://hub.docker.com/r/fullstackspectrum/forgely/tags"><img src="https://img.shields.io/docker/image-size/fullstackspectrum/forgely?sort=semver&amp;logo=docker&amp;label=size&amp;style=flat-square&amp;labelColor=0C447C&amp;color=378ADD&amp;logoColor=white" alt="Image size"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/fullstackspectrum/Forgely?logo=opensourceinitiative&amp;label=license&amp;style=flat-square&amp;labelColor=0C447C&amp;color=378ADD&amp;logoColor=white" alt="License"></a>
+  <a href="https://github.com/fullstackspectrum/Forgely/commits/main"><img src="https://img.shields.io/github/last-commit/fullstackspectrum/Forgely?logo=github&amp;label=last%20commit&amp;style=flat-square&amp;labelColor=0C447C&amp;color=378ADD&amp;logoColor=white" alt="Last commit"></a>
+</p>
 
 ---
 
