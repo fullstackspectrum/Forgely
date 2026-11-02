@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.1 — 2 November 2026
+
+### Security
+
+- Image rebuilt on current Chainguard bases, clearing all 39 findings from the 1.0.0 image, including 2 critical CA certificate advisories (CVE-2026-91403, GHSA-6q48-6c7w-9gw2)
+- certifi and urllib3 floored past GHSA-6q48-6c7w-9gw2 and CVE-2026-97687/97688/97689
+- Image builds now always pull the latest base, so cached layers can no longer pin outdated OS packages
+
 ## v1.0.0 — September 2026
 
 ### SCA — Software Composition Analysis

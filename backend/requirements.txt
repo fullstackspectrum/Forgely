@@ -4,3 +4,9 @@ requests>=2.32.0
 python-dotenv>=1.0.0
 pydantic>=2.10.0
 vulnly>=1.1.0
+
+# Transitive, via requests. Floored so a cached pip layer cannot keep a
+# vulnerable version: GHSA-6q48-6c7w-9gw2 (certifi), CVE-2026-97687/97688/97689
+# (urllib3).
+certifi>=2026.10.18
+urllib3>=2.8.0
